@@ -1,0 +1,17 @@
+# Vivado junk files
+*.jou
+*.log
+*.pb
+*.wdb
+*.dir/
+.Xil/
+*.str
+*.zip
+
+# Verilator output
+obj_dir/
+
+# Vitis output
+.metadata/
+*.o
+*.elf
