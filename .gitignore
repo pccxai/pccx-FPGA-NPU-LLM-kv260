@@ -8,6 +8,9 @@
 *.str
 *.zip
 
+# Vivado Log
+vivado.tcl
+
 # Verilator output
 obj_dir/
 
@@ -15,3 +18,25 @@ obj_dir/
 .metadata/
 *.o
 *.elf
+
+
+# Vivado Directory Junk (수십 기가씩 먹는 폴더들)
+*.runs/
+*.cache/
+*.hw/
+*.sim/
+*.ip_user_files/
+
+# Simulation, Waveform, Temp Files
+*.vcd
+*.db
+*.wpc
+*.prj
+*.lpr
+*.bat
+*.ini
+
+# VS Code / OS Setup
+.vscode/
+.DS_Store
+Thumbs.db
