@@ -1,0 +1,146 @@
+
+# Ping-Pong BRAM Controller
+
+1. 전체 구조 (NPU = 미니 GPU)
+우리가 엣지 보드(PYNQ-Z2)에서 돌릴 전체 시스템의 데이터 흐름은
+
+> DDR (메인 메모리) ↔ BRAM ↔ Systolic Array (연산기)
+
+이걸 CUDA 환경으로 번역하면
+
+> Host RAM ↔ Shared Memory ↔ CUDA Cores
+
+Shared Memory에서 데이터를 꺼내와서 CUDA Cores에서 연산하고 다시 집어넣는, 하드웨어의 가장 깊숙한(Core) 부분을 설계
+
+# 1.  AXI DMA (Direct Memory Access)
+
+CUDA 비유: cudaMemcpy(d_A, h_A, size, cudaMemcpyHostToDevice)  
+
+ CPU(ARM 코어)가 직접 데이터를 하나하나 옮기면 너무 느림.  
+ 그래서 CPU 대신 메인메모리(DDR)에 있는 배열 데이터를 NPU 쪽으로 쫙 밀어 넣어라 하고 명령만 내리면, 알아서 데이터를 고속으로 쏴주는 하드웨어 블록
+
+# 2. BRAM (Block RAM)
+
+CUDA 비유: Shared Memory (__shared__) 또는 L1 Cache
+
+FPGA 칩 내부에 콕 박혀있는 작고 엄청나게 빠른 SRAM 덩어리. DMA가 DDR에서 가져온 데이터를 여기에 임시로 저장해두면,  systolic_2x2가 클럭마다 여기서 데이터를 사용함. BRAM 2개가 ping-pong-buffer
+
+# 3. Parameter (파라미터)
+
+C++ 비유: template <int N> 또는 #define SIZE 8
+
+```verilog
+    parameter DATA_WIDTH = 8,
+    parameter ADDR_WIDTH = 8 // 256 depth
+```
+코드가 칩으로 구워지기 전(합성 단계)에 하드웨어의 크기나 규격을 결정하는 상수야. 예를 들어 parameter DATA_WIDTH = 8이라고 쓰면, "아, 이 모듈은 8비트짜리 전선(자료형)을 쓰는구나" 하고 컴파일러가 회로를 8가닥으로 맞춰서 그려줌
+
+# 4. Address (주소 연산)
+
+C++ 비유: 배열의 인덱스 array[index]
+
+메모리에서 몇 번째 칸의 데이터를 읽고 쓸지 지정하는 숫자.소프트웨어에선 포인터나 인덱스로 접근하지만, 하드웨어에선 8비트짜리 addr 전선에 00000001 이라는 전기 신호를 주면 메모리의 1번 인덱스 방 문이 열리는 방식.
+
+# 5. MUX (Multiplexer, 멀티플렉서)
+
+C++ 비유: if-else문, 삼항 연산자 ? :, 혹은 포인터 스위칭
+```verilog
+    // BRAM 0번 제어
+    assign we_0   = (ping_pong_sel == 1'b0) ? dma_we   : 1'b0;       // NPU가 쓸 땐 Write 금지
+    assign addr_0 = (ping_pong_sel == 1'b0) ? dma_addr : sys_addr;
+
+    // BRAM 1번 제어
+    assign we_1   = (ping_pong_sel == 1'b1) ? dma_we   : 1'b0;       // NPU가 쓸 땐 Write 금지
+    assign addr_1 = (ping_pong_sel == 1'b1) ? dma_addr : sys_addr;
+
+    // Systolic 쪽으로 나가는 데이터 (Demux)
+    assign sys_rdata = (ping_pong_sel == 1'b0) ? rdata_1 : rdata_0;
+```
+소프트웨어는 if문이 거짓이면 그 안의 코드를 아예 실행 안 하는데. 하지만 하드웨어는 모든 모듈(전선)이 항상 살아서 전기가 흐르고 있음.그래서 MUX라는 스위치를 달아서 "선택 신호가 0이면 A 전선의 데이터를, 1이면 B 전선의 데이터를 통과시켜!"라는 물리적인 길을 터주는 역할. 아까 assign sys_rdata = (sel == 0) ? rdata_1 : rdata_0; 코드가 바로 이 MUX 회로.
+
+# 1. 내부에 BRAM_0과 BRAM_1 모듈 두 개를 생성한다.
+```mermaid
+graph LR
+    DMA[AXI DMA]:::input
+    
+    subgraph "FPGA 메모리 (BRAM)"
+        B0[("BRAM_0")]:::memory
+        B1[("BRAM_1")]:::memory
+    end
+    
+    SYS[systolic_2x2 연산 유닛]:::logic
+
+    %% 스타일 정의
+    classDef input fill:#f9f,stroke:#333,stroke-width:2px;
+    classDef memory fill:#ff9,stroke:#333,stroke-width:2px;
+    classDef logic fill:#9cf,stroke:#333,stroke-width:2px;
+
+    %% 연결선 (개념적)
+    DMA -.-> B0
+    DMA -.-> B1
+    B0 -.-> SYS
+    B1 -.-> SYS
+```
+
+# 2.ping_pong_sel이라는 1비트짜리 스위치(포인터)를 둔다.
+# 3.ping_pong_sel == 0일 때: AXI DMA (외부 메모리)는 BRAM_0에 다음 연산할 데이터를 열심히 쓰고(Write), 그와 동시에 우리의 systolic_2x2는 BRAM_1에서 이미 준비된 데이터를 읽어와서(Read) 연산을 돌린다.
+* 상황 1: ping_pong_sel == 0 일 때
+스위치 상태: 위쪽(0번)으로 입력, 아래쪽(1번)에서 출력
+DMA: BRAM_0에 열심히 데이터를 채워 넣습니다 (Write).
+Systolic: 이미 데이터가 차 있는 BRAM_1에서 데이터를 가져와 연산합니다 (Read).
+```mermaid
+graph LR
+    DMA[AXI DMA]:::input
+    SYS[systolic_2x2]:::logic
+    
+    subgraph "Ping-Pong Control (sel == 0)"
+        direction TB
+        B0[("BRAM_0 writing ")]:::activeWrite
+        B1[("BRAM_1 reading")]:::activeRead
+    end
+
+    %% 흐름선
+    DMA == "데이터 쓰기 (Write)" ==> B0
+    B1 == "데이터 읽기 (Read)" ==> SYS
+
+    %% 스타일 정의
+    classDef input fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
+    classDef logic fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
+    classDef activeWrite fill:#ffcdd2,stroke:#b71c1c,color:black,stroke-width:4px;
+    classDef activeRead fill:#c8e6c9,stroke:#1b5e20,color:black,stroke-width:4px;
+```
+* 전환 (Switching): 양쪽 작업 완료 후
+DMA도 쓰기를 다 했고, Systolic도 연산을 다 마쳤다면?
+ping_pong_sel = ~ping_pong_sel (0 → 1)로 바뀝니다.  
+
+* 상황 2: ping_pong_sel == 1 일 때
+스위치 상태: 경로가 크로스(교차) 됩니다.
+DMA: 이제 비어있는 BRAM_1에 새 데이터를 채웁니다.
+Systolic: 아까(상황 1에서) DMA가 꽉 채워둔 BRAM_0의 데이터를 가져와 연산합니다.
+```mermaid
+graph LR
+    DMA[AXI DMA]:::input
+    SYS[systolic_2x2]:::logic
+    
+    subgraph "Ping-Pong Control (sel == 1)"
+        direction TB
+        B0[("BRAM_0 reading")]:::activeRead
+        B1[("BRAM_1 writing")]:::activeWrite
+    end
+
+    %% 흐름선
+    DMA == "데이터 쓰기 (Write)" ==> B1
+    B0 == "데이터 읽기 (Read)" ==> SYS
+
+    %% 스타일 정의
+    classDef input fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
+    classDef logic fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
+    classDef activeWrite fill:#ffcdd2,stroke:#b71c1c,color:black,stroke-width:4px;
+    classDef activeRead fill:#c8e6c9,stroke:#1b5e20,color:black,stroke-width:4px;
+```
+
+```mermaid
+
+```
+
+# 4.양쪽 작업이 다 끝나면 ping_pong_sel = ~ping_pong_sel; 로 스위칭! (0은 1로, 1은 0으로)

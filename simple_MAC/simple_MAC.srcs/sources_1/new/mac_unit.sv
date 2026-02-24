@@ -40,7 +40,7 @@ module pe_unit (
             // Asynchronous active-low reset
             o_acc   <= 16'd0;
             o_valid <= 1'b0;
-            o_a     <= 8'd0;
+        o_a     <= 8'd0;
             o_b     <= 8'd0;
         end else if (i_valid) begin 
             // Accumulate and forward data pipeline
@@ -48,7 +48,7 @@ module pe_unit (
             o_valid <= 1'b1;
             o_a     <= i_a; 
             o_b     <= i_b;
-        end else begin
+        end else begin  
             // Pipeline stall on invalid data
             o_valid <= 1'b0;
         end
