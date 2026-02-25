@@ -19,6 +19,6 @@ module simple_bram #(
             ram[addr] <= din; // 쓰기
         end
         dout <= ram[addr];    // 읽기 (동기식)
-    end
+    end 
 
 endmodule
