@@ -1,61 +1,70 @@
 `timescale 1ns / 1ps
 
-module ping_pong_bram (
+module ping_pong_bram #(
+    parameter DATA_WIDTH = 512,
+    parameter ADDR_WIDTH = 9     
+)(
     input  logic       clk,
     input  logic       rst_n,
+    input  logic       switch_buffer,
     
-    // 0: DMA -> BRAM_0 쓰기 / Systolic <- BRAM_1 읽기
-    // 1: DMA -> BRAM_1 쓰기 / Systolic <- BRAM_0 읽기
-    input  logic       ping_pong_sel, 
+    // AXI DMA 인터페이스 (Write Only)
+    input  logic                  dma_we,
+    input  logic [ADDR_WIDTH-1:0] dma_addr,
+    input  logic [DATA_WIDTH-1:0] dma_write_data,
     
-    // AXI DMA 인터페이스
-    input  logic       dma_we,
-    input  logic [7:0] dma_addr,
-    input  logic [7:0] dma_wdata,
-    
-    // Systolic Array 인터페이스
-    input  logic [7:0] sys_addr,
-    output logic [7:0] sys_rdata
+    // NPU 인터페이스 (💥 2차선 고속도로: A와 B를 동시에 읽음! 💥)
+    input  logic [ADDR_WIDTH-1:0] npu_addr_a,
+    input  logic [ADDR_WIDTH-1:0] npu_addr_b,
+    output logic [DATA_WIDTH-1:0] npu_read_data_a,
+    output logic [DATA_WIDTH-1:0] npu_read_data_b
 );
 
-    // BRAM_0 과 BRAM_1 에 연결할 내부 전선들
-    logic       we_0, we_1;
-    logic [7:0] addr_0, addr_1;
-    logic [7:0] rdata_0, rdata_1;
+    // 🚨 내 지적 반영: [7:0] 하드코딩 제거 및 파라미터화
+    logic                  we_0_a, we_0_b, we_1_a, we_1_b;
+    logic [ADDR_WIDTH-1:0] addr_0_a, addr_0_b, addr_1_a, addr_1_b;
+    logic [DATA_WIDTH-1:0] rdata_0_a, rdata_0_b, rdata_1_a, rdata_1_b;
 
     // --------------------------------------------------------
-    // [MUX 로직] 포인터(ping_pong_sel)에 따라 길을 바꿔줌
+    // [MUX 로직] 포인터(switch_buffer)에 따라 길을 엇갈려줌
     // --------------------------------------------------------
-    
-    // BRAM 0번 제어
-    assign we_0   = (ping_pong_sel == 1'b0) ? dma_we   : 1'b0;       // NPU가 쓸 땐 Write 금지
-    assign addr_0 = (ping_pong_sel == 1'b0) ? dma_addr : sys_addr;
-
-    // BRAM 1번 제어
-    assign we_1   = (ping_pong_sel == 1'b1) ? dma_we   : 1'b0;       // NPU가 쓸 땐 Write 금지
-    assign addr_1 = (ping_pong_sel == 1'b1) ? dma_addr : sys_addr;
-
-    // Systolic 쪽으로 나가는 데이터 (Demux)
-    assign sys_rdata = (ping_pong_sel == 1'b0) ? rdata_1 : rdata_0;
-
+    always_comb begin
+        if (switch_buffer == 1'b0) begin
+            // [State 0] DMA -> BRAM_0 쓰기 / NPU <- BRAM_1 읽기
+            we_0_a = dma_we;     addr_0_a = dma_addr;   // BRAM 0 Port A는 DMA가 점령
+            we_0_b = 1'b0;       addr_0_b = '0;         // BRAM 0 Port B는 쉼
+            
+            we_1_a = 1'b0;       addr_1_a = npu_addr_a; // BRAM 1 Port A는 NPU A 읽기
+            we_1_b = 1'b0;       addr_1_b = npu_addr_b; // BRAM 1 Port B는 NPU B 읽기
+            
+            npu_read_data_a = rdata_1_a;
+            npu_read_data_b = rdata_1_b;
+        end else begin
+            // [State 1] DMA -> BRAM_1 쓰기 / NPU <- BRAM_0 읽기
+            we_1_a = dma_we;     addr_1_a = dma_addr;   // BRAM 1 Port A는 DMA가 점령
+            we_1_b = 1'b0;       addr_1_b = '0;         // BRAM 1 Port B는 쉼
+            
+            we_0_a = 1'b0;       addr_0_a = npu_addr_a; // BRAM 0 Port A는 NPU A 읽기
+            we_0_b = 1'b0;       addr_0_b = npu_addr_b; // BRAM 0 Port B는 NPU B 읽기
+            
+            npu_read_data_a = rdata_0_a;
+            npu_read_data_b = rdata_0_b;
+        end
+    end
 
     // --------------------------------------------------------
-    // [BRAM 인스턴시에이션] 실제 메모리 2개 박기
+    // [BRAM 인스턴스화] Dual-Port BRAM 2개 쾅!
     // --------------------------------------------------------
-    simple_bram bram_0 (
+    simple_bram #(.DATA_WIDTH(DATA_WIDTH), .ADDR_WIDTH(ADDR_WIDTH)) bram_0 (
         .clk(clk),
-        .we(we_0),
-        .addr(addr_0),
-        .din(dma_wdata), // 데이터 들어가는 선은 묶어놔도 we가 막아줌
-        .dout(rdata_0)
+        .we_a(we_0_a), .addr_a(addr_0_a), .data_in_a(dma_write_data), .data_out_a(rdata_0_a),
+        .we_b(we_0_b), .addr_b(addr_0_b), .data_in_b('0),             .data_out_b(rdata_0_b)
     );
 
-    simple_bram bram_1 (
+    simple_bram #(.DATA_WIDTH(DATA_WIDTH), .ADDR_WIDTH(ADDR_WIDTH)) bram_1 (
         .clk(clk),
-        .we(we_1),
-        .addr(addr_1),
-        .din(dma_wdata),
-        .dout(rdata_1)
+        .we_a(we_1_a), .addr_a(addr_1_a), .data_in_a(dma_write_data), .data_out_a(rdata_1_a),
+        .we_b(we_1_b), .addr_b(addr_1_b), .data_in_b('0),             .data_out_b(rdata_1_b)
     );
 
 endmodule

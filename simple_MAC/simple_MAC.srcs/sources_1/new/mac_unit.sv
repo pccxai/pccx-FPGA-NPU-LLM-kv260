@@ -1,55 +1,44 @@
 `timescale 1ns / 1ps
-//////////////////////////////////////////////////////////////////////////////////
-// Company: 
-// Engineer: 
-// 
-// Create Date: 2026/02/23 03:29:56
-// Design Name: 
-// Module Name: mac_unit
-// Project Name: 
-// Target Devices: 
-// Tool Versions: 
-// Description: 
-// 
-// Dependencies: 
-// 
-// Revision:
-// Revision 0.01 - File Created
-// Additional Comments:
-// 
-//////////////////////////////////////////////////////////////////////////////////
 
 module pe_unit (
     input  logic        clk,     
     input  logic        rst_n,   
-    input  logic        i_valid, // Input valid signal
-    input  logic [7:0]  i_a,     // Data from left PE
-    input  logic [7:0]  i_b,     // Data from top PE
+    input  logic        i_clear, // 🔥 [핵심] 타일 연산 전 누산기를 비우는 클리어 핀!
+    input  logic        i_valid, 
     
-    output logic [7:0]  o_a,     // Forwarded data to right PE
-    output logic [7:0]  o_b,     // Forwarded data to bottom PE
-    output logic        o_valid, // Output valid signal
-    output logic [15:0] o_acc    // Accumulated MAC result
+    input  logic [7:0]  i_a,     
+    input  logic [7:0]  i_b,     
+    
+    output logic [7:0]  o_a,     
+    output logic [7:0]  o_b,     
+    output logic        o_valid, 
+    output logic [15:0] o_acc  
 );
 
     logic [15:0] mul_result;
-    assign mul_result = i_a * i_b; // Combinational multiplication
+    assign mul_result = i_a * i_b; // 조합회로 곱셈
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            // Asynchronous active-low reset
+            // 하드웨어 전체 리셋
+            o_acc   <= 16'd0;
+            o_valid <= 1'b0;
+            o_a     <= 8'd0;
+            o_b     <= 8'd0;
+        end else if (i_clear) begin 
+            // 🔥 소프트웨어(FSM) 명령에 의한 누산기 초기화! (변기 물 내림)
             o_acc   <= 16'd0;
             o_valid <= 1'b0;
             o_a     <= 8'd0;
             o_b     <= 8'd0;
         end else if (i_valid) begin 
-            // Accumulate and forward data pipeline
+            // 정상 MAC 파이프라인 가동
             o_acc   <= o_acc + mul_result;
             o_valid <= 1'b1;
             o_a     <= i_a; 
             o_b     <= i_b;
         end else begin  
-            // Pipeline stall on invalid data
+            // Valid가 없으면 쉬기
             o_valid <= 1'b0;
         end
     end

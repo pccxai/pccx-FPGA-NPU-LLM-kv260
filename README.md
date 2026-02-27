@@ -1,45 +1,48 @@
-# TinyNPU-RTL: On-Device LLM Accelerator for Gemma 3N
+# TinyNPU-RTL: 2D Systolic Array CNN Accelerator
 
 ## 1. Project Overview
-This project focuses on the RTL-level design and implementation of a custom Neural Processing Unit (NPU) tailored for Edge Devices. The ultimate goal is to accelerate Google's latest on-device LLM, **Gemma 3N (E4B / E2B)**, on the Xilinx **Kria KV260** FPGA board. 
+This project focuses on the RTL-level design and implementation of a lightweight Convolutional Neural Network (CNN) accelerator (NPU) tailored for Edge Devices. 
+This project utilizes **SystemVerilog** to construct a highly optimized hardware architecture. 
+The target platform is the **Zynq-7000** SoC (e.g., PYNQ-Z2). To overcome the inherent memory bandwidth bottlenecks of edge environments, the design aggressively adopts a **Systolic Array** architecture and **AXI DMA** for efficient data pipelining.
 
-Unlike traditional CNNs, Auto-regressive LLMs suffer from severe **Memory Bound** issues during the token decoding phase. To overcome this extreme memory bandwidth bottleneck, the design aggressively adopts a **2D Systolic Array** architecture, **AXI DMA**, and optimized **KV Cache** management for efficient hardware-software co-design.
+## 2. System Architecture
+The system is built on a Hardware/Software Co-design approach, partitioning tasks between the Processing System (PS - ARM Cortex-A9) and Programmable Logic (PL - FPGA).
 
-## 2. Developer Background
-- **Core Strengths**: Mastering software parallel processing based on **C/C++, CUDA, OpenCL**, and **DirectX 11** pipelines.
-- **Hardware Mapping Philosophy**: Rapidly bridging software parallel concepts into hardware (RTL). For instance, translating GPU **Shared Memory** usage into FPGA **BRAM** design, and transforming **Compute Shader** thread parallelism into hardware **Systolic Arrays** to maximize **Data Reuse**.
+### A. Processing Element (PE)  
+The PE is the fundamental computing unit, essentially a Multiply-Accumulate (MAC) block.
+* **Combinational & Sequential Logic:** Performs multiplication combinationally and accumulates the result sequentially at every positive clock edge.
+* **Data Flow Control:** Utilizes a `valid` signal to ensure only legitimate data is processed.
+* **Forwarding:** Propagates internal data to adjacent PEs in the subsequent clock cycle, forming the basis of the pipeline.
 
-## 3. System Architecture
-The system utilizes a Hardware/Software Co-design approach, partitioning tasks between the ARM CPU (PS) and the FPGA (PL).
+### B. 2D Systolic Array
+An architecture comprising multiple PEs arranged in a 2D grid.
+* **Data Reuse:** Maximizes internal data reuse by flowing data continuously through the array like a wavefront, drastically reducing external memory access.
+* **Scalability:** The initial implementation is a 2x2 array, structurally modeled to scale up to NxN configurations via parameterization.
 
-### A. 2D Systolic Array (Compute Core)
-* **GEMM & GEMV Acceleration**: The core execution unit designed to accelerate massive matrix multiplications (**GEMM** for Prefill phase, **GEMV** for Decode phase).
-* **Wavefront Data Flow**: Maximizes internal data reuse by flowing data continuously through the Processing Elements (PEs) like a wavefront, drastically reducing external memory access.
+### C. Memory Hierarchy & Bandwidth Optimization
+* **Global Memory (DDR3):** Stores the large-scale original input feature maps and pre-trained weights.
+* **AXI DMA:** A high-speed Direct Memory Access controller that fetches data from DDR3 to the PL without CPU intervention.
+* **BRAM (Block RAM):** Ultra-fast on-chip SRAM, serving a role identical to Shared Memory in CUDA architectures.
+* **Tiling & Ping-Pong Buffer:** To bypass the strict capacity limits of BRAM, large feature maps are divided into smaller tiles. A Ping-Pong buffer scheme is employed to overlap data transfer with computation.
 
-### B. Memory Hierarchy & Bandwidth Optimization
-* **Global Memory (DDR4)**: Stores the quantized Gemma 3N weights and the dynamically growing **KV Cache**.
-* **AXI DMA**: A high-speed Direct Memory Access controller that streams weights and tokens from DDR4 to the NPU without CPU intervention.
-* **Ping-Pong BRAM (Double Buffering)**: Ultra-fast on-chip SRAM functioning identical to **Shared Memory** in CUDA. A Ping-Pong buffer scheme is employed to overlap data transfer with computation, effectively hiding memory latency.
+## 3. Directory Structure
+```text
+├── src/
+│   ├── pe_unit.sv        # PE module (MAC + Valid control + Data forwarding)
+│   └── systolic_2x2.sv   # Top module (2x2 Array of PEs)
+├── tb/
+│   └── tb_systolic.sv    # Testbench for behavioral simulation
+├── constrs/
+│   └── pynq_z2.xdc       # Physical pin and timing constraints
+├── .gitignore            # Excludes Vivado/Verilator generated junk files
+└── README.md             # Project documentation (Main Page)  
+```
 
-## 4. Project Milestones
+## 4. Development Workflow & Tools
+**Code Editor**: VS Code (Configured with SystemVerilog & TerosHDL extensions for linting and structural visualization)
 
-### 🏃‍♂️ Phase 1. Hardware Core Implementation (Completed ✅)
-- Designed the `NxN` MAC array in **SystemVerilog** based on C++ parallel concepts.
-- Automated **Delay Lines** for wavefront data synchronization.
-- Implemented **Ping-Pong BRAM** double buffering to hide memory bottlenecks.
-- Packaged as a Vivado **AXI4-Lite** IP, perfectly passing timing constraints (**WNS** = 0).
+**EDA Tool**: Xilinx Vivado 2025.2 (Used for RTL Synthesis, Implementation, and Waveform Simulation)
 
-### 🧠 Phase 2. Software Golden Model & Architecture Analysis (WIP 🚀)
-- Building a pure Python/NumPy simulator to dissect the Gemma 3N transformer structure from the ground up.
-- Simulating **KV Cache** structures and isolating the heavy **MatMul** operations that the NPU can accelerate.
-- Testing Matrix slicing and mapping strategies via the `MockTinyNPU` virtual environment before board deployment.
+**Simulator**: Verilator (For high-speed, C++ based cycle-accurate simulation) / Vivado Behavioral Simulator
 
-### ⚡ Phase 3. Real Hardware Deployment (Upcoming)
-- Setting up Ubuntu and **PYNQ** environments on the Kria KV260 board.
-- Replacing the `np.dot` functions in the Python Golden Model with actual NPU **MMIO** control codes (`npu.write/read`).
-- Finalizing the local Edge AI demo generating text via Gemma 3N.
-
-## 5. Development Workflow & Tools
-* **Hardware**: SystemVerilog, Xilinx Vivado 2025.2
-* **Software**: Python, PyTorch, Hugging Face, C/C++, PYNQ
-* **Simulation**: Verilator, VS Code
+**Version Control**: Git & GitHub
