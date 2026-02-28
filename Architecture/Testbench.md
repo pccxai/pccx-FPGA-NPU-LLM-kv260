@@ -1,137 +1,70 @@
-# 테스트벤치 시뮬레이션 흐름
+# Testbench & Verification: Bit-True to Python
 
-세 개의 testbench가 각 모듈을 검증한다.
+To verify the functionality and timing of the TinyNPU-Gemma core, a top-down integrated simulation approach is employed. Our ultimate goal is **0% Error (Bit-True Match)** against the Python (NumPy/PyTorch) Golden Model.
+
+## Trace-Driven Verification
+
+단순한 랜덤 데이터 테스트가 아니라, 실제 Python(PyTorch/NumPy)에서 추출한 **Golden Trace**를 Verilog 시뮬레이션에 주입하여 결과를 비교하는 **Trace-Driven Verification** 방식을 채택했다.
+
+## 디버깅 히스토리: Python vs Verilog Bit-True 매칭
+
+우리는 중간 연산 단계마다 Python에서 덤프한 배열(메모리 헥스 덤프)과 NPU의 출력 포트에서 캡처된 값을 비교 검증했다.
+
+1. **MAC 결과 확인:** MAC Array가 `24`를 출력할 때, Python 배열의 같은 위치 값이 정확히 `24`인지 확인.
+2. **GeLU 통과 확인:** NPU가 MAC 값 `24`를 GeLU 모듈에 통과시켜 `12`가 나올 때, Python Golden 모델의 GeLU 출력도 정확히 `12`인지 확인.
+3. **오차율 0% 달성:** INT8 양자화 기반의 `+`, `*`, Shift, 그리고 Custom LUT 연산들이 S/W의 결과와 완전히 동일하게 동작함을 입증했다.
 
 ---
 
-## 전체 검증 구조
+## 전체 검증 구조 (`tb_gemma_layer.sv` & `tb_npu_core_top_NxN.sv`)
 
 ```mermaid
 flowchart LR
     %% 전체는 가로(1행 3열) 배치
     
-    subgraph tb_mac_unit["<h3>tb_mac_unit<br/>(pe_unit 검증)</h3>"]
+    subgraph tb_mac_unit["<h3>tb_mac_unit<br/>(Signed 8-bit PE)</h3>"]
         direction TB
         %% 제목과의 간격을 위한 투명 노드
         sep1[ ] --- T1
         style sep1 fill:none,stroke:none
         
-        T1["① 리셋 (rst_n=0 → 1)"] --> T2["② i_a=2, i_b=3 → acc=6"]
-        T2 --> T3["③ i_a=4, i_b=5 → acc=26"]
-        T3 --> T4["④ i_a=10, i_b=10 → acc=126"]
-        T4 --> T5["⑤ $display로 결과 출력"]
-        T5 --> W1["⚠️ i_valid 연결 안 됨\n→ 항상 누산됨"]
+        T1["① 리셋 (rst_n=0 → 1)"] --> T2["② i_a=2, i_b=-3 → acc=-6"]
+        T2 --> T3["③ i_a=-4, i_b=-5 → acc=14"]
     end
 
-    subgraph tb_ping_pong["<h3>tb_ping_pong<br/>(PP-bram 검증)</h3>"]
+    subgraph tb_gemma_layer["<h3>tb_gemma_layer<br/>(Full Layer Test)</h3>"]
         direction TB
         %% 제목과의 간격을 위한 투명 노드
         sep2[ ] --- P1
         style sep2 fill:none,stroke:none
 
-        P1["① sel=0, DMA→BRAM_0[0]=10"] --> P2["② DMA→BRAM_0[1]=20"]
-        P2 --> P3["③ sel=1 (스위치!)"]
-        P3 --> P4["④ NPU가 sys_addr=0 → rdata=10"]
-        P4 --> P5["⑤ 동시에 DMA→BRAM_1[0]=30"]
-        P5 --> W2["⚠️ 동기 읽기라\n1 사이클 후 데이터"]
+        P1["① Load Golden Weights"] --> P2["② Run FSM / DMA"]
+        P2 --> P3["③ Pipeline 38-Clocks"]
+        P3 --> P4["④ Dump Final Result"]
+        P4 --> P5["⑤ diff (Python vs RTL)"]
     end
 
-    subgraph tb_systolic["<h3>tb_systolic<br/>(systolic_2x2 검증)</h3>"]
+    subgraph tb_math_accelerators["<h3>tb_math_accelerators<br/>(Non-linear Math)</h3>"]
         direction TB
         %% 제목과의 간격을 위한 투명 노드
         sep3[ ] --- S1
         style sep3 fill:none,stroke:none
 
-        S1["① in_valid=1, 파도 1 투입"] --> S2["② 파도 2 투입"]
-        S2 --> S3["③ 파도 3 투입"]
-        S3 --> S4["④ in_valid=0 (flush)"]
-        S4 --> S5["⑤ PE들이 순차적으로 결과 수렴"]
-        S5 --> W3["⚠️ PE(1,1)은\n2 사이클 늦게 시작"]
+        S1["① Input 'x'"] --> S2["② PWL (RMSNorm)"]
+        S2 --> S3["③ Base-2 (Softmax)"]
+        S3 --> S4["④ LUT (GeLU)"]
+        S4 --> S5["⑤ Verify 1-3 Clock Latency"]
     end
 
     %% 3열 배치를 유지하기 위한 투명 연결선
-    tb_mac_unit ~~~ tb_ping_pong
-    tb_ping_pong ~~~ tb_systolic
+    tb_mac_unit ~~~ tb_gemma_layer
+    tb_gemma_layer ~~~ tb_math_accelerators
 ```
 
 ---
 
-## 1. tb_mac_unit — pe_unit 단독 검증
-
-PE 하나를 단독으로 검증한다. 매 클럭 입력을 넣고 누적 결과가 올바른지 확인.
-
-```
-시나리오:
-  rst_n = 0 → 1  (리셋 해제)
-  Cycle 1: i_a=2, i_b=3  → acc = 0 + 6  = 6
-  Cycle 2: i_a=4, i_b=5  → acc = 6 + 20 = 26
-  Cycle 3: i_a=10, i_b=10 → acc = 26 + 100 = 126 ✓
-```
-
-**알려진 이슈:** `tb_mac_unit.sv`에서 `i_valid` 포트가 연결되지 않아 항상 valid 상태로 동작한다. 실제 systolic 배열과 달리 valid 제어를 테스트하지 못한다.
-
----
-
-## 2. tb_ping_pong — ping_pong_bram 더블버퍼 검증
-
-핑퐁 버퍼의 핵심: DMA 쓰기와 NPU 읽기가 **동시에** 일어나는지 확인.
-
-```
-Phase 1 (sel=0):
-  DMA → BRAM_0[0] = 10
-  DMA → BRAM_0[1] = 20
-
-Phase 2 (sel=1, 스위치!):
-  NPU  → sys_addr=0 → (1 사이클 후) rdata = 10  ← BRAM_0에서 읽기
-  DMA  → BRAM_1[0] = 30                          ← BRAM_1에 쓰기 (동시!)
-  NPU  → sys_addr=1 → (1 사이클 후) rdata = 20
-```
-
-**동기식 읽기 주의:** `simple_bram`은 동기식이므로 주소 입력 후 **다음 클럭**에 데이터가 나온다.
-
----
-
-## 3. tb_systolic — systolic_2x2 행렬 연산 검증
-
-4사이클 파도를 흘려보내며 2×2 행렬 곱 결과를 검증한다.
-
-| 사이클 | in_a_0 | in_a_1 | in_b_0 | in_b_1 | 이벤트 |
-|--------|--------|--------|--------|--------|--------|
-| 1 | 1 | 0 | 1 | 0 | PE(0,0) 첫 연산 시작 |
-| 2 | 2 | 3 | 3 | 2 | 파도 확산: PE(0,0), (0,1), (1,0) 가동 |
-| 3 | 0 | 4 | 0 | 4 | 전체 가동: PE(1,1) 첫 연산 |
-| 4 | 0 | 0 | 0 | 0 | valid=0 (flush): PE(1,1) 마지막 연산 |
-
-**valid 전파 지연:** PE(0,0) → PE(0,1), PE(1,0)까지는 **1 사이클** 늦고, PE(1,1)은 **2 사이클** 늦게 계산을 시작한다.
-
-```mermaid
-sequenceDiagram
-    participant C as Clock
-    participant PE00 as PE(0,0)
-    participant PE01 as PE(0,1)
-    participant PE10 as PE(1,0)
-    participant PE11 as PE(1,1)
-
-    C->>PE00: Cycle 1: A=1, B=1 → acc=1
-    C->>PE00: Cycle 2: A=2, B=3 → acc=7
-    C->>PE01: Cycle 2: A=1(from 00), B=2 → acc=2
-    C->>PE10: Cycle 2: A=3, B=1(from 00) → acc=3
-    C->>PE01: Cycle 3: A=2, B=4 → acc=10
-    C->>PE10: Cycle 3: A=4, B=3 → acc=15
-    C->>PE11: Cycle 3: A=3(from 10), B=2(from 01) → acc=6
-    C->>PE11: Cycle 4: A=4, B=4 → acc=22 ✓
-```
-
----
-
-## 4. 검증 환경
+## 검증 환경
 
 **EDA Tool:** Xilinx Vivado 2025.2  
-**Target:** xc7z020clg400-1 (PYNQ-Z2)  
-**Simulator:** XSim (Vivado 내장) + Verilator (고속 C++ 기반)
-
-```bash
-# Verilator로 빠른 시뮬레이션
-verilator --cc --exe --build tb_systolic.sv systolic_2x2.sv pe_unit.sv
-./obj_dir/Vsystolic_2x2
-```
+**Target:** Xilinx Kria KV260 Vision AI Starter Kit
+**Simulator:** XSim (Vivado 내장)

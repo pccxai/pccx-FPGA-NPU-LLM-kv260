@@ -4,7 +4,7 @@
 
 PE(Processing Element)는 NPU의 **Atomic Unit**이다. 하나의 PE는 단 하나의 일만 한다: 입력받은 두 수를 곱하고, 그 결과를 계속 더해나가는 것. 이것이 MAC(Multiply-ACcumulate)이다.
 
-AI 연산의 99%는 결국 이 `곱셈 + 누산`이다.
+TinyNPU-Gemma에서는 **INT8 양자화 모델**을 완벽하게 지원하기 위해, 음수 연산이 가능한 **Signed 8-bit 곱셈**과 오버플로우를 방지하는 **16-bit (최대 32-bit 확장) 누산기** 구조를 채택했다.
 
 ---
 
@@ -45,8 +45,11 @@ flowchart LR
 
 ### Combinational Logic (조합 논리)
 곱셈은 클럭과 무관하게 입력이 바뀌면 **즉시** 결과가 나온다.
+Verilog에서는 기본적으로 숫자를 Unsigned로 취급하기 때문에, 음수 가중치(Weight)와 활성화 값(Activation)을 정확히 곱하기 위해 반드시 `$signed()` 캐스팅을 해야 한다. (이 부분이 초기 디버깅에서 가장 핵심적인 문제였다.)
+
 ```systemverilog
-assign mul_result = i_a * i_b; // 클럭 없이 즉시 계산
+// Signed 8-bit x Signed 8-bit = Signed 16-bit
+assign mul_result = $signed(i_a) * $signed(i_b);
 ```
 
 ### Sequential Logic (순차 논리)
@@ -54,9 +57,9 @@ assign mul_result = i_a * i_b; // 클럭 없이 즉시 계산
 ```systemverilog
 always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n)
-        o_acc <= 16'd0;
+        o_acc <= 16'd0; // Accumulator 리셋
     else if (i_valid)
-        o_acc <= o_acc + mul_result; // 클럭마다 누산
+        o_acc <= o_acc + mul_result; // 클럭마다 부호 있는 연산 누적
 end
 ```
 
@@ -129,29 +132,37 @@ end
 
 ---
 
-## 6. 동작 타이밍 테이블 (tb_mac_unit 검증 결과)
+## 6. 음수 곱셈 디버깅 (Debugging History)
 
-| 사이클 | i_a | i_b | 곱셈 결과 | o_acc (누적) |
-|--------|-----|-----|-----------|-------------|
-| reset  | 0   | 0   | 0         | **0** |
-| 1      | 2   | 3   | 6         | **6** |
-| 2      | 4   | 5   | 20        | **26** |
-| 3      | 10  | 10  | 100       | **126** ✓ |
+설계 초기에는 Verilog의 특성을 간과하고 일반적인 `*` 연산자를 사용했다가, `i_a = -2` (8'hFE), `i_b = 3` (8'h03) 인 경우에 `254 * 3 = 762` 라는 완전히 잘못된 (Unsigned) 결과가 나왔다.
 
-테스트벤치 주의사항: `i_valid`를 연결하지 않으면 항상 누산이 진행된다.
+**해결책:**
+모든 입력 포트 선언에 `signed` 키워드를 추가하고, 내부 연산시 `$signed()`를 강제 캐스팅함으로써,
+`-2 * 3 = -6` 이 정확히 16-bit 2's complement(`16'hFFFA`)로 나오도록 수정하여 하드웨어 검증을 통과했다.
 
 ---
 
-## 7. 포트 인터페이스
+## 7. 동작 타이밍 테이블 (tb_mac_unit 검증 결과)
+
+| 사이클 | i_a (Signed 8-bit) | i_b (Signed 8-bit) | 곱셈 결과 (16-bit) | o_acc (누적) |
+|--------|---------------------|---------------------|--------------------|-------------|
+| reset  | 0                   | 0                   | 0                  | **0** |
+| 1      | 2                   | 3                   | 6                  | **6** |
+| 2      | -4                  | 5                   | -20                | **-14** |
+| 3      | -10                 | -10                 | 100                | **86** ✓ |
+
+---
+
+## 8. 포트 인터페이스
 
 | 포트 | 방향 | 비트 수 | 설명 |
 |------|------|---------|------|
 | `clk` | in | 1 | 클럭 (100MHz) |
 | `rst_n` | in | 1 | 비동기 액티브-로우 리셋 |
 | `i_valid` | in | 1 | 유효 데이터 신호 |
-| `i_a` | in | 8 | 왼쪽에서 들어오는 Feature Map |
-| `i_b` | in | 8 | 위쪽에서 내려오는 Weight |
-| `o_a` | out | 8 | 오른쪽 PE로 포워딩 |
-| `o_b` | out | 8 | 아래쪽 PE로 포워딩 |
+| `i_a` | in | 8 (signed) | 왼쪽에서 들어오는 Feature Map (A) |
+| `i_b` | in | 8 (signed) | 위쪽에서 내려오는 Weight (B) |
+| `o_a` | out | 8 (signed) | 오른쪽 PE로 포워딩 |
+| `o_b` | out | 8 (signed) | 아래쪽 PE로 포워딩 |
 | `o_valid` | out | 1 | 유효 출력 신호 |
-| `o_acc` | out | 16 | 누적 MAC 결과 |
+| `o_acc` | out | 16 (signed)| 누적 MAC 결과 |

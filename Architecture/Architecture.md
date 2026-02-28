@@ -1,60 +1,55 @@
-# TinyNPU-RTL Top-Level Architecture
+# TinyNPU-Gemma Top-Level Architecture
 
-TinyNPU is a scalable NxN Systolic Array-based matrix multiplication accelerator designed to operate on the Xilinx Zynq-7000 SoC (PYNQ-Z2) environment.
+TinyNPU-Gemma is a custom NPU designed specifically to accelerate the quantized **Gemma 3-4B-IT (E4B) LLM model** on the **Xilinx Kria KV260 FPGA board**. It evolved from an initial 12MP image enhancement project (SwinIR-Light) to focus strictly on maximizing the KV260's hardware resources (1,248 DSP48E2 slices, 144 BRAMs) for large language model inference.
+
+## System Block Diagram & 38-Clock Pipeline Latency
+
+The entire system is divided into the ARM Cortex-A53 CPU (Processing System, PS) and the NPU Core in the FPGA fabric (Programmable Logic, PL). Communication is handled via the AXI4-Lite interface, controlled using Memory Mapped I/O (MMIO).
+
+To minimize latency, TinyNPU-Gemma implements an ultra-deep, fully-pipelined data path ("The 4 Exodia Parts") that executes complex non-linear mathematical operations alongside matrix multiplication in just **38 clock cycles** (approx. 380ns at 100MHz).
+
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e1f5fe', 'primaryBorderColor': '#01579b', 'lineColor': '#01579b', 'fontFamily': 'arial'}}}%%
+graph TD
+    subgraph "Pipeline Data Path (38-Clock Latency)"
+        direction LR
+        IN((Input 512-bit<br/>[W:A] Packed)) --> RMS["RMSNorm<br/>(2 Cycles)"]
+        RMS --> VSCALE["Vector Scaling<br/>(1 Cycle)"]
+        VSCALE --> MAC["32x32 Systolic Array<br/>MAC Engine<br/>(32 Cycles)"]
+        MAC --> ACT{"Activation<br/>Select"}
+        ACT -- Score --> SM["Softmax<br/>(3 Cycles)"]
+        ACT -- Value --> GELU["GeLU<br/>(1 Cycle)"]
+        SM --> OUT((Output))
+        GELU --> OUT
+    end
+    
+    style RMS fill:#ffe0b2,stroke:#e65100
+    style VSCALE fill:#fff9c4,stroke:#fbc02d
+    style MAC fill:#c8e6c9,stroke:#1b5e20
+    style SM fill:#f8bbd0,stroke:#ad1457
+    style GELU fill:#e1bee7,stroke:#4a148c
+```
 
 ## System Block Diagram
 
 The entire system is divided into the ARM Cortex-A9 CPU (Processing System, PS) and the NPU Core in the FPGA fabric (Programmable Logic, PL). Communication is handled via the AXI4-Lite interface, controlled using Memory Mapped I/O (MMIO).
 
-```mermaid
-block-beta
-    columns 4
-    
-    %% Processing System
-    block:PS:1
-        CPU["ARM Cortex-A9 (PS)"]
-        Jupyter["Jupyter Notebook\n(Python)"]
-        CPU --- Jupyter
-    end
+### The 4 Exodia Parts (Hardware Accelerators)
 
-    %% AXI Bus
-    AXI(("AXI4-Lite\nInterconnect"))
-    
-    %% NPU IP
-    block:NPU_IP:2
-        columns 2
-        AXI_WRAPPER["AXI4-Lite Wrapper\n(MMIO Registers)"]
-        
-        block:NPU_CORE:2
-            columns 2
-            FSM["Controller FSM\n(Tile Scheduler)"]
-            BRAM["Ping-Pong BRAM\n(Double Buffering)"]
-            DELAY["Delay Lines\n(Shift Registers)"]
-            SYSTOLIC["NxN Systolic Array\n(MAC Cores)"]
-            
-            FSM --> BRAM
-            FSM --> DELAY
-            BRAM --> DELAY
-            DELAY --> SYSTOLIC
-        end
-        
-        AXI_WRAPPER --> FSM
-        AXI_WRAPPER --> BRAM
-        SYSTOLIC --> AXI_WRAPPER
-    end
-    
-    PS --> AXI
-    AXI --> NPU_IP
+1. **32x32 Systolic Array MAC Engine:** Scaled down from a theoretical 64x64 design to exactly 32x32 to perfectly fit the KV260's DSP limit (uses 1,024 out of 1,248 available DSP48E2 slices). Executes signed 8-bit multiplications with 16/32-bit accumulations to prevent overflow, utilizing a wavefront propagation structure for maximum data reuse.
+2. **1-Clock RMSNorm Accelerator (`rmsnorm_inv_sqrt.sv`):** Replaces computationally expensive $1/\sqrt{x}$ iterative divisions with a 1024-segment Piecewise Linear (PWL) approximation. Extracts slope and intercept from BRAM and calculates $y = ax + b$ within a single DSP clock cycle.
+3. **3-Clock Softmax Accelerator (`softmax_exp_unit.sv`):** Sidesteps Taylor series calculations by applying Base-2 conversion ($e^x = 2^{x \cdot \log_2 e}$). The integer portion is handled instantly via bit-shifts, while the fractional portion uses a tiny 1024-segment LUT, slashing the cycle cost down to just 3 clocks.
+4. **1-Clock GeLU Accelerator (`gelu_lut.sv`):** Bypasses the complex $\text{tanh}$ formula by implementing a 64KB Full-ROM lookup table optimized for 16-bit inputs, resolving the non-linear activation in a single clock cycle.
 
-    Core Features
-```
-Memory Mapped I/O (AXI4-Lite): The CPU can control NPU registers and inject data into the BRAM simply by writing to specific memory addresses.
+## Core Features & Data Path Strategy
 
-Double Buffering (Ping-Pong BRAM): Applies a latency hiding technique that overlaps data transmission (DMA) with NPU computation, effectively eliminating memory-bound bottlenecks.
+**512-bit Wide Data Path (Packing):** To maximize memory bandwidth from the BRAM, TinyNPU utilizes a 512-bit wide read bus. A single BRAM slot contains exactly 512 bits, strategically packed as: `[Upper 256-bit Weights (B) : Lower 256-bit Activations (A)]`.
 
-Data Skewing via Delay Lines: Utilizes D-Flip-Flop-based shift registers to create the physical delay required for the wavefront execution in the Systolic Array, minimizing the complexity of the FSM controller.
+**Memory Mapped I/O (AXI4-Lite):** The CPU can control NPU registers and inject data into the BRAM simply by writing to specific memory addresses.
 
-Scalable NxN Design: Designed using SystemVerilog's generate statements, allowing flexible expansion of core counts (e.g., 4x4, 8x8, 16x16) simply by modifying the ARRAY_SIZE parameter at compile time.
+**Double Buffering (Ping-Pong BRAM):** Applies a latency hiding technique that overlaps data transmission (DMA) with NPU computation, effectively eliminating memory-bound bottlenecks.
+
+**Data Skewing via Delay Lines:** Utilizes D-Flip-Flop-based shift registers to create the physical delay required for the wavefront execution in the Systolic Array, minimizing the complexity of the FSM controller.
 
 
 ---

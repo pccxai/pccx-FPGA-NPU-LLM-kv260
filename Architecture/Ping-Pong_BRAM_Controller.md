@@ -2,9 +2,15 @@
 # Ping-Pong BRAM Controller
 
 1. 전체 구조 (NPU = 미니 GPU)
-우리가 엣지 보드(PYNQ-Z2)에서 돌릴 전체 시스템의 데이터 흐름은
+우리가 KV260 보드에서 돌릴 전체 시스템의 데이터 흐름은
 
 > DDR (메인 메모리) ↔ BRAM ↔ Systolic Array (연산기)
+
+## 512-bit Data Packing (데이터 패킹)
+메모리 대역폭(Bandwidth)을 극한으로 끌어올리기 위해, BRAM 한 칸의 넓이를 512-bit로 확장했다. 한 번의 읽기(Read) 요청으로 행렬 연산에 필요한 A와 B 데이터를 동시에 가져온다.
+
+* **상위 256-bit:** Weights (가중치 B) 데이터 저장 (8-bit x 32개)
+* **하위 256-bit:** Activations (활성화값 A) 데이터 저장 (8-bit x 32개)
 
 이걸 CUDA 환경으로 번역하면
 
@@ -161,9 +167,22 @@ int read_val = buffer_0[0];
 buffer_1[0] = 30; // 1e  <-- 30은 여기에 들어감!
 ```
 
+---
+
+## 5. BRAM Latency와 Preload 상태 (Debugging History)
+
 >Q:  "시뮬레이션 웨이브 상으로는 dma_addr과 wdata에 00, 0a(10)이 ram의 값으로 들어가는 순간 동시(클럭상으로 동일)에 dma_addr과 wdata에 01, 14(20)가 할당되는 것처럼 보여 이게 문제 없을까?"  
 
 A: 하드웨어의 핵심: "과거를 읽고, 미래를 쓴다" (<= Non-blocking)
+
+**디버깅 히스토리: 1-Cycle 지연 문제 해결**
+초기 설계에서는 FSM(상태머신)이 연산 시작(Run) 상태에 진입함과 동시에 BRAM 주소를 주입하고 데이터를 즉시 읽어오려 했다. 그러나 **BRAM은 동기식(Synchronous) 메모리이므로 주소를 넣은 후 정확히 1 Clock Cycle 뒤에 데이터가 출력(Read Latency)** 된다.
+이로 인해 첫 번째 클럭에 쓰레기 값(Garbage data)이 Array로 들어가는 버그가 발생했다.
+
+**해결책:**
+FSM에 `PRELOAD` 라는 중간 상태(State)를 삽입했다.
+1. `PRELOAD`: 주소 `0`을 BRAM에 주입하고 1클럭 대기한다.
+2. `RUN`: 1클럭이 지나면 주소 `0`의 진짜 데이터가 나오기 시작하므로, 이때부터 NPU 연산 Valid 신호를 On 시켜서 연산을 시작한다.
 하드웨어의 모든 플립플롭(메모리, 레지스터)은 클럭이 0에서 1로 딱 올라가는 **Rising Edge (파형에서 솟아오르는 순간)** 에만 동작해. 이때 아주 중요한 2가지 절대 규칙이 있어.
 
 * 읽을 때는 '클럭이 뛰기 직전(과거)'의 값을 읽어간다. (Setup Time)
