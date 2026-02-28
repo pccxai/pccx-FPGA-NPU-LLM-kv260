@@ -1,88 +1,103 @@
 `timescale 1ns / 1ps
-//////////////////////////////////////////////////////////////////////////////////
-// Company: 
-// Engineer: 
-// 
-// Create Date: 2026/02/25 21:04:06
-// Design Name: 
-// Module Name: tb_npu_core_top
-// Project Name: 
-// Target Devices: 
-// Tool Versions: 
-// Description: 
-// 
-// Dependencies: 
-// 
-// Revision:
-// Revision 0.01 - File Created
-// Additional Comments:
-// 
-//////////////////////////////////////////////////////////////////////////////////
 
-module tb_npu_core_top;
+module tb_npu_core_top();
+
+    // 파라미터 셋업
+    parameter ARRAY_SIZE = 32;
+    parameter DATA_WIDTH = 512;
+    parameter ADDR_WIDTH = 9;
+
+    // 포트 연결용 신호
     logic clk;
     logic rst_n;
-
-    // AXI DMA 인터페이스 (Host -> Device 메모리 복사용)
-    logic       dma_we;
-    logic [7:0] dma_addr;
-    logic [7:0] dma_wdata;
-
-    // 제어 신호 (Kernel Launch 트리거)
-    logic       start_mac;
-
-    // 최종 연산 결과 (출력)
-    logic [15:0] out_acc_00, out_acc_01;
-    logic [15:0] out_acc_10, out_acc_11;
-
-    // 대망의 NPU 코어 등판!
-    npu_core_top dut (
+    
+    logic                  dma_we;
+    logic [ADDR_WIDTH-1:0] dma_addr;
+    logic [DATA_WIDTH-1:0] dma_write_data;
+    logic                  start_mac;
+    
+    logic signed [31:0] out_acc  [0:ARRAY_SIZE-1][0:ARRAY_SIZE-1];
+    logic signed [7:0]  out_gelu [0:ARRAY_SIZE-1][0:ARRAY_SIZE-1]; // 🔥 배선 추가
+    // NPU 탑 모듈 인스턴스화
+    npu_core_top_NxN #(
+        .ARRAY_SIZE(ARRAY_SIZE),
+        .DATA_WIDTH(DATA_WIDTH),
+        .ADDR_WIDTH(ADDR_WIDTH)
+    ) uut (
         .clk(clk), .rst_n(rst_n),
-        .dma_we(dma_we), .dma_addr(dma_addr), .dma_wdata(dma_wdata),
+        .dma_we(dma_we), .dma_addr(dma_addr), .dma_write_data(dma_write_data),
         .start_mac(start_mac),
-        .out_acc_00(out_acc_00), .out_acc_01(out_acc_01),
-        .out_acc_10(out_acc_10), .out_acc_11(out_acc_11)
+        .out_acc(out_acc),
+        .out_gelu(out_gelu)  // 🔥 포트 연결
     );
 
-    // 하드웨어 심장 박동 (10ns 주기)
-    always #5 clk = ~clk;
-
+    // 100MHz 클럭 생성 (주기 10ns)
     initial begin
-        // 1. 초기화 (전원 ON)
-        clk = 0; rst_n = 0;
-        dma_we = 0; dma_addr = 0; dma_wdata = 0;
+        clk = 0;
+        forever #5 clk = ~clk;
+    end
+
+    // 파이썬에서 만든 512비트 타일 데이터를 담을 임시 메모리
+    logic [DATA_WIDTH-1:0] test_mem [0:ARRAY_SIZE-1];
+
+    // 시뮬레이션 시나리오 시작!
+    initial begin
+        // 1. 초기화 및 리셋
+        $display("🚀 [Time: %0t] 시뮬레이션 시작! 리셋 가동...", $time);
+        rst_n = 0;
+        dma_we = 0;
+        dma_addr = 0;
+        dma_write_data = 0;
         start_mac = 0;
-
-        #20 rst_n = 1; // 리셋 해제!
-
-        // =========================================================
-        // [Phase 1] Host to Device (DMA가 BRAM에 데이터 세팅)
-        // 0~1번 주소: Feature Map (A행렬)
-        // 2~3번 주소: Weight (B행렬)
-        // =========================================================
-        @(posedge clk); dma_we <= 1; dma_addr <= 8'd0; dma_wdata <= 8'd2; // a0 = 2
-        @(posedge clk); dma_we <= 1; dma_addr <= 8'd1; dma_wdata <= 8'd3; // a1 = 3
-        @(posedge clk); dma_we <= 1; dma_addr <= 8'd2; dma_wdata <= 8'd4; // b0 = 4
-        @(posedge clk); dma_we <= 1; dma_addr <= 8'd3; dma_wdata <= 8'd5; // b1 = 5
-        @(posedge clk); dma_we <= 0; // 쓰기 종료
-
-        #30; // 잠깐 대기
-
-        // =========================================================
-        // [Phase 2] Kernel Launch! (연산 시작 명령)
-        // =========================================================
-        @(posedge clk);
-        start_mac <= 1'b1; // "NPU야, 일해라!"
         
+        // 메모리 파일 로드 (파이썬에서 만든 gemma 타일)
+        $readmemh("gemma_tile.mem", test_mem);
+        
+        #20 rst_n = 1; // 리셋 해제
+        #10;
+
+        // 2. 가상 AXI DMA 전송 시작
+        $display("💾 [Time: %0t] AXI DMA: Gemma 타일 데이터 BRAM 전송 시작...", $time);
+        for (int i = 0; i < ARRAY_SIZE; i++) begin
+            @(posedge clk);
+            #1; // 🔥 Race Condition 방지용 딜레이! (이게 핵심)
+            dma_we = 1'b1;
+            dma_addr = i;
+            dma_write_data = test_mem[i]; 
+        end
         @(posedge clk);
-        start_mac <= 1'b0; // 딱 1클럭만 쏴주고 끔 (트리거 역할)
+        #1; // 🔥 여기도 추가!
+        dma_we = 1'b0; 
+        $display("💾 [Time: %0t] AXI DMA: 전송 완료!", $time);
+        #10;
 
-        // =========================================================
-        // [Phase 3] CPU는 팝콘 먹으면서 결과 기다림
-        // FSM이 알아서 핑퐁 스위치 바꾸고, BRAM에서 읽어서 Systolic에 쏨
-        // =========================================================
-        #200; 
+        // 3. NPU 타일 연산 트리거 (발사!)
+        $display("🔥 [Time: %0t] NPU 가동! 32x32 Wavefront 파도타기 시작!", $time);
+        @(posedge clk);
+        #1; // 🔥 여기도 추가!
+        start_mac = 1'b1;
+        @(posedge clk);
+        #1; // 🔥 여기도 추가!
+        start_mac = 1'b0;
 
+        // 4. 연산 완료 대기
+        // FSM 스트리밍 32클럭 + Systolic Array 파도타기 전파 지연 (Row 31 + Col 31 = 62클럭) + 여유 마진
+        // 약 100클럭 대기
+        #(150 * 10);
+        $display("🌊 [Time: %0t] 파도타기 연산 종료!", $time);
+
+        // 5. 결과 검증 (첫 번째 PE와 마지막 PE 확인)
+        // 파이썬 콘솔에 출력된 '파이썬 정답'과 비교해볼 것!
+        $display("========================================");
+        $display("🎯 PE(0,0) 결과: %d", $signed(out_acc[0][0]));
+        $display("🎯 PE(31,31) 결과: %d", $signed(out_acc[31][31]));
+        $display("========================================");
+        // 5. 결과 검증 (첫 번째 PE와 마지막 PE 확인)
+        $display("========================================");
+        $display("🎯 PE(0,0)   MAC: %d -> GeLU: %d", $signed(out_acc[0][0]), $signed(out_gelu[0][0]));
+        $display("🎯 PE(31,31) MAC: %d -> GeLU: %d", $signed(out_acc[31][31]), $signed(out_gelu[31][31]));
+        $display("========================================");
         $finish;
     end
+
 endmodule

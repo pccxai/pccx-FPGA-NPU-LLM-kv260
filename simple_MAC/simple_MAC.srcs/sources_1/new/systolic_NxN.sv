@@ -1,7 +1,7 @@
 `timescale 1ns / 1ps
 
 module systolic_NxN #(
-    parameter ARRAY_SIZE = 64 // 64x64 아키텍처!
+    parameter ARRAY_SIZE = 32 // 32x32 아키텍처!
 )(
     input  logic clk,
     input  logic rst_n,
@@ -12,7 +12,7 @@ module systolic_NxN #(
     input  logic [7:0] in_b [0:ARRAY_SIZE-1],
     input  logic       in_valid,
 
-    output logic [15:0] out_acc [0:ARRAY_SIZE-1][0:ARRAY_SIZE-1]
+    output logic [31:0] out_acc [0:ARRAY_SIZE-1][0:ARRAY_SIZE-1]
 );
 
     // 각 PE들 사이를 연결할 내부 전선

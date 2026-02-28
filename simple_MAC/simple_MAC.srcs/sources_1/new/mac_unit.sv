@@ -6,17 +6,21 @@ module pe_unit (
     input  logic        i_clear, // 🔥 [핵심] 타일 연산 전 누산기를 비우는 클리어 핀!
     input  logic        i_valid, 
     
-    input  logic [7:0]  i_a,     
-    input  logic [7:0]  i_b,     
+    // 🔥 포트 자체를 signed로 선언!
+    input  logic signed [7:0]  i_a,     
+    input  logic signed [7:0]  i_b, 
     
     output logic [7:0]  o_a,     
     output logic [7:0]  o_b,     
     output logic        o_valid, 
-    output logic [15:0] o_acc  
+    output logic [31:0] o_acc  
 );
 
-    logic [15:0] mul_result;
-    assign mul_result = i_a * i_b; // 조합회로 곱셈
+    // [mac_unit.sv 수정본]
+    logic signed [31:0] mul_result;
+
+    // 이제 포트가 signed니까 $signed 매크로 없이도 완벽한 2의 보수 곱셈 수행됨!
+    assign mul_result = $signed(i_a) * $signed(i_b); // 🔥 완벽한 INT8 곱셈!
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
