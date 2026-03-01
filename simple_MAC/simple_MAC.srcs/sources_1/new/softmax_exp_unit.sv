@@ -16,7 +16,7 @@ module softmax_exp_unit (
     logic signed [31:0] reg_x_prime; 
     logic               reg_valid_1;
 
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             reg_x_prime <= 0;
             reg_valid_1 <= 0;
@@ -43,14 +43,14 @@ module softmax_exp_unit (
 
     initial begin
         // 🚨 절대 경로 필수! (네 경로에 맞게 확인)
-        $readmemh("C:/Users/breadk/Desktop/FPGA_Project/TinyNPU-RTL/model/Patchify/gemma_In_FPGA_Project/softmax_frac.mem", lut_exp_frac);
+        $readmemh("softmax_frac.mem", lut_exp_frac);
     end
 
     logic [15:0] reg_frac_val;
     logic [4:0]  reg_shift_val;
     logic        reg_valid_2;
 
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             reg_frac_val  <= 0;
             reg_shift_val <= 0;
@@ -64,7 +64,7 @@ module softmax_exp_unit (
         end
     end
 
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             o_exp     <= 0;
             valid_out <= 0;

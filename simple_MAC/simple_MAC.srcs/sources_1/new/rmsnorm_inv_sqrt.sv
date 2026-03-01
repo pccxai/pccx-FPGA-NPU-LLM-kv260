@@ -26,8 +26,8 @@ module rmsnorm_inv_sqrt (
 
     initial begin
         // 파이썬으로 만든 1024분할 컨닝페이퍼 2장 로드!
-        $readmemh("C:/Users/breadk/Desktop/FPGA_Project/TinyNPU-RTL/model/Patchify/gemma_In_FPGA_Project/rmsnorm_slope.mem", lut_slope);
-        $readmemh("C:/Users/breadk/Desktop/FPGA_Project/TinyNPU-RTL/model/Patchify/gemma_In_FPGA_Project/rmsnorm_inter.mem", lut_inter);
+        $readmemh("rmsnorm_slope.mem", lut_slope);
+        $readmemh("rmsnorm_inter.mem", lut_inter);
     end
 
     // ----------------------------------------------------------------
@@ -62,7 +62,7 @@ module rmsnorm_inv_sqrt (
     logic signed [47:0] dsp_mult_comb;
     assign dsp_mult_comb = (reg_a * $signed({1'b0, reg_frac_x})) + reg_b; 
     
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             o_inv_sqrt <= 0;
             valid_out  <= 0;
