@@ -1,108 +1,108 @@
-# 테스트벤치 시뮬레이션 흐름
+# Testbench Simulation Flow
 
-세 개의 testbench가 각 모듈을 검증한다.
+Three testbenches verify each respective module.
 
 ---
 
-## 전체 검증 구조
+## Overall Verification Structure
 
 ```mermaid
 flowchart LR
-    %% 전체는 가로(1행 3열) 배치
-    
-    subgraph tb_mac_unit["<h3>tb_mac_unit<br/>(pe_unit 검증)</h3>"]
+    %% Overall horizontal (1 row 3 columns) arrangement
+
+    subgraph tb_mac_unit["<h3>tb_mac_unit<br/>(pe_unit Verification)</h3>"]
         direction TB
-        %% 제목과의 간격을 위한 투명 노드
+        %% Transparent node for spacing from title
         sep1[ ] --- T1
         style sep1 fill:none,stroke:none
-        
-        T1["① 리셋 (rst_n=0 → 1)"] --> T2["② i_a=2, i_b=3 → acc=6"]
+
+        T1["① Reset (rst_n=0 → 1)"] --> T2["② i_a=2, i_b=3 → acc=6"]
         T2 --> T3["③ i_a=4, i_b=5 → acc=26"]
         T3 --> T4["④ i_a=10, i_b=10 → acc=126"]
-        T4 --> T5["⑤ $display로 결과 출력"]
-        T5 --> W1["⚠️ i_valid 연결 안 됨\n→ 항상 누산됨"]
+        T4 --> T5["⑤ Output result via $display"]
+        T5 --> W1["⚠️ i_valid is unconnected\n→ Accumulates continuously"]
     end
 
-    subgraph tb_ping_pong["<h3>tb_ping_pong<br/>(PP-bram 검증)</h3>"]
+    subgraph tb_ping_pong["<h3>tb_ping_pong<br/>(PP-bram Verification)</h3>"]
         direction TB
-        %% 제목과의 간격을 위한 투명 노드
+        %% Transparent node for spacing from title
         sep2[ ] --- P1
         style sep2 fill:none,stroke:none
 
         P1["① sel=0, DMA→BRAM_0[0]=10"] --> P2["② DMA→BRAM_0[1]=20"]
-        P2 --> P3["③ sel=1 (스위치!)"]
-        P3 --> P4["④ NPU가 sys_addr=0 → rdata=10"]
-        P4 --> P5["⑤ 동시에 DMA→BRAM_1[0]=30"]
-        P5 --> W2["⚠️ 동기 읽기라\n1 사이클 후 데이터"]
+        P2 --> P3["③ sel=1 (Switch!)"]
+        P3 --> P4["④ NPU sys_addr=0 → rdata=10"]
+        P4 --> P5["⑤ Simultaneously DMA→BRAM_1[0]=30"]
+        P5 --> W2["⚠️ Synchronous read\nso data appears 1 cycle later"]
     end
 
-    subgraph tb_systolic["<h3>tb_systolic<br/>(systolic_2x2 검증)</h3>"]
+    subgraph tb_systolic["<h3>tb_systolic<br/>(systolic_2x2 Verification)</h3>"]
         direction TB
-        %% 제목과의 간격을 위한 투명 노드
+        %% Transparent node for spacing from title
         sep3[ ] --- S1
         style sep3 fill:none,stroke:none
 
-        S1["① in_valid=1, 파도 1 투입"] --> S2["② 파도 2 투입"]
-        S2 --> S3["③ 파도 3 투입"]
-        S3 --> S4["④ in_valid=0 (flush)"]
-        S4 --> S5["⑤ PE들이 순차적으로 결과 수렴"]
-        S5 --> W3["⚠️ PE(1,1)은\n2 사이클 늦게 시작"]
+        S1["① in_valid=1, Input Wave 1"] --> S2["② Input Wave 2"]
+        S2 --> S3["③ Input Wave 3"]
+        S3 --> S4["④ in_valid=0 (Flush)"]
+        S4 --> S5["⑤ PEs sequentially converge results"]
+        S5 --> W3["⚠️ PE(1,1) starts\n2 cycles later"]
     end
 
-    %% 3열 배치를 유지하기 위한 투명 연결선
+    %% Transparent connecting lines to maintain the 3-column layout
     tb_mac_unit ~~~ tb_ping_pong
     tb_ping_pong ~~~ tb_systolic
 ```
 
 ---
 
-## 1. tb_mac_unit — pe_unit 단독 검증
+## 1. `tb_mac_unit` — `pe_unit` Standalone Verification
 
-PE 하나를 단독으로 검증한다. 매 클럭 입력을 넣고 누적 결과가 올바른지 확인.
+Verifies a single PE in isolation. Inputs are provided every clock, and it checks whether the accumulated result is correct.
 
 ```
-시나리오:
-  rst_n = 0 → 1  (리셋 해제)
+Scenario:
+  rst_n = 0 → 1  (Release Reset)
   Cycle 1: i_a=2, i_b=3  → acc = 0 + 6  = 6
   Cycle 2: i_a=4, i_b=5  → acc = 6 + 20 = 26
   Cycle 3: i_a=10, i_b=10 → acc = 26 + 100 = 126 ✓
 ```
 
-**알려진 이슈:** `tb_mac_unit.sv`에서 `i_valid` 포트가 연결되지 않아 항상 valid 상태로 동작한다. 실제 systolic 배열과 달리 valid 제어를 테스트하지 못한다.
+**Known Issue:** The `i_valid` port is unconnected in `tb_mac_unit.sv`, meaning it operates in an always-valid state. It does not test the valid control differently from the actual systolic array.
 
 ---
 
-## 2. tb_ping_pong — ping_pong_bram 더블버퍼 검증
+## 2. `tb_ping_pong` — `ping_pong_bram` Double Buffer Verification
 
-핑퐁 버퍼의 핵심: DMA 쓰기와 NPU 읽기가 **동시에** 일어나는지 확인.
+The core of the ping-pong buffer: verify that DMA writes and NPU reads occur **simultaneously**.
 
 ```
 Phase 1 (sel=0):
   DMA → BRAM_0[0] = 10
   DMA → BRAM_0[1] = 20
 
-Phase 2 (sel=1, 스위치!):
-  NPU  → sys_addr=0 → (1 사이클 후) rdata = 10  ← BRAM_0에서 읽기
-  DMA  → BRAM_1[0] = 30                          ← BRAM_1에 쓰기 (동시!)
-  NPU  → sys_addr=1 → (1 사이클 후) rdata = 20
+Phase 2 (sel=1, Switch!):
+  NPU  → sys_addr=0 → (1 cycle later) rdata = 10  ← Read from BRAM_0
+  DMA  → BRAM_1[0] = 30                           ← Write to BRAM_1 (Simultaneous!)
+  NPU  → sys_addr=1 → (1 cycle later) rdata = 20
 ```
 
-**동기식 읽기 주의:** `simple_bram`은 동기식이므로 주소 입력 후 **다음 클럭**에 데이터가 나온다.
+**Synchronous Read Caution:** Because `simple_bram` is synchronous, data is output on the **next clock** after the address is inputted.
 
 ---
 
-## 3. tb_systolic — systolic_2x2 행렬 연산 검증
+## 3. `tb_systolic` — `systolic_2x2` Matrix Multiplication Verification
 
-4사이클 파도를 흘려보내며 2×2 행렬 곱 결과를 검증한다.
+Verifies the 2x2 matrix multiplication result by flowing waves over 4 cycles.
 
-| 사이클 | in_a_0 | in_a_1 | in_b_0 | in_b_1 | 이벤트 |
+| Cycle | in_a_0 | in_a_1 | in_b_0 | in_b_1 | Event |
 |--------|--------|--------|--------|--------|--------|
-| 1 | 1 | 0 | 1 | 0 | PE(0,0) 첫 연산 시작 |
-| 2 | 2 | 3 | 3 | 2 | 파도 확산: PE(0,0), (0,1), (1,0) 가동 |
-| 3 | 0 | 4 | 0 | 4 | 전체 가동: PE(1,1) 첫 연산 |
-| 4 | 0 | 0 | 0 | 0 | valid=0 (flush): PE(1,1) 마지막 연산 |
+| 1 | 1 | 0 | 1 | 0 | PE(0,0) starts first computation |
+| 2 | 2 | 3 | 3 | 2 | Wave spreads: PE(0,0), (0,1), (1,0) activate |
+| 3 | 0 | 4 | 0 | 4 | Full activation: PE(1,1) first computation |
+| 4 | 0 | 0 | 0 | 0 | valid=0 (flush): PE(1,1) final computation |
 
-**valid 전파 지연:** PE(0,0) → PE(0,1), PE(1,0)까지는 **1 사이클** 늦고, PE(1,1)은 **2 사이클** 늦게 계산을 시작한다.
+**Valid Propagation Delay:** Computations at PE(0,1) and PE(1,0) are delayed by **1 cycle** compared to PE(0,0). Computations at PE(1,1) start **2 cycles** later.
 
 ```mermaid
 sequenceDiagram
@@ -124,14 +124,14 @@ sequenceDiagram
 
 ---
 
-## 4. 검증 환경
+## 4. Verification Environment
 
-**EDA Tool:** Xilinx Vivado 2025.2  
-**Target:** xc7z020clg400-1 (PYNQ-Z2)  
-**Simulator:** XSim (Vivado 내장) + Verilator (고속 C++ 기반)
+- **EDA Tool:** Xilinx Vivado 2025.2
+- **Target:** xc7z020clg400-1 (PYNQ-Z2)
+- **Simulator:** XSim (Built-in Vivado) + Verilator (High-speed C++ based)
 
 ```bash
-# Verilator로 빠른 시뮬레이션
+# Fast simulation with Verilator
 verilator --cc --exe --build tb_systolic.sv systolic_2x2.sv pe_unit.sv
 ./obj_dir/Vsystolic_2x2
 ```

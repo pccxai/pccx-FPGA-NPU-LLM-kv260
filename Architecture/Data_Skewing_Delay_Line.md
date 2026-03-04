@@ -1,5 +1,3 @@
-### 3. `Data_Skewing_Delay_Line.md` (The secret of Wavefront execution)
-
 # Data Skewing & Delay Line (Wavefront Execution)
 
 ## 1. Why Do We Need Delay?
@@ -14,17 +12,17 @@ Calculating these precise timings via software-like FSM counters creates massive
 graph LR
     subgraph "Data Skewing (A Matrix)"
         FSM["FSM (Simultaneous Fire!)"]
-        
+
         FSM -->|Delay 0| PE00["PE (0,0)"]
-        
+
         FSM -->|1 Cycle Delay| FF1["D-FF"]
         FF1 --> PE10["PE (1,0)"]
-        
+
         FSM -->|2 Cycle Delay| FF2_1["D-FF"]
         FF2_1 --> FF2_2["D-FF"]
         FF2_2 --> PE20["PE (2,0)"]
     end
-    
+
     style FF1 fill:#f96,stroke:#333
     style FF2_1 fill:#f96,stroke:#333
     style FF2_2 fill:#f96,stroke:#333

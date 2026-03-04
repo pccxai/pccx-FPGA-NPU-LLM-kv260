@@ -1,151 +1,169 @@
-
 # Ping-Pong BRAM Controller
 
-1. 전체 구조 (NPU = 미니 GPU)
-우리가 엣지 보드(PYNQ-Z2)에서 돌릴 전체 시스템의 데이터 흐름은
+## Overall Structure (NPU = Mini GPU)
+The data flow of the entire system running on the edge board (PYNQ-Z2) is:
 
-> DDR (메인 메모리) ↔ BRAM ↔ Systolic Array (연산기)
+> DDR (Main Memory) ↔ BRAM ↔ Systolic Array (Computation Unit)
 
-이걸 CUDA 환경으로 번역하면
+Translating this to a CUDA environment:
 
 > Host RAM ↔ Shared Memory ↔ CUDA Cores
 
-Shared Memory에서 데이터를 꺼내와서 CUDA Cores에서 연산하고 다시 집어넣는, 하드웨어의 가장 깊숙한(Core) 부분을 설계
+This design implements the deepest hardware core part where data is fetched from Shared Memory, computed in CUDA Cores, and then stored back.
 
-# 1.  AXI DMA (Direct Memory Access)
+---
 
-CUDA 비유: cudaMemcpy(d_A, h_A, size, cudaMemcpyHostToDevice)  
+## 1. AXI DMA (Direct Memory Access)
 
- CPU(ARM 코어)가 직접 데이터를 하나하나 옮기면 너무 느림.  
- 그래서 CPU 대신 메인메모리(DDR)에 있는 배열 데이터를 NPU 쪽으로 쫙 밀어 넣어라 하고 명령만 내리면, 알아서 데이터를 고속으로 쏴주는 하드웨어 블록
+**CUDA Analogy:** `cudaMemcpy(d_A, h_A, size, cudaMemcpyHostToDevice)`
 
-# 2. BRAM (Block RAM)
+If the CPU (ARM Core) moves data one by one itself, it is too slow.
+Therefore, the DMA is a hardware block that rapidly pushes array data from main memory (DDR) into the NPU automatically once the CPU issues a command.
 
-CUDA 비유: Shared Memory (__shared__) 또는 L1 Cache
+---
 
-FPGA 칩 내부에 콕 박혀있는 작고 엄청나게 빠른 SRAM 덩어리. DMA가 DDR에서 가져온 데이터를 여기에 임시로 저장해두면,  systolic_2x2가 클럭마다 여기서 데이터를 사용함. BRAM 2개가 ping-pong-buffer
+## 2. BRAM (Block RAM)
 
-# 3. Parameter (파라미터)
+**CUDA Analogy:** Shared Memory (`__shared__`) or L1 Cache
 
-C++ 비유: template <int N> 또는 #define SIZE 8
+BRAM is a small, incredibly fast block of SRAM embedded inside the FPGA chip. When the DMA temporarily stores data fetched from DDR here, the `systolic_2x2` uses this data every clock cycle. Two BRAMs form a ping-pong buffer.
 
-```verilog
+---
+
+## 3. Parameter
+
+**C++ Analogy:** `template <int N>` or `#define SIZE 8`
+
+```systemverilog
     parameter DATA_WIDTH = 8,
     parameter ADDR_WIDTH = 8 // 256 depth
 ```
-코드가 칩으로 구워지기 전(합성 단계)에 하드웨어의 크기나 규격을 결정하는 상수야. 예를 들어 parameter DATA_WIDTH = 8이라고 쓰면, "아, 이 모듈은 8비트짜리 전선(자료형)을 쓰는구나" 하고 컴파일러가 회로를 8가닥으로 맞춰서 그려줌
 
-# 4. Address (주소 연산)
+Parameters are constants that define the hardware's size or specifications before the code is synthesized into a chip. For example, `parameter DATA_WIDTH = 8` tells the compiler to synthesize an 8-bit wire path for this module.
 
-C++ 비유: 배열의 인덱스 array[index]
+---
 
-메모리에서 몇 번째 칸의 데이터를 읽고 쓸지 지정하는 숫자.소프트웨어에선 포인터나 인덱스로 접근하지만, 하드웨어에선 8비트짜리 addr 전선에 00000001 이라는 전기 신호를 주면 메모리의 1번 인덱스 방 문이 열리는 방식.
+## 4. Address (Address Calculation)
 
-# 5. MUX (Multiplexer, 멀티플렉서)
+**C++ Analogy:** Array index `array[index]`
 
-C++ 비유: if-else문, 삼항 연산자 ? :, 혹은 포인터 스위칭
-```verilog
-    // BRAM 0번 제어
-    assign we_0   = (ping_pong_sel == 1'b0) ? dma_we   : 1'b0;       // NPU가 쓸 땐 Write 금지
+Address is a number specifying which memory slot to read/write. In software, this is accessed via pointers or indices. In hardware, applying an electrical signal like `00000001` to an 8-bit `addr` wire opens the door to memory index 1.
+
+---
+
+## 5. MUX (Multiplexer)
+
+**C++ Analogy:** `if-else` statements, ternary operator `? :`, or pointer switching
+
+```systemverilog
+    // BRAM 0 Control
+    assign we_0   = (ping_pong_sel == 1'b0) ? dma_we   : 1'b0;       // Disable write when NPU is using it
     assign addr_0 = (ping_pong_sel == 1'b0) ? dma_addr : sys_addr;
 
-    // BRAM 1번 제어
-    assign we_1   = (ping_pong_sel == 1'b1) ? dma_we   : 1'b0;       // NPU가 쓸 땐 Write 금지
+    // BRAM 1 Control
+    assign we_1   = (ping_pong_sel == 1'b1) ? dma_we   : 1'b0;       // Disable write when NPU is using it
     assign addr_1 = (ping_pong_sel == 1'b1) ? dma_addr : sys_addr;
 
-    // Systolic 쪽으로 나가는 데이터 (Demux)
+    // Data going out to Systolic Array (Demux)
     assign sys_rdata = (ping_pong_sel == 1'b0) ? rdata_1 : rdata_0;
 ```
-소프트웨어는 if문이 거짓이면 그 안의 코드를 아예 실행 안 하는데. 하지만 하드웨어는 모든 모듈(전선)이 항상 살아서 전기가 흐르고 있음.그래서 MUX라는 스위치를 달아서 "선택 신호가 0이면 A 전선의 데이터를, 1이면 B 전선의 데이터를 통과시켜!"라는 물리적인 길을 터주는 역할. 아까 assign sys_rdata = (sel == 0) ? rdata_1 : rdata_0; 코드가 바로 이 MUX 회로.
 
-# 1. 내부에 BRAM_0과 BRAM_1 모듈 두 개를 생성한다.
+In software, if a condition is false, the code block inside is not executed. However, in hardware, electricity is always flowing through all modules (wires). Therefore, a MUX acts as a physical switch: "If the selection signal is 0, pass the data from wire A; if 1, pass wire B!" The line `assign sys_rdata = (sel == 0) ? rdata_1 : rdata_0;` is exactly this MUX circuit.
+
+---
+
+## 6. How it Works
+
+### Step 1. Create two modules: `BRAM_0` and `BRAM_1`
+
 ```mermaid
 graph LR
     DMA[AXI DMA]:::input
-    
-    subgraph "FPGA 메모리 (BRAM)"
+
+    subgraph "FPGA Memory (BRAM)"
         B0[("BRAM_0")]:::memory
         B1[("BRAM_1")]:::memory
     end
-    
-    SYS[systolic_2x2 연산 유닛]:::logic
 
-    %% 스타일 정의
+    SYS[systolic_2x2 Computation Unit]:::logic
+
+    %% Style definitions
     classDef input fill:#f9f,stroke:#333,stroke-width:2px;
     classDef memory fill:#ff9,stroke:#333,stroke-width:2px;
     classDef logic fill:#9cf,stroke:#333,stroke-width:2px;
 
-    %% 연결선 (개념적)
+    %% Conceptual connections
     DMA -.-> B0
     DMA -.-> B1
     B0 -.-> SYS
     B1 -.-> SYS
 ```
 
-# 2.ping_pong_sel이라는 1비트짜리 스위치(포인터)를 둔다.
-# 3.ping_pong_sel == 0일 때: AXI DMA (외부 메모리)는 BRAM_0에 다음 연산할 데이터를 열심히 쓰고(Write), 그와 동시에 우리의 systolic_2x2는 BRAM_1에서 이미 준비된 데이터를 읽어와서(Read) 연산을 돌린다.
-* 상황 1: ping_pong_sel == 0 일 때
-스위치 상태: 위쪽(0번)으로 입력, 아래쪽(1번)에서 출력
-DMA: BRAM_0에 열심히 데이터를 채워 넣습니다 (Write).
-Systolic: 이미 데이터가 차 있는 BRAM_1에서 데이터를 가져와 연산합니다 (Read).
+### Step 2. Introduce a 1-bit switch (pointer) named `ping_pong_sel`.
+
+### Step 3. When `ping_pong_sel == 0`:
+The AXI DMA (external memory) actively writes the next data to `BRAM_0` (Write), while simultaneously, our `systolic_2x2` reads already prepared data from `BRAM_1` (Read) and performs computations.
+
+**Scenario 1: `ping_pong_sel == 0`**
+- Switch state: Input to the top (0), Output from the bottom (1)
+- **DMA**: Diligently fills `BRAM_0` with data (Write).
+- **Systolic**: Fetches data from the already filled `BRAM_1` for computation (Read).
+
 ```mermaid
 graph LR
     DMA[AXI DMA]:::input
     SYS[systolic_2x2]:::logic
-    
+
     subgraph "Ping-Pong Control (sel == 0)"
         direction TB
-        B0[("BRAM_0 writing ")]:::activeWrite
+        B0[("BRAM_0 writing")]:::activeWrite
         B1[("BRAM_1 reading")]:::activeRead
     end
 
-    %% 흐름선
-    DMA == "데이터 쓰기 (Write)" ==> B0
-    B1 == "데이터 읽기 (Read)" ==> SYS
+    %% Flow lines
+    DMA == "Write Data" ==> B0
+    B1 == "Read Data" ==> SYS
 
-    %% 스타일 정의
+    %% Style definitions
     classDef input fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
     classDef logic fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
     classDef activeWrite fill:#ffcdd2,stroke:#b71c1c,color:black,stroke-width:4px;
     classDef activeRead fill:#c8e6c9,stroke:#1b5e20,color:black,stroke-width:4px;
 ```
-* 전환 (Switching): 양쪽 작업 완료 후
-DMA도 쓰기를 다 했고, Systolic도 연산을 다 마쳤다면?
-ping_pong_sel = ~ping_pong_sel (0 → 1)로 바뀝니다.  
 
-* 상황 2: ping_pong_sel == 1 일 때
-스위치 상태: 경로가 크로스(교차) 됩니다.
-DMA: 이제 비어있는 BRAM_1에 새 데이터를 채웁니다.
-Systolic: 아까(상황 1에서) DMA가 꽉 채워둔 BRAM_0의 데이터를 가져와 연산합니다.
+**Switching: After both tasks are complete**
+If the DMA finishes writing and the Systolic array finishes computing, the `ping_pong_sel` is toggled: `ping_pong_sel = ~ping_pong_sel` (from 0 to 1).
+
+**Scenario 2: `ping_pong_sel == 1`**
+- Switch state: Paths cross over.
+- **DMA**: Now fills the empty `BRAM_1` with new data.
+- **Systolic**: Fetches data from `BRAM_0` (which the DMA just filled in Scenario 1) for computation.
+
 ```mermaid
 graph LR
     DMA[AXI DMA]:::input
     SYS[systolic_2x2]:::logic
-    
+
     subgraph "Ping-Pong Control (sel == 1)"
         direction TB
         B0[("BRAM_0 reading")]:::activeRead
         B1[("BRAM_1 writing")]:::activeWrite
     end
 
-    %% 흐름선
-    DMA == "데이터 쓰기 (Write)" ==> B1
-    B0 == "데이터 읽기 (Read)" ==> SYS
+    %% Flow lines
+    DMA == "Write Data" ==> B1
+    B0 == "Read Data" ==> SYS
 
-    %% 스타일 정의
+    %% Style definitions
     classDef input fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
     classDef logic fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
     classDef activeWrite fill:#ffcdd2,stroke:#b71c1c,color:black,stroke-width:4px;
     classDef activeRead fill:#c8e6c9,stroke:#1b5e20,color:black,stroke-width:4px;
 ```
 
-```mermaid
+### Step 4. When both tasks are done, switch `ping_pong_sel = ~ping_pong_sel;` (0 to 1, or 1 to 0).
 
-```
-
-# 4.양쪽 작업이 다 끝나면 ping_pong_sel = ~ping_pong_sel; 로 스위칭! (0은 1로, 1은 0으로)
-
-```c++
+```cpp
 int buffer_0[256]; // BRAM 0
 int buffer_1[256]; // BRAM 1
 
@@ -154,41 +172,42 @@ buffer_0[0] = 10; // 0a
 buffer_0[1] = 20; // 14
 
 // Phase 2 (ping_pong_sel = 1)
-// NPU는 buffer_0에서 데이터를 안전하게 읽고
-int read_val = buffer_0[0]; 
+// NPU safely reads from buffer_0
+int read_val = buffer_0[0];
 
-// 동시에 DMA는 다음 데이터를 buffer_1에 쓴다!
-buffer_1[0] = 30; // 1e  <-- 30은 여기에 들어감!
+// Simultaneously, DMA writes next data into buffer_1!
+buffer_1[0] = 30; // 1e  <-- 30 goes in here!
 ```
 
->Q:  "시뮬레이션 웨이브 상으로는 dma_addr과 wdata에 00, 0a(10)이 ram의 값으로 들어가는 순간 동시(클럭상으로 동일)에 dma_addr과 wdata에 01, 14(20)가 할당되는 것처럼 보여 이게 문제 없을까?"  
+---
 
-A: 하드웨어의 핵심: "과거를 읽고, 미래를 쓴다" (<= Non-blocking)
-하드웨어의 모든 플립플롭(메모리, 레지스터)은 클럭이 0에서 1로 딱 올라가는 **Rising Edge (파형에서 솟아오르는 순간)** 에만 동작해. 이때 아주 중요한 2가지 절대 규칙이 있어.
+## 7. Q&A on Simulation Waveforms
 
-* 읽을 때는 '클럭이 뛰기 직전(과거)'의 값을 읽어간다. (Setup Time)
+> **Q:** "On the simulation waveform, at the exact moment `dma_addr` and `wdata` assign `00` and `0a` (10) into the ram, it looks like `01` and `14` (20) are being assigned simultaneously on the same clock cycle. Is this a problem?"
 
-* 값이 변하는 건 '클럭이 뛴 직후(미래)'부터 반영된다. (Clock-to-Q)
+**A: The core principle of hardware: "Read the past, Write the future" (Non-blocking)**
 
-[클럭이 뛰기 0.001초 전]
+All flip-flops (memory, registers) in hardware operate only on the **Rising Edge** (the exact moment the waveform shoots up from 0 to 1). There are two absolute rules here:
 
-* dma_addr는 00을 유지하고 있고, dma_wdata는 0a (10)을 유지하고 있다.  
+1. **Setup Time:** When reading, it fetches the value from 'just before the clock tick' (the past).
+2. **Clock-to-Q:** The changed value is reflected 'just after the clock tick' (the future).
 
-[클럭 엣지 발생]
+**[0.001 seconds before the clock tick]**
+- `dma_addr` maintains `00`, and `dma_wdata` maintains `0a` (10).
 
-* BRAM : 방금 전까지 가지고 있던 주소(00)랑 데이터(0a) 를 ram[0] 안에 넣음 (여기서 ram[0]에 10이 저장됨)
+**[Clock Edge Occurs]**
+- **BRAM:** Stores the address (`00`) and data (`0a`) it held a moment ago into `ram[0]`. (10 is stored here).
+- **Testbench (DMA):** Prepares the next address `01` and data `14` (20). (The waveform values change to `01` and `14` here).
 
-* 테스트벤치(DMA) : 주소 01이랑 데이터 14 (20)를 저장 (여기서 파형의 값이 01, 14(10진수 20)로 바뀜)  
-
-```c++
-// 매 클럭(Loop)마다 일어나는 일
+```cpp
+// What happens every clock cycle (Loop)
 int old_addr = current_addr;
 int old_data = current_data;
 
-// 1. BRAM은 옛날(방금 전) 값을 읽어서 저장하고
-ram[old_addr] = old_data; 
+// 1. BRAM reads the old value (from a moment ago) and stores it
+ram[old_addr] = old_data;
 
-// 2. 테스트벤치는 새로운 값으로 업데이트함 (동시에 발생!)
+// 2. Testbench updates with new values (Happens simultaneously!)
 current_addr = 1;
 current_data = 20;
 ```

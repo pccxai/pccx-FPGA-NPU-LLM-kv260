@@ -20,8 +20,8 @@ flowchart TB
                 BRAM0["simple_bram #0\n[Port A / Port B]"]
                 BRAM1["simple_bram #1\n[Port A / Port B]"]
             end
-            MUX -->|"DMA → BRAM_0 또는 BRAM_1\n(switch_buffer)"| BRAM0
-            MUX -->|"DMA → BRAM_1 또는 BRAM_0\n(switch_buffer)"| BRAM1
+            MUX -->|"DMA → BRAM_0 or BRAM_1\n(switch_buffer)"| BRAM0
+            MUX -->|"DMA → BRAM_1 or BRAM_0\n(switch_buffer)"| BRAM1
             BRAM0 -->|"rdata_0_a / rdata_0_b"| MUX
             BRAM1 -->|"rdata_1_a / rdata_1_b"| MUX
         end
@@ -52,7 +52,7 @@ flowchart TB
             DELAY_COL -->|"wire_b[0][i]"| MAC_ARRAY
         end
 
-        GELU["⚡ gelu_lut × 1,024\n(32×32 병렬)\ndata_in → data_out"]
+        GELU["⚡ gelu_lut × 1,024\n(32×32 Parallel)\ndata_in → data_out"]
 
         %% Internal connections
         FSM -->|"read_addr"| PING_PONG
@@ -74,7 +74,7 @@ flowchart TB
 
         SCALE["📐 Vector Scaling\n(always_ff)\nx = token × inv_sqrt >> 15"]
 
-        SHIFT["⏱️ 32-Cycle Shift Reg\n(MAC latency 모사)"]
+        SHIFT["⏱️ 32-Cycle Shift Reg\n(MAC latency simulation)"]
 
         SOFT["softmax_exp_unit\n(i_x → o_exp)\nvalid_in → valid_out"]
 
