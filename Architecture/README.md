@@ -20,3 +20,18 @@ This documentation alternates between bottom-up and top-down approaches to expla
    - Vivado IP packaging, MMIO communication, and Python Jupyter Notebook control.
 7. **[Verification & Simulation (Testbench)](Testbench.md)**
    - Strategies for verifying hardware timing and waveforms.
+
+### Gemma 3N E4B Constraints & Secrets
+
+8. **[RMSNorm and Weight Scaling](RMSNorm.md)**
+   - `scale_plus_one=False` constraint and why adding `+ 1.0` causes failures.
+9. **[AltUp 4-Stream Router](AltUp_4Stream.md)**
+   - Tanh router formula, dimension scaling, and pure vs. shadow residual connections.
+10. **[Attention & Dynamic RoPE](Attention_RoPE.md)**
+    - Removal of attention scaling/softcap and the alternating 5-layer RoPE cycle.
+11. **[FFN Gaussian Top-K Sparsity](FFN_Sparsity.md)**
+    - Extreme 95% thresholding applied to early FFN layers.
+12. **[Calibration Modules: LAuReL & PLE](PLE_LAuReL.md)**
+    - Specific injection points, parallel addition, and precise scaling factors.
+13. **[Core Secrets & Rules](Gemma3N_E4B_Core_Secrets.md)**
+    - A consolidated summary of all strict Gemma 3N implementation constraints.
