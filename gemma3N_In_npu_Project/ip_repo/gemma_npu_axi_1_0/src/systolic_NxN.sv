@@ -59,7 +59,7 @@ module systolic_NxN #(
         for (row = 0; row < ARRAY_SIZE; row++) begin : row_loop
             for (col = 0; col < ARRAY_SIZE; col++) begin : col_loop
                 
-                // 🚨 클로드 지적 반영: 변수 선언을 if 밖으로 빼서 합성 호환성 100% 확보!
+                // 클로드 지적 반영: 변수 선언을 if 밖으로 빼서 합성 호환성 100% 확보!
                 logic current_i_valid;
                 
                 if (row == 0 && col == 0) begin
@@ -72,7 +72,7 @@ module systolic_NxN #(
 
                 pe_unit u_pe (
                     .clk(clk), .rst_n(rst_n),
-                    .i_clear(i_clear),                // 🔥 4096개 PE에 동시 클리어 배선!
+                    .i_clear(i_clear),                // 4096개 PE에 동시 클리어 배선!
                     .i_valid(current_i_valid),
                     .i_a(wire_a[row][col]),
                     .i_b(wire_b[row][col]),

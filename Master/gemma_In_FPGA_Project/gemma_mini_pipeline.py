@@ -51,11 +51,11 @@ def run_gemma_mini_pipeline():
     kv_manager = HardwareKVCacheManager(max_seq_len, embed_dim)
     
     print("====================================================")
-    print("🚀 NPU Auto-regressive Decode Loop 시작!")
+    print("NPU Auto-regressive Decode Loop 시작!")
     print("====================================================\n")
     
     # 1. Prefill 단계 모사 (사용자가 "안녕" 이라고 입력함)
-    print("📥 [Prefill 단계] 프롬프트 '안녕' 처리 중...")
+    print("[Prefill 단계] 프롬프트 '안녕' 처리 중...")
     input_tokens = [0, 1] # "안", "녕"
     
     # (원래는 병렬로 처리하지만, 구조 이해를 위해 토큰 단위로 밀어넣음)
@@ -70,7 +70,7 @@ def run_gemma_mini_pipeline():
         # KV 캐시에 저장
         kv_manager.write_cache(k, v)
     
-    print(f"✅ Prefill 완료! 현재 KV Cache 포인터: {kv_manager.current_pos}\n")
+    print(f"Prefill 완료! 현재 KV Cache 포인터: {kv_manager.current_pos}\n")
     
     # 2. Decode 단계 (한 글자씩 "하", "세", "요" 생성)
     # 방금 처리한 "녕"을 시작점으로 잡음
@@ -81,7 +81,7 @@ def run_gemma_mini_pipeline():
     target_sequence = [2, 3, 4, 5] 
     
     for step in range(4):
-        print(f"🔄 [Decode Step {step+1}] 이전 단어 처리 중...")
+        print(f"[Decode Step {step+1}] 이전 단어 처리 중...")
         
         # [Step 1] 현재 단어를 NPU에 넣고 Q, K, V 연산
         dummy_embed = np.random.randn(1, embed_dim)
@@ -92,10 +92,10 @@ def run_gemma_mini_pipeline():
         # [Step 2] 방금 만든 K, V를 캐시에 추가 기록
         kv_manager.write_cache(k, v)
         
-        # [Step 3] 🔥 Attention 연산 (KV Cache 통째로 읽어오기!) 🔥
+        # [Step 3] Attention 연산 (KV Cache 통째로 읽어오기!) 🔥
         # 이게 바로 LLM의 메모리 대역폭을 다 잡아먹는 주범이야!
         past_k, past_v = kv_manager.read_active_cache()
-        print(f"   💽 [Memory] KV Cache에서 {past_k.shape[0]}개의 과거 토큰(K,V) DMA 로드 완료!")
+        print(f"  [Memory] KV Cache에서 {past_k.shape[0]}개의 과거 토큰(K,V) DMA 로드 완료!")
         
         # NPU 가동: Q x K^T (현재 단어가 과거 단어들과 얼마나 연관있는지 점수 매기기)
         attn_scores = np.dot(q, past_k.T) 
@@ -110,17 +110,17 @@ def run_gemma_mini_pipeline():
         next_word = vocab[next_token_idx]
         
         generated_text += next_word
-        print(f"✨ [출력] NPU가 다음 단어를 예측했습니다 -> **{next_word}**\n")
+        print(f"[출력] NPU가 다음 단어를 예측했습니다 -> **{next_word}**\n")
         
         if next_token_idx == 5: # <EOS> 토큰
-            print("🛑 <EOS> 감지! 생성을 종료합니다.")
+            print("<EOS> 감지! 생성을 종료합니다.")
             break
             
         # 뱉어낸 단어를 다음 스텝의 입력으로 피드백! (Auto-regressive)
         current_token_idx = next_token_idx
 
     print("====================================================")
-    print(f"🎉 최종 생성된 문장: {generated_text}")
+    print(f"최종 생성된 문장: {generated_text}")
     print("====================================================")
 
 if __name__ == "__main__":

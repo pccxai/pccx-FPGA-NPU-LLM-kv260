@@ -7,7 +7,7 @@ def slice_weight_for_npu(weight_name, weight_matrix, block_size=64, save_dir="./
     필요시 0으로 Padding하여 BRAM에 올릴 수 있는 Bin 파일로 저장하는 함수.
     """
     out_features, in_features = weight_matrix.shape
-    print(f"🔪 Target Layer: [{weight_name}] | Original Shape: {out_features}x{in_features}")
+    print(f" Target Layer: [{weight_name}] | Original Shape: {out_features}x{in_features}")
 
     # 1. 64 단위로 딱 떨어지게 패딩(Memory Alignment) 계산
     # CUDA에서 Pitch 메모리 할당하는 개념과 동일함!
@@ -15,7 +15,7 @@ def slice_weight_for_npu(weight_name, weight_matrix, block_size=64, save_dir="./
     pad_in  = (block_size - (in_features % block_size)) % block_size
 
     if pad_out > 0 or pad_in > 0:
-        print(f"📏 Memory Alignment 적용: Zero-padding (+{pad_out}, +{pad_in}) 추가")
+        print(f"Memory Alignment 적용: Zero-padding (+{pad_out}, +{pad_in}) 추가")
         # numpy.pad를 이용해 오른쪽과 아래쪽에 0을 채움
         aligned_matrix = np.pad(weight_matrix, ((0, pad_out), (0, pad_in)), mode='constant', constant_values=0)
     else:
@@ -26,7 +26,7 @@ def slice_weight_for_npu(weight_name, weight_matrix, block_size=64, save_dir="./
     # Grid 크기 계산 (몇 개의 64x64 블록이 나오는지)
     grid_y = aligned_out // block_size
     grid_x = aligned_in // block_size
-    print(f"🧱 Grid 구성: {grid_y} x {grid_x} Blocks (Total: {grid_y * grid_x} 타일)")
+    print(f"Grid 구성: {grid_y} x {grid_x} Blocks (Total: {grid_y * grid_x} 타일)")
 
     # 2. 64x64 블록으로 슬라이싱 (Tiling)
     # 메모리상에서 64x64 덩어리로 예쁘게 연속되도록 shape을 꼬아줌 (Numpy 마법!)
@@ -45,7 +45,7 @@ def slice_weight_for_npu(weight_name, weight_matrix, block_size=64, save_dir="./
             file_name = f"{weight_name}_block_Y{y}_X{x}.npy"
             np.save(os.path.join(save_dir, file_name), tile_data)
             
-    print(f"✅ 슬라이싱 완료! 저장 위치: {save_dir}/\n")
+    print(f"슬라이싱 완료! 저장 위치: {save_dir}/\n")
     return tiles
 
 if __name__ == "__main__":
