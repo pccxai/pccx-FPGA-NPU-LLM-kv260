@@ -2,35 +2,37 @@
 
 module systolic_NxN #(
     parameter ARRAY_SIZE = 32 // 32x32 아키텍처!
+    parameter RESULT_SIZE = 48
+    parameter INPUT_SIZE = 16;
 )(
     input  logic clk,
     input  logic rst_n,
     input  logic i_clear, // 외부(Top FSM)에서 받는 글로벌 클리어 신호
 
     // npu_core_top에서 '동시'에 쏟아지는 64개 데이터
-    input  logic [7:0] in_a [0:ARRAY_SIZE-1], 
-    input  logic [7:0] in_b [0:ARRAY_SIZE-1],
+    input  logic [INPUT_SIZE-1:0] in_a [0:ARRAY_SIZE-1], 
+    input  logic [INPUT_SIZE-1:0] in_b [0:ARRAY_SIZE-1],
     input  logic       in_valid,
 
-    output logic [ARRAY_SIZE*ARRAY_SIZE*32-1:0] out_acc_flat
+    output logic [ARRAY_SIZE*ARRAY_SIZE*RESULT_SIZE-1:0] out_acc_flat
 );
 
     // 내부 연산용 2차원 배열
-    logic [31:0] out_acc [0:ARRAY_SIZE-1][0:ARRAY_SIZE-1];
+    logic [RESULT_SIZE-1:0] out_acc [0:ARRAY_SIZE-1][0:ARRAY_SIZE-1];
 
     // 2차원 -> 1차원 Flat 변환
     genvar r, c;
     generate
         for (r = 0; r < ARRAY_SIZE; r++) begin
             for (c = 0; c < ARRAY_SIZE; c++) begin
-                assign out_acc_flat[(r*ARRAY_SIZE+c)*32 +: 32] = out_acc[r][c];
+                assign out_acc_flat[(r*ARRAY_SIZE+c)*RESULT_SIZE +: RESULT_SIZE] = out_acc[r][c];
             end
         end
     endgenerate
 
     // 각 PE들 사이를 연결할 내부 전선
-    logic [7:0] wire_a [0:ARRAY_SIZE-1][0:ARRAY_SIZE];
-    logic [7:0] wire_b [0:ARRAY_SIZE][0:ARRAY_SIZE-1];
+    logic [INPUT_SIZE-1:0] wire_a [0:ARRAY_SIZE-1][0:ARRAY_SIZE];
+    logic [INPUT_SIZE-1:0] wire_b [0:ARRAY_SIZE][0:ARRAY_SIZE-1];
     logic       wire_v [0:ARRAY_SIZE-1][0:ARRAY_SIZE-1]; 
 
     // -----------------------------------------------------------------
@@ -39,12 +41,12 @@ module systolic_NxN #(
     genvar i;
     generate
         for (i = 0; i < ARRAY_SIZE; i++) begin : delay_skewing
-            delay_line #( .WIDTH(8), .DELAY(i) ) u_delay_a (
+            delay_line #( .WIDTH(INPUT_SIZE), .DELAY(i) ) u_delay_a (
                 .clk(clk), .rst_n(rst_n),
                 .in_data(in_a[i]), .out_data(wire_a[i][0])
             );
 
-            delay_line #( .WIDTH(8), .DELAY(i) ) u_delay_b (
+            delay_line #( .WIDTH(INPUT_SIZE), .DELAY(i) ) u_delay_b (
                 .clk(clk), .rst_n(rst_n),
                 .in_data(in_b[i]), .out_data(wire_b[0][i])
             );

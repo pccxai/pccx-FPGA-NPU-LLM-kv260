@@ -4,10 +4,10 @@
 # 1. 범용 NPU 행렬곱 엔진 (Ping-Pong BRAM Overlapping)
 # =====================================================================
 import numpy as np
-import MMIO
+import Master.SYS_CONFIG as SYS_CONFIG
 
 def run_npu_matmul(x_vec, weight_mat, mean_sq_val, use_gelu=False):
-    if MMIO.SIMULATION_MODE:
+    if SYS_CONFIG.SIMULATION_MODE:
         #  [PC 시뮬레이션] NPU 하드웨어 동작을 완벽히 모사 (Mocking)
         # 1. RMSNorm 역제곱근 스케일링
         inv_sqrt = 1.0 / np.sqrt(float(mean_sq_val) + 1e-6)
@@ -41,22 +41,22 @@ def run_npu_matmul(x_vec, weight_mat, mean_sq_val, use_gelu=False):
     # [A] 커널 파라미터 셋업 (MMIO 레지스터 제어)
     # ---------------------------------------------------------
     # 0x08: RMSNorm용 분모 스칼라 꽂기
-    MMIO.npu_control.write(0x08, int(mean_sq_val))
+    SYS_CONFIG.npu_control.write(0x08, int(mean_sq_val))
     
     # 0x10: 1-Cycle GeLU 하드웨어 발동 여부 세팅 (Bit 0)
     mode_flag = 0x01 if use_gelu else 0x00
-    MMIO.npu_control.write(0x10, mode_flag)
+    SYS_CONFIG.npu_control.write(0x10, mode_flag)
     
     # ---------------------------------------------------------
     # [B] 프롤로그 (0번 타일 Ping 버퍼에 선탑재)
     # ---------------------------------------------------------
-    np.copyto(MMIO.ping_token, x_vec[0:32])
-    np.copyto(MMIO.ping_weight, weight_mat[0:32, 0:32])
+    np.copyto(SYS_CONFIG.ping_token, x_vec[0:32])
+    np.copyto(SYS_CONFIG.ping_weight, weight_mat[0:32, 0:32])
     
-    MMIO.npu_control.write(0x0C, 0) # DMA 스위치 -> Ping(0)
-    MMIO.dma.sendchannel.transfer(MMIO.ping_token)
-    MMIO.dma.sendchannel.transfer(MMIO.ping_weight)
-    MMIO.dma.sendchannel.wait()
+    SYS_CONFIG.npu_control.write(0x0C, 0) # DMA 스위치 -> Ping(0)
+    SYS_CONFIG.dma.sendchannel.transfer(SYS_CONFIG.ping_token)
+    SYS_CONFIG.dma.sendchannel.transfer(SYS_CONFIG.ping_weight)
+    SYS_CONFIG.dma.sendchannel.wait()
     
     # ---------------------------------------------------------
     # [C] 메인 핑퐁 파이프라인 루프
@@ -67,7 +67,7 @@ def run_npu_matmul(x_vec, weight_mat, mean_sq_val, use_gelu=False):
         
         # 새로운 Output Channel 계산 시작 전, 누산기(ACC) 0으로 초기화!
         if ic == 0:
-            MMIO.npu_control.write(0x00, 0x02) # ACC_CLEAR 비트(Bit 1) ON!
+            SYS_CONFIG.npu_control.write(0x00, 0x02) # ACC_CLEAR 비트(Bit 1) ON!
             
         next_idx = tile_idx + 1
         next_oc = next_idx // num_ic_tiles
@@ -76,44 +76,44 @@ def run_npu_matmul(x_vec, weight_mat, mean_sq_val, use_gelu=False):
         
         # --- 1. DMA 백그라운드 전송 (Prefetch) ---
         if next_idx < total_tiles:
-            MMIO.ping_token = x_vec[next_ic*32 : (next_ic+1)*32]
-            MMIO.ping_weight = weight_mat[next_ic*32 : (next_ic+1)*32, next_oc*32 : (next_oc+1)*32]
+            SYS_CONFIG.ping_token = x_vec[next_ic*32 : (next_ic+1)*32]
+            SYS_CONFIG.ping_weight = weight_mat[next_ic*32 : (next_ic+1)*32, next_oc*32 : (next_oc+1)*32]
             
             if is_ping_turn:
                 # oken 전송 시작 전: 0x14 번지에 0 (Token) 기록
-                MMIO.npu_control.write(0x14, 0)
-                MMIO.dma.sendchannel.transfer(MMIO.pong_token)
-                MMIO.dma.sendchannel.wait() # 스트림 섞임 방지용 대기
+                SYS_CONFIG.npu_control.write(0x14, 0)
+                SYS_CONFIG.dma.sendchannel.transfer(SYS_CONFIG.pong_token)
+                SYS_CONFIG.dma.sendchannel.wait() # 스트림 섞임 방지용 대기
 
                 # eight 전송 시작 전: 0x14 번지에 1 (Weight) 기록
-                MMIO.npu_control.write(0x14, 1)
-                MMIO.dma.sendchannel.transfer(MMIO.pong_weight)
+                SYS_CONFIG.npu_control.write(0x14, 1)
+                SYS_CONFIG.dma.sendchannel.transfer(SYS_CONFIG.pong_weight)
             else:
-                MMIO.npu_control.write(0x14, 0)
-                MMIO.dma.sendchannel.transfer(MMIO.ping_token)
-                MMIO.dma.sendchannel.wait()
+                SYS_CONFIG.npu_control.write(0x14, 0)
+                SYS_CONFIG.dma.sendchannel.transfer(SYS_CONFIG.ping_token)
+                SYS_CONFIG.dma.sendchannel.wait()
 
-                MMIO.npu_control.write(0x14, 1)
-                MMIO.dma.sendchannel.transfer(MMIO.ping_weight)
+                SYS_CONFIG.npu_control.write(0x14, 1)
+                SYS_CONFIG.dma.sendchannel.transfer(SYS_CONFIG.ping_weight)
 
         # --- 2. NPU 연산 킥! ---
         # 펄스 로직 넣었으니까 이제 1 한 번 쓰면 알아서 꺼짐!
-        MMIO.npu_control.write(0x00, 0x01) 
+        SYS_CONFIG.npu_control.write(0x00, 0x01) 
         
         # --- 3. 연산 완료 대기 (Polling 버그 수정: 0x04 -> 0x10) ---
-        while (MMIO.npu_control.read(0x10) & 0x010000) == 0: 
+        while (SYS_CONFIG.npu_control.read(0x10) & 0x010000) == 0: 
             # 0x10의 16번 비트가 w_npu_done 이니까 0x010000과 AND 연산!
             pass     
                
         # --- 4. 결과 수신 (64번 누산이 끝난 마지막 타일에서만!) ---
         if ic == num_ic_tiles - 1:
-            MMIO.dma.recvchannel.transfer(MMIO.result_buf)
-            MMIO.dma.recvchannel.wait()
-            final_out[oc*32 : (oc+1)*32] = np.array(MMIO.result_buf)
+            SYS_CONFIG.dma.recvchannel.transfer(SYS_CONFIG.result_buf)
+            SYS_CONFIG.dma.recvchannel.wait()
+            final_out[oc*32 : (oc+1)*32] = np.array(SYS_CONFIG.result_buf)
             
         # --- 5. 다음 루프 넘어가기 전 DMA 전송 완료 대기 ---
         if next_idx < total_tiles:
-            MMIO.dma.sendchannel.wait()
+            SYS_CONFIG.dma.sendchannel.wait()
 
     return final_out
 
@@ -132,35 +132,36 @@ def npu_matmul_gelu(x, W_gate, mean_sq):
 # 3. Softmax 가속 함수
 # =====================================================================
 def npu_softmax(logits):
-    if MMIO.SIMULATION_MODE:
+    if SYS_CONFIG.SIMULATION_MODE:
         #  [PC 시뮬레이션] NPU Softmax IP 모사
         logits_safe = logits - np.max(logits)
         probs = np.exp(logits_safe) / np.sum(np.exp(logits_safe))
         return probs.astype(np.float16)
+    
     """
     [FPGA] LM Head에서 나온 256,000개의 점수를 확률값으로 변환
     """
     probs = np.zeros_like(logits, dtype=np.float16)
     
     # 0x10 레지스터에 Softmax_EN 비트(Bit 1) 켜기!
-    MMIO.npu_control.write(0x10, 0x02) 
+    SYS_CONFIG.npu_control.write(0x10, 0x02) 
     
     # Softmax는 행렬곱이 아니므로 32개 단위로 쪼개서 NPU Softmax IP만 통과시킴
     for i in range(0, len(logits), 32):
-        np.copyto(MMIO.ping_token, logits[i:i+32])
+        np.copyto(SYS_CONFIG.ping_token, logits[i:i+32])
         
         # 데이터 전송 및 NPU 킥 (단순 벡터 연산)
-        MMIO.npu_control.write(0x0C, 0)
-        MMIO.dma.sendchannel.transfer(MMIO.ping_token)
-        MMIO.dma.sendchannel.wait()
+        SYS_CONFIG.npu_control.write(0x0C, 0)
+        SYS_CONFIG.dma.sendchannel.transfer(SYS_CONFIG.ping_token)
+        SYS_CONFIG.dma.sendchannel.wait()
         
-        MMIO.npu_control.write(0x00, 0x01)
-        while (MMIO.npu_control.read(0x04) & 0x01) == 0:
+        SYS_CONFIG.npu_control.write(0x00, 0x01)
+        while (SYS_CONFIG.npu_control.read(0x04) & 0x01) == 0:
             pass
             
-        MMIO.dma.recvchannel.transfer(MMIO.result_buf)
-        MMIO.dma.recvchannel.wait()
+        SYS_CONFIG.dma.recvchannel.transfer(SYS_CONFIG.result_buf)
+        SYS_CONFIG.dma.recvchannel.wait()
         
-        probs[i:i+32] = np.array(MMIO.result_buf)
+        probs[i:i+32] = np.array(SYS_CONFIG.result_buf)
         
     return probs

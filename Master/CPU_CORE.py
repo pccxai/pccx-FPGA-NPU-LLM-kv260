@@ -1,11 +1,10 @@
 import numpy as np
 import math
 from transformers import AutoTokenizer
-import os
 
-base_dir = os.path.dirname(os.path.abspath(__file__))
-model_id = os.path.join(base_dir, "local_gemma_3n")
-tokenizer = AutoTokenizer.from_pretrained(model_id, local_files_only=True)
+import SYS_CONFIG  
+
+tokenizer = AutoTokenizer.from_pretrained(SYS_CONFIG.MODEL_DIR, local_files_only=True)
 
 def tokenize(text):
     tokens = tokenizer(text, return_tensors="np")["input_ids"][0]
@@ -32,7 +31,7 @@ def cpu_qk_norm(Q, K, gamma_q, gamma_k):
 
     return Q_norm.flatten(), K_norm.flatten()
 
-def cpu_rope(x, pos, theta_base): # 동적 theta_base 적용
+def cpu_rope(x, pos, theta_base): 
     dim = 256 
     num_heads = len(x) // dim
     x_reshaped = x.reshape(num_heads, dim)
@@ -54,23 +53,26 @@ def cpu_rope(x, pos, theta_base): # 동적 theta_base 적용
             
     return out.flatten() 
 
-def cpu_update_kv_cache(K_rope, V, layer_idx, K_cache, V_cache):
-    K_cache[layer_idx].append(K_rope)
-    V_cache[layer_idx].append(V)
+def cpu_update_kv_cache_static(K_rope, V, layer_idx, pos, K_cache, V_cache):
+    K_cache[layer_idx, pos] = K_rope.reshape(2, 256)
+    V_cache[layer_idx, pos] = V.reshape(2, 256)
 
-def cpu_gqa(Q_rope, K_cache_layer, V_cache_layer):
+def cpu_gqa_static(Q_rope, K_cache_slice, V_cache_slice):
     Q_reshaped = Q_rope.reshape(8, 256)
-    K_mat = np.array(K_cache_layer).reshape(-1, 2, 256) 
-    V_mat = np.array(V_cache_layer).reshape(-1, 2, 256) 
+    K_mat = K_cache_slice # 형태: (pos+1, 2, 256)
+    V_mat = V_cache_slice # 형태: (pos+1, 2, 256)
     
     attn_out = np.zeros((8, 256), dtype=np.float32)
     
     for q_head in range(8):
         kv_head = q_head // 4 
-        # 충격적인 구글 공식 1: sqrt(256)으로 절대 나누지 않음!
-        scores = np.dot(K_mat[:, kv_head, :].astype(np.float32), Q_reshaped[q_head].astype(np.float32)) 
         
-        # 충격적인 구글 공식 2: Softcap 없음! 바로 Softmax!
+        # 1. 스케일링 (1 / sqrt(256))
+        scores = np.dot(K_mat[:, kv_head, :].astype(np.float32), Q_reshaped[q_head].astype(np.float32)) / 16.0
+        
+        # 2. 🔥 Gemma 전용 Attention Softcapping (50.0) - 공백 무한루프의 주범 해결!
+        scores = np.tanh(scores / 50.0) * 50.0
+        
         scores_safe = scores - np.max(scores)
         probs = np.exp(scores_safe) / np.sum(np.exp(scores_safe))
         
@@ -78,6 +80,3 @@ def cpu_gqa(Q_rope, K_cache_layer, V_cache_layer):
         attn_out[q_head] = head_out
         
     return attn_out.flatten()
-
-def cpu_sample_token(probs):
-    return int(np.argmax(probs))

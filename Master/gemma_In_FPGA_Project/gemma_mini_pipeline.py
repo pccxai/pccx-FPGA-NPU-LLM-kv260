@@ -92,7 +92,7 @@ def run_gemma_mini_pipeline():
         # [Step 2] 방금 만든 K, V를 캐시에 추가 기록
         kv_manager.write_cache(k, v)
         
-        # [Step 3] Attention 연산 (KV Cache 통째로 읽어오기!) 🔥
+        # [Step 3] Attention 연산 (KV Cache 통째로 읽어오기!) 
         # 이게 바로 LLM의 메모리 대역폭을 다 잡아먹는 주범이야!
         past_k, past_v = kv_manager.read_active_cache()
         print(f"  [Memory] KV Cache에서 {past_k.shape[0]}개의 과거 토큰(K,V) DMA 로드 완료!")

@@ -3,7 +3,7 @@ import numpy as np
 
 class TinyNPUDriver:
     def __init__(self, bitstream_path="tinynpu.bit"):
-        print("🔧 FPGA에 NPU 하드웨어 굽는 중... (Bitstream Load)")
+        print("FPGA에 NPU 하드웨어 굽는 중... (Bitstream Load)")
         self.overlay = Overlay(bitstream_path)
         
         # 1. 하드웨어 IP 포인터 가져오기 (C++ 구조체 포인터 맵핑과 동일)

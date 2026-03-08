@@ -10,7 +10,7 @@ module delay_line #(
     output logic [WIDTH-1:0] out_data
 );
 
-    // 🔥 [Vivado 버그 우회] DELAY가 0일 때 배열 인덱스가 [-1]이 되는 것을 막는 트릭
+    //  [Vivado 버그 우회] DELAY가 0일 때 배열 인덱스가 [-1]이 되는 것을 막는 트릭
     localparam SAFE_DELAY = (DELAY == 0) ? 1 : DELAY;
     logic [WIDTH-1:0] shift_reg [0:SAFE_DELAY-1];
 

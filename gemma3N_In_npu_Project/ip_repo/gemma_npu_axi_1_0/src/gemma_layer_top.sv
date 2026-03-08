@@ -1,6 +1,10 @@
 `timescale 1ns / 1ps
 
-module gemma_layer_top (
+module gemma_layer_top #(
+    parameter SYSTOLIC_ARRAY_SIZE = 32 // 32x32 아키텍처!
+    parameter SYSTOLIC_RESULT_SIZE = 48
+    parameter SYSTOLIC_INPUT_SIZE = 16;
+)(
     input  logic               clk,
     input  logic               rst_n,
 
@@ -139,7 +143,7 @@ module gemma_layer_top (
         .switch_buffer(i_ping_pong_sel),
         .dma_we(i_dma_we_weight),
         .dma_addr({1'b0, i_dma_addr_weight}),
-        .dma_write_data(i_dma_wdata_weight), // 🔥 {256'd0, ...} 지우고 직결!        .npu_addr_a({3'd0, feed_counter}),
+        .dma_write_data(i_dma_wdata_weight), //  {256'd0, ...} 지우고 직결!        .npu_addr_a({3'd0, feed_counter}),
         .npu_addr_b(9'd0),
         .npu_read_data_a(flat_weight_data),
         .npu_read_data_b()
@@ -159,7 +163,11 @@ module gemma_layer_top (
     // =========================================================================
     logic [32*32*32-1:0] mac_out_acc_flat; // 2차원 배열 대신 1차원 Flat 버스 (연결성 보장!)
 
-    systolic_NxN #(.ARRAY_SIZE(32)) u_mac_engine (
+    systolic_NxN #(
+        .ARRAY_SIZE(32)
+        .OUT_SIZE(48)
+        .INPUT_SIZE(16)
+    ) u_mac_engine (
         .clk(clk), .rst_n(rst_n),
         .i_clear(i_acc_clear),           
         .in_a(scaled_token_data),        
@@ -168,34 +176,37 @@ module gemma_layer_top (
         .out_acc_flat(mac_out_acc_flat)  // Flat 포트로 연결
     );
 
-    // 파이프라인 레이턴시(Wavefront) 추적 시프트 레지스터
+    // 파이프라인 레이턴시(Wavefront) 추적 shift register
     logic [63:0] shift_reg_valid; 
     always_ff @(posedge clk) begin
         if (!rst_n) shift_reg_valid <= 0;
         else        shift_reg_valid <= {shift_reg_valid[62:0], npu_running};
     end
-    assign mac_valid_out = shift_reg_valid[63]; // 약 64클럭 후 가장 오른쪽 아래 PE 완료
+    assign mac_valid_out = shift_reg_valid[63]; // aproximately 64clocks after 가장 오른쪽 아래 PE 완료
 
-    // // =========================================================================
+    // =========================================================================
     // 5. [Stage 3] Output Buffering & Activation MUX
     // =========================================================================
-    // [정공법] 32개 채널의 32비트 연산 결과를 한꺼번에 BRAM에 저장 (DSP Pruning 방지)
-    logic [31:0] mac_result_row [0:31];
+    
+    // Array to store 48bit from 32 pe units
+    logic [SYSTOLIC_RESULT_SIZE-1:0] mac_result_row [0:SYSTOLIC_ARRAY_SIZE-1];
     always_comb begin
-        for (int j = 0; j < 32; j++) begin
-            // Flat 버스에서 마지막 Row (31번 Row) 데이터 추출
-            mac_result_row[j] = mac_out_acc_flat[(31*32 + j)*32 +: 32];
+        for (int j = 0; j < SYSTOLIC_ARRAY_SIZE; j++) begin
+            // 인덱스 계산: ((가장 마지막 줄 번호) * 배열 크기 + 현재 열) * 데이터 폭
+            // 32(31)번째 row값 전부 저장 -> 31(30) -> 30(29) -> ... -> 1(0)
+            mac_result_row[j] = mac_out_acc_flat[((SYSTOLIC_ARRAY_SIZE-1)*SYSTOLIC_ARRAY_SIZE + j) * SYSTOLIC_RESULT_SIZE +: SYSTOLIC_RESULT_SIZE];
         end
     end
 
-    // 결과 주소 카운터 (고정 주소가 아니라 동적으로 변하게 해서 Vivado Pruning 원천 봉쇄!)
+    // result address counter
     logic [4:0] result_addr_cnt;
     always_ff @(posedge clk) begin
         if (!rst_n || i_acc_clear) result_addr_cnt <= 5'd0;
         else if (mac_valid_out)    result_addr_cnt <= result_addr_cnt + 1;
     end
 
-    logic [1023:0] dma_result_bus;
+    //DMA output BUS size : 32(column) * 48bit(value) = 1536bit [1535:0]
+    logic [(SYSTOLIC_ARRAY_SIZE * SYSTOLIC_RESULT_SIZE) - 1 : 0] dma_result_bus;
 
     result_ping_pong_bram u_out_buffer (
         .clk(clk), .rst_n(rst_n),
@@ -210,7 +221,7 @@ module gemma_layer_top (
     // [정공법] 전체 버스 밖으로 노출 (DMA 준비용)  
     assign o_npu_result_all = dma_result_bus;
 
-    // 🔥 [필살기] 모든 PE(1024개)를 강제로 살려두기 위한 논리적 '닻(Anchor)'
+    //  [필살기] 모든 PE(1024개)를 강제로 살려두기 위한 논리적 '닻(Anchor)'
     // 1024비트 중 하나만 바뀌어도 이 값이 바뀌므로 Vivado는 PE를 삭제하지 못함!
     assign o_logic_anchor = ^dma_result_bus; 
 
@@ -228,7 +239,7 @@ module gemma_layer_top (
         .i_x(mac_attn_score), .valid_out(), .o_exp(softmax_prob)
     );
 
-    // 🔥 GeLU 하드웨어(LUT) 꽂기
+    //  GeLU 하드웨어(LUT) 꽂기
     logic signed [7:0] gelu_out_8bit;
     logic [15:0]       gelu_out;
 
