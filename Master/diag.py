@@ -1,13 +1,19 @@
-import glob
-from safetensors.torch import load_file
-import SYS_CONFIG
+# 별도 스크립트로 실행
+from transformers import AutoTokenizer, AutoModelForCausalLM
+import torch
 
-st_files = sorted(glob.glob(f"{SYS_CONFIG.MODEL_DIR}/*.safetensors"))
-if not st_files:
-    print("파일이 없습니다!")
-else:
-    print(f"첫 번째 파일 분석: {st_files[0]}")
-    tensors = load_file(st_files[0], device="cpu")
-    print("\n[저장된 키 이름 TOP 20개 확인]")
-    for k in list(tensors.keys())[:20]:
-        print(f" - {k}")
+model_path = r"/home/hwkim/Desktop/github/TinyNPU-RTL/Master/gemma3NE2B/"  # 원본 (양자화 전) 폴더
+tokenizer = AutoTokenizer.from_pretrained(model_path)
+model = AutoModelForCausalLM.from_pretrained(model_path, torch_dtype=torch.float32)
+
+prompt = "<start_of_turn>user\n안녕 하세요<end_of_turn>\n<start_of_turn>model\n"
+inputs = tokenizer(prompt, return_tensors="pt")
+
+with torch.no_grad():
+    outputs = model(**inputs)
+
+logits = outputs.logits[0, -1, :]
+top5 = torch.argsort(logits, descending=True)[:5]
+print("=== HuggingFace 정답 ===")
+for tid in top5.tolist():
+    print(f"  토큰 {tid}: {repr(tokenizer.decode([tid]))} 점수: {logits[tid]:.3f}")

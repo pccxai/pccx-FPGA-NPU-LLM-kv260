@@ -6,17 +6,15 @@ ti.init(arch=ti.vulkan, fast_math=True)
 
 TILE_K = 128
 
-# ================================================================
 # 🚀 NPU(FPGA) 완벽 모사: INT4 (W4A16) 초고속 GEMV 커널
-# ================================================================
 @ti.kernel
 def _gemv_int4_packed(
     vec:          ti.types.ndarray(dtype=ti.f32, ndim=1), # type: ignore
     mat_packed:   ti.types.ndarray(dtype=ti.u8,  ndim=2), # type: ignore
     scales:       ti.types.ndarray(dtype=ti.f32, ndim=2), # type: ignore
     out:          ti.types.ndarray(dtype=ti.f32, ndim=1), # type: ignore
-    out_features: ti.i32,
-    in_features:  ti.i32
+    out_features: ti.i32, # type: ignore
+    in_features:  ti.i32 # type: ignore
 ):
     ti.loop_config(block_dim=128)
     for i in range(out_features):
@@ -53,8 +51,8 @@ def _gemv_int4_packed_gelu(
     mat_packed:   ti.types.ndarray(dtype=ti.u8,  ndim=2), # type: ignore
     scales:       ti.types.ndarray(dtype=ti.f32, ndim=2), # type: ignore
     out:          ti.types.ndarray(dtype=ti.f32, ndim=1), # type: ignore
-    out_features: ti.i32,
-    in_features:  ti.i32
+    out_features: ti.i32,# type: ignore
+    in_features:  ti.i32 # type: ignore
 ):
     ti.loop_config(block_dim=128)
     for i in range(out_features):
@@ -63,7 +61,7 @@ def _gemv_int4_packed_gelu(
             j_base = j_half * 2
             packed_val = ti.cast(mat_packed[i, j_half], ti.i32)
 
-            # 🔥 핵심 수술: if문 다 날리고 비트 시프트로 부호 확장!
+            # if문 다 날리고 비트 시프트로 부호 확장!
             # 하위 4비트: 왼쪽 28칸 밀고 오른쪽 28칸 밀면 자동으로 -8~+7 부호가 생김
             low_val = ti.cast((packed_val << 28) >> 28, ti.f32)
             
@@ -80,9 +78,7 @@ def _gemv_int4_packed_gelu(
             ti.sqrt(ti.f32(2.0 / math.pi)) * (v + ti.f32(0.044715) * v * v * v)
         ))
 
-# ================================================================
 # 기존 INT16 커널 (양자화 안 한 원본 가중치용)
-# ================================================================
 @ti.kernel
 def _gemv_int16(
     vec:    ti.types.ndarray(dtype=ti.f32, ndim=1), # type: ignore
@@ -130,9 +126,7 @@ def _zero_buffer(buf: ti.types.ndarray(dtype=ti.f32, ndim=1), N: ti.i32): # type
     for i in range(N):
         buf[i] = 0.0
 
-# ================================================================
 # VRAM 폭발 방지 & 캐싱 로직
-# ================================================================
 _CPU_WEIGHT_CACHE = {}  
 _WEIGHT_BUF_POOL = {}   
 _SCALE_BUF_POOL = {}    
@@ -192,9 +186,7 @@ def _get_output_buf(size: int) -> ti.ndarray:
         _OUTPUT_BUF_POOL[size] = ti.ndarray(dtype=ti.f32, shape=(size,))
     return _OUTPUT_BUF_POOL[size]
 
-# ================================================================
 # Public API
-# ================================================================
 def igpu_matmul(x_vec: np.ndarray, weight_data) -> np.ndarray:
     x_f32 = np.ascontiguousarray(x_vec.astype(np.float32))
     
@@ -248,4 +240,4 @@ def warmup():
     # INT4 워밍업 더미
     dummy_packed = {"packed": np.zeros((2048, 1024), dtype=np.uint8), "scales": np.ones((2048, 64), dtype=np.float32)}
     igpu_matmul_gelu(dummy_x, dummy_packed)
-    print("[iGPU] 워밍업 완료! 🚀")
+    print("[iGPU] warmup() complete")

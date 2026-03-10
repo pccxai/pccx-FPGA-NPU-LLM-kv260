@@ -1,16 +1,15 @@
 `timescale 1ns / 1ps
 
 module gemma_layer_top #(
-    parameter SYSTOLIC_ARRAY_SIZE = 32 // 32x32 아키텍처!
+    parameter SYSTOLIC_ARRAY_SIZE = 32 // 32x32 아키텍처
+    parameter INT4_SYSTOLIC_ARRAY_SIZE = 4 *; //32 x 32 (4bit)
     parameter SYSTOLIC_RESULT_SIZE = 48
     parameter SYSTOLIC_INPUT_SIZE = 16;
 )(
     input  logic               clk,
     input  logic               rst_n,
 
-    // -------------------------------------------------------------------
     // [AXI4-Lite MMIO 제어 신호들] (0x00 ~ 0x10)
-    // -------------------------------------------------------------------
     input  logic               i_npu_start,     // 0x00 [Bit 0] (Kernel Launch!)
     input  logic               i_acc_clear,     // 0x00 [Bit 1] (누산기 리셋)
     input  logic [31:0]        i_rms_mean_sq,   // 0x08 (RMSNorm 분모)
@@ -19,10 +18,8 @@ module gemma_layer_top #(
     input  logic               i_softmax_en,    // 0x10 [Bit 1] (Softmax 활성화)
     output logic               o_npu_done,      // 0x04 [Bit 0] (연산 완료 깃발)
 
-    // -------------------------------------------------------------------
     // [AXI DMA 스트리밍 인터페이스 (예시)]
     // 실제로는 AXI-Stream (TVALID, TDATA 등) 규격을 사용하겠지만, 개념적으로 표현함!
-    // -------------------------------------------------------------------
     input  logic               i_dma_we_token,
     input  logic [7:0]         i_dma_addr_token,
     input  logic [511:0]       i_dma_wdata_token,
@@ -37,9 +34,7 @@ module gemma_layer_top #(
     output logic [15:0]        o_final_result      // DMA를 통해 CPU로 돌아갈 최종 결과
 );
 
-    // =========================================================================
     // 1. FSM (Warp Scheduler): 커널의 생명주기 통제
-    // =========================================================================
     typedef enum logic [1:0] {
         ST_IDLE     = 2'd0,  // 대기
         ST_WAIT_RMS = 2'd1,  // 0x08로 들어온 mean_sq가 역제곱근으로 변환될 때까지 대기
@@ -89,9 +84,7 @@ module gemma_layer_top #(
         endcase
     end
 
-    // =========================================================================
     // 2. [Stage 1] Pre-Norm (RMSNorm 계산기)
-    // =========================================================================
     logic [15:0] rms_inv_sqrt_val;
 
     rmsnorm_inv_sqrt u_rmsnorm (
@@ -102,9 +95,7 @@ module gemma_layer_top #(
         .o_inv_sqrt(rms_inv_sqrt_val)
     );
 
-    // =========================================================================
     // 3. Ping-Pong BRAM & Vector Scaling (On-the-fly)
-    // =========================================================================
     // 핑퐁 버퍼에서 읽어온 원본 데이터 (8비트 배열 32개)
     logic [7:0] raw_token_data  [0:31]; 
     logic [7:0] sys_weight_data [0:31]; 
@@ -158,9 +149,7 @@ module gemma_layer_top #(
         end
     endgenerate
 
-    // =========================================================================
     // 4. [Stage 2] 32x32 Systolic MAC Array (본체)
-    // =========================================================================
     logic [32*32*32-1:0] mac_out_acc_flat; // 2차원 배열 대신 1차원 Flat 버스 (연결성 보장!)
 
     systolic_NxN #(
@@ -184,9 +173,7 @@ module gemma_layer_top #(
     end
     assign mac_valid_out = shift_reg_valid[63]; // aproximately 64clocks after 가장 오른쪽 아래 PE 완료
 
-    // =========================================================================
     // 5. [Stage 3] Output Buffering & Activation MUX
-    // =========================================================================
     
     // Array to store 48bit from 32 pe units
     logic [SYSTOLIC_RESULT_SIZE-1:0] mac_result_row [0:SYSTOLIC_ARRAY_SIZE-1];

@@ -1,7 +1,6 @@
 import numpy as np
 import math
 from transformers import AutoTokenizer
-
 import SYS_CONFIG  
 
 tokenizer = AutoTokenizer.from_pretrained(SYS_CONFIG.MODEL_DIR, local_files_only=True)
@@ -31,27 +30,26 @@ def cpu_qk_norm(Q, K, gamma_q, gamma_k):
 
     return Q_norm.flatten(), K_norm.flatten()
 
+# 클로드 지적 수용: RoPE Numpy 벡터화 (속도 수십 배 향상)
 def cpu_rope(x, pos, theta_base): 
-    dim = 256 
+    dim = 256
     num_heads = len(x) // dim
     x_reshaped = x.reshape(num_heads, dim)
-    out = np.zeros_like(x_reshaped, dtype=np.float32)
+    half = dim // 2
     
-    for h in range(num_heads):
-        half = dim // 2
-        for i in range(half):
-            freq = 1.0 / (theta_base ** ((2 * i) / dim))
-            val = pos * freq
-            cos_val = math.cos(val)
-            sin_val = math.sin(val)
-            
-            x0 = x_reshaped[h, i]           
-            x1 = x_reshaped[h, i + half]    
-            
-            out[h, i]        = x0 * cos_val - x1 * sin_val
-            out[h, i + half] = x1 * cos_val + x0 * sin_val
-            
-    return out.flatten() 
+    i = np.arange(half)
+    freqs = 1.0 / (theta_base ** ((2 * i) / dim))
+    angles = pos * freqs  
+    cos_v = np.cos(angles)
+    sin_v = np.sin(angles)
+    
+    x0 = x_reshaped[:, :half]
+    x1 = x_reshaped[:, half:]
+    
+    out = np.empty_like(x_reshaped, dtype=np.float32)
+    out[:, :half] = x0 * cos_v - x1 * sin_v
+    out[:, half:] = x1 * cos_v + x0 * sin_v
+    return out.flatten()
 
 def cpu_update_kv_cache_static(K_rope, V, layer_idx, pos, K_cache, V_cache):
     K_cache[layer_idx, pos] = K_rope.reshape(2, 256)
@@ -59,18 +57,17 @@ def cpu_update_kv_cache_static(K_rope, V, layer_idx, pos, K_cache, V_cache):
 
 def cpu_gqa_static(Q_rope, K_cache_slice, V_cache_slice):
     Q_reshaped = Q_rope.reshape(8, 256)
-    K_mat = K_cache_slice # 형태: (pos+1, 2, 256)
-    V_mat = V_cache_slice # 형태: (pos+1, 2, 256)
+    K_mat = K_cache_slice 
+    V_mat = V_cache_slice 
     
     attn_out = np.zeros((8, 256), dtype=np.float32)
     
     for q_head in range(8):
         kv_head = q_head // 4 
         
-        # 1. 스케일링 (1 / sqrt(256))
-        scores = np.dot(K_mat[:, kv_head, :].astype(np.float32), Q_reshaped[q_head].astype(np.float32)) / 16.0
-        
-        # 2. 🔥 Gemma 전용 Attention Softcapping (50.0) - 공백 무한루프의 주범 해결!
+        # 스케일링 (1 / 256.0)
+        scores = np.dot(K_mat[:, kv_head, :].astype(np.float32), Q_reshaped[q_head].astype(np.float32)) / 16.0        
+        # Attention Softcapping (50.0)
         scores = np.tanh(scores / 50.0) * 50.0
         
         scores_safe = scores - np.max(scores)

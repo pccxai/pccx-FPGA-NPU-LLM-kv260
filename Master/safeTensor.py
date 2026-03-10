@@ -61,7 +61,7 @@ def load_local_weights(model_dir=SYS_CONFIG.MODEL_DIR):
     altup_projs   = []
     altup_unprojs = []
     if P + "altup_projections.0.weight.weight_int4" in tensors:
-        print("  -> [E4B 감지] altup_projections INT4 로딩 중...")
+        print("  -> [E2B 감지] altup_projections INT4 로딩 중...")
         altup_projs = [
             get_w_opt(tensors, P + f"altup_projections.{i}") for i in range(3)
         ]
@@ -70,7 +70,7 @@ def load_local_weights(model_dir=SYS_CONFIG.MODEL_DIR):
             tensors[P + f"altup_unembed_projections.{i}.weight"].T for i in range(3)
         ]
     elif P + "altup_projections.0.weight" in tensors:
-        print("  -> [E4B 감지] altup_projections float 로딩 중...")
+        print("  -> [E2B 감지] altup_projections float 로딩 중...")
         altup_projs   = [tensors[P + f"altup_projections.{i}.weight"].T for i in range(3)]
         altup_unprojs = [tensors[P + f"altup_unembed_projections.{i}.weight"].T for i in range(3)]
     else:
@@ -139,9 +139,9 @@ def load_local_weights(model_dir=SYS_CONFIG.MODEL_DIR):
     none_counts = {k: sum(1 for v in vals if v is None) for k, vals in layers.items()}
     problem_keys = {k: v for k, v in none_counts.items() if v > 0}
     if problem_keys:
-        print(f"  ⚠️  None인 레이어 가중치: {problem_keys}")
+        print(f" None인 레이어 가중치: {problem_keys}")
     else:
-        print("  ✅ 모든 레이어 가중치 정상 로딩")
+        print(" 모든 레이어 가중치 정상 로딩")
     
     print("가중치 로딩 및 아키텍처 매핑 완료.")
     return W_embed, W_ple, norm_ple, W_ple_proj, altup_projs, altup_unprojs, W_final_norm, W_lm_head, layers
