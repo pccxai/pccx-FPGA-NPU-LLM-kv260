@@ -1,8 +1,8 @@
-# TinyNPU-RTL: Gemma 3N E4B LLM Decode Accelerator
+# TinyNPU-RTL: Gemma 3N E2B LLM Decode Accelerator
 
 ## 1. Project Overview
 This project is a full-stack Edge AI accelerator designed explicitly to run **Gemma 3N E2B (LLM)** on the **Kria KV260** FPGA board. 
-Bypassing standard vendor DPU solutions, we built a 100% custom **32x32 Systolic Array NPU** focused entirely on maximizing the LLM's **Decode Phase (T=1)** performance using a Hardware/Software Co-design approach.
+Bypassing standard vendor DPU solutions, we built a 100% **`custom 32x32 Systolic Array NPU`** focused entirely on maximizing the LLM's **Decode Phase (T=1)** performance using a Hardware/Software Co-design approach.
 
 ## 2. Hardware Architecture (RTL)
 The NPU core is designed in **SystemVerilog** to achieve a 100MHz clock with 0 setup/hold timing violations.
@@ -33,3 +33,4 @@ The host CPU (ARM Cortex) runs a highly optimized Python pipeline communicating 
 │   └── safeTensor.py         # Local Model Loader & Weight Folding
 
 └── .gitignore
+
