@@ -16,8 +16,7 @@ module pe_unit (
     // 32번 누적 시 오버플로우 방지 및 DSP48E2 네이티브 크기에 맞춘 48비트 누산기
     output logic signed [47:0] o_acc 
 );
-    // 곱셈과 누산을 한 줄에 작성하여 DSP48E2 내부 퓨전을 유도
-    
+    // int4 4개 x int4 4개 = 32bit (carry bitX <- overflow = 0)    
     '''
     Pre-Adder: 두 입력을 받아서 27비트 덧셈/뺄셈을 수행
 
@@ -30,13 +29,14 @@ module pe_unit (
         if (!rst_n || i_clear) begin
             o_acc   <= 48'd0;    // 48비트 초기화
             o_valid <= 1'b0;
-            o_a     <= 16'd0;    // 기존 8'd0에서 16'd0으로 버그 수정 완료
-            o_b     <= 16'd0;    // 기존 8'd0에서 16'd0으로 버그 수정 완료
+            o_a     <= 16'd0;    
+            o_b     <= 16'd0;    
         end else if (i_valid) begin 
             // 16비트 * 16비트 곱셈 결과(32비트)를 48비트 누산기에 더함
+            // 결과 32bit = [8bit,8bit,8bit,8bit]
             o_acc   <= o_acc + (i_a * i_b);
             o_valid <= 1'b1;
-            o_a     <= i_a; 
+            o_a     <= i_a;
             o_b     <= i_b;
         end else begin  
             o_valid <= 1'b0;

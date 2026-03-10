@@ -80,7 +80,7 @@ def process_gemma_weights(input_dir, output_dir):
 
 
 # 사용 예시 (경로는 네 환경에 맞게 수정해)
-input_directory = "Master/gemma3NE4B"   # 다운받은 safetensors가 있는 폴더
-output_directory = "Master/gemma3NE4B_INT4_Q"      # 압축된 파일을 저장할 폴더
+input_directory = "Master/gemma3NE2B"   # 다운받은 safetensors가 있는 폴더
+output_directory = "Master/gemma3NE2B_INT4_Q"      # 압축된 파일을 저장할 폴더
 
 process_gemma_weights(input_directory, output_directory)

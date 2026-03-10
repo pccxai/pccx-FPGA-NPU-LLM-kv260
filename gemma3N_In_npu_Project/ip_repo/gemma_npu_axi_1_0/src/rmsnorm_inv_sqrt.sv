@@ -9,18 +9,14 @@ module rmsnorm_inv_sqrt (
     output logic               valid_out,
     output logic [15:0]        o_inv_sqrt   // 16비트 출력 (Q1.15 포맷)
 );
-    // ----------------------------------------------------------------
     // 1. 구간 인덱스와 소수점 찌꺼기 분리
-    // ----------------------------------------------------------------
     logic [9:0]  segment_idx;
     logic [21:0] fractional_x;
 
     assign segment_idx  = i_mean_sq[31:22]; // 상위 10비트 (BRAM 주소)
     assign fractional_x = i_mean_sq[21:0];  // 하위 22비트 (보간용 x)
 
-    // ----------------------------------------------------------------
     // 2. 1024칸짜리 초정밀 BRAM (기울기 & 절편)
-    // ----------------------------------------------------------------
     (* rom_style = "block" *) logic signed [15:0] lut_slope [0:1023];
     (* rom_style = "block" *) logic signed [31:0] lut_inter [0:1023]; // 32비트로 확장!
 
@@ -30,9 +26,7 @@ module rmsnorm_inv_sqrt (
         $readmemh("rmsnorm_inter.mem", lut_inter);
     end
 
-    // ----------------------------------------------------------------
     // 3. 파이프라인 1단계 (BRAM Read & 데이터 지연)
-    // ----------------------------------------------------------------
     logic signed [15:0] reg_a;          // 기울기 레지스터 (16bit)
     logic signed [31:0] reg_b;          // 절편 레지스터 (32bit 수정 완료!)
     logic        [21:0] reg_frac_x;     // 소수점 찌꺼기 지연용 레지스터 (22bit)
@@ -54,10 +48,9 @@ module rmsnorm_inv_sqrt (
         end
     end
 
-    // ----------------------------------------------------------------
     // 4. 파이프라인 2단계 (DSP48E2 연산: y = ax + b)
-    // ----------------------------------------------------------------
-    // DSP48E2는 27x18 곱셈을 지원. a(16비트) * x(23비트 부호확장) 완벽 매칭!
+    // 
+    // DSP48E2 27x18 곱셈을 지원. a(16bit) * x(23bit 부호확장)
     // 곱셈과 덧셈을 클럭 상관없이 '전선(Wire)'으로 즉시 계산!
     logic signed [47:0] dsp_mult_comb;
     assign dsp_mult_comb = (reg_a * $signed({1'b0, reg_frac_x})) + reg_b; 
