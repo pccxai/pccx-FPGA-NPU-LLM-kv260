@@ -1,27 +1,27 @@
 # Gemma 3N E4B Forward Pass: 하드웨어(CPU/IGPU) 분배 및 코드 매핑
 
 이 문서는 Gemma 3 4B 모델에 "안녕하세요" 라는 텍스트가 입력되어 처리되는 전체 Forward Pass 과정을 다룹니다. 상세한 개념 설명, 데이터 흐름(Mermaid), 그리고 IGPU 가속 환경과 Python (`main.py`) 제어 코드를 모두 통합했습니다.
-특히 기존 문서에서 누락되었거나 불일치했던 **35개 레이어 구조, 4-Stream AltUp 라우터, 18/19층 KV 캐시 강제 차용(Routing), 극단적 FFN Sparsity, PLE 그림자 스트림 주입, 그리고 IGPU 기반의 분리형 하드웨어 가속** 등의 핵심 기믹들을 완벽하게 반영했습니다.
+특히 기존 문서에서 누락되었거나 불일치했던 **35개 레이어 구조** , 4-Stream AltUp 라우터, 18/19층 KV 캐시 강제 차용(Routing), 극단적 FFN Sparsity, PLE 그림자 스트림 주입, 그리고 IGPU 기반의 분리형 하드웨어 가속 등의 핵심 기믹들을 완벽하게 반영했습니다.
 
 ## Phase 1: 입력 및 임베딩 처리
 
 ### 1. 토큰화 (Tokenize) 및 가중치 로드 : CPU
 
-**동작**: AI는 한글을 직접 못 읽으므로, 입력 텍스트 "안녕하세요"를 자기가 아는 정수 ID 번호표로 바꿉니다. ("안녕" -> 4512번, "하세요" -> 8931번 등). 단순한 사전 검색 작업이라 CPU가 처리합니다.
+**동작** : AI는 한글을 직접 못 읽으므로, 입력 텍스트 "안녕하세요"를 자기가 아는 정수 ID 번호표로 바꿉니다. ("안녕" -> 4512번, "하세요" -> 8931번 등). 단순한 사전 검색 작업이라 CPU가 처리합니다.
 
 💡 **무엇을 & 왜 하는 건가요?**
 
-**무엇을**: 사람이 쓰는 자연어(글자)를 컴퓨터가 처리할 수 있는 고유한 숫자(ID) 로 치환하는 작업이야.
-**왜**: 컴퓨터 연산기(ALU/MAC)는 숫자만 계산할 수 있으니까! 텍스트 그대로는 행렬 곱셈을 할 수가 없어서, 모델이 미리 학습해둔 25만 개의 단어 사전과 대조해서 고유 번호를 부여하는 필수 전처리 과정이야.
+**무엇을** : 사람이 쓰는 자연어(글자)를 컴퓨터가 처리할 수 있는 고유한 숫자(ID) 로 치환하는 작업이야.
+**왜** : 컴퓨터 연산기(ALU/MAC)는 숫자만 계산할 수 있으니까! 텍스트 그대로는 행렬 곱셈을 할 수가 없어서, 모델이 미리 학습해둔 25만 개의 단어 사전과 대조해서 고유 번호를 부여하는 필수 전처리 과정이야.
 
-**Shape**: token_ids: [T] (1차원 배열, 여기서 $T$ 는 토큰 수)
+**Shape** : token_ids: [T] (1차원 배열, 여기서  $T$  는 토큰 수)
 
 ```python
 # 1. 가중치 로드
 W_embed, W_ple, norm_ple, W_ple_proj, altup_projs, altup_unprojs, W_final_norm, W_lm_head, W = safeTensor.load_local_weights()
 
-K_cache = np.zeros((30, MAX_SEQ_LEN, 2, 256), dtype=np.float32)
-V_cache = np.zeros((30, MAX_SEQ_LEN, 2, 256), dtype=np.float32)
+K_cache = [[] for _ in range(35)]
+V_cache = [[] for _ in range(35)]
 
 prompt = "안녕 하세요"
 input_tokens = CPU_CORE.tokenize(prompt)
@@ -33,10 +33,10 @@ input_tokens = CPU_CORE.tokenize(prompt)
 
 💡 **무엇을 & 왜 하는 건가요?**
 
-**무엇을**: 단순한 정수 ID(예: 4512)를 2048개의 소수점으로 이루어진 연속적인 수치(벡터) 로 변환하고, 이를 4개의 병렬 스트림으로 복제 및 투영시켜.
-**왜 (AltUp)**: 단일 스트림으로 연산하는 것보다, 여러 스트림으로 쪼개서 각기 다른 관점의 정보를 담아두면 훨씬 적은 파라미터로도 모델의 표현력이 대폭 상승하기 때문이야.
+**무엇을** : 단순한 정수 ID(예: 4512)를 2048개의 소수점으로 이루어진 연속적인 수치(벡터) 로 변환하고, 이를 4개의 병렬 스트림으로 복제 및 투영시켜.
+**왜 (AltUp)** : 단일 스트림으로 연산하는 것보다, 여러 스트림으로 쪼개서 각기 다른 관점의 정보를 담아두면 훨씬 적은 파라미터로도 모델의 표현력이 대폭 상승하기 때문이야.
 
-**Shape**: xs: [4, T, 2048]
+**Shape** : xs: [4, T, 2048]
 
 ```mermaid
 graph LR
@@ -55,14 +55,15 @@ for k in range(3):
     xs[k + 1] = hw_matmul(x, altup_projs[k])
 ```
 
-**수학식**:
+**수학식** :
+
 $$
 \mathbf{xs}[0] = W_{embed}[\text{token\_ids}]
 $$
 
 ## Phase 2: Transformer Block (35번 반복 시작)
 
-매 레이어마다 아래의 파이프라인이 정확히 **35번 반복**됩니다. (40번 아님)
+매 레이어마다 아래의 파이프라인이 정확히 **35번 반복** 됩니다.
 
 ```python
 for i in range(35):
@@ -71,31 +72,28 @@ for i in range(35):
 
 ### 3. AltUp Router (Tanh 기반 혼합) : IGPU
 
-**동작**: 4개의 다중 스트림(Main 1개 + Shadow 3개)을 섞어 임시 스트림(`xs_pred[0]`)을 만듭니다. 이때 Softmax가 아닌 **Tanh** 활성화를 사용하는 것이 핵심입니다.
+**동작** : 4개의 다중 스트림(Main 1개 + Shadow 3개)을 섞어 임시 스트림(`xs_pred[0]`)을 만듭니다. 이때 Softmax가 아닌 **Tanh** 활성화를 사용하는 것이 핵심입니다.
 
 💡 **무엇을 & 왜 하는 건가요?**
 
-**무엇을**: 각 스트림의 데이터를 Tanh를 통과한 가중치와 곱해서 섞어줘(Mixing).
-**왜**: Tanh로 스케일링을 해야 그라디언트가 부드러워지고 안정적으로 섞이거든. 이때 만들어진 `xs_pred[0]`은 메인 연산(Attn/FFN)에 들어가지 않고, 나중에 잔차 연결을 위한 '임시 렌즈'로만 쓰여. 진짜 연산은 오직 순수한 `xs[0]`만 들어가는 점이 중요해!
+**무엇을** : 각 스트림의 데이터를 Tanh를 통과한 가중치와 곱해서 섞어줘(Mixing).
+**왜** : Tanh로 스케일링을 해야 그라디언트가 부드러워지고 안정적으로 섞이거든. 이때 만들어진 `xs_pred[0]`은 메인 연산(Attn/FFN)에 들어가지 않고, 나중에 잔차 연결을 위한 '임시 렌즈'로만 쓰여. 진짜 연산은 오직 순수한 `xs[0]`만 들어가는 점이 중요해!
 
 ```python
     modalities = get_router_modalities(xs[0], W["altup_rn"][i], W["altup_router"][i])
-    coef_mat = np.clip(np.dot(modalities, W["altup_pred"][i]).reshape(4, 4), -120.0, 120.0)
+    coef_mat = np.dot(W["altup_pred"][i], modalities).reshape(4, 4)
 
     # xs_pred[0]은 임시 렌즈 (나중에 Residual 계산에 사용)
     xs_pred = xs + np.dot(coef_mat, xs)
-
-    # Attention과 FFN 연산은 무조건 순수한 xs[0]이 담당!
-    x_current = xs[0]
 ```
 
 ### 4. Pre-Attention RMSNorm & Q,K,V 계산 : IGPU
 
-**동작 (RMSNorm & 하드웨어 가속기)**: AI가 데이터 크기에 휘둘리지 않게 볼륨을 평준화합니다. 기존 NPU 퓨전 설명과 달리, `ACCEL_MODE = "IGPU"` 환경에 맞춰 **rms_norm과 hw_matmul을 엄격하게 분리하여 순차적으로 호출**합니다.
+**동작 (RMSNorm & 하드웨어 가속기)** : AI가 데이터 크기에 휘둘리지 않게 볼륨을 평준화합니다. `ACCEL_MODE = "IGPU"` 환경에 맞춰 **rms_norm과 hw_matmul을 분리하여 순차적으로 호출** 합니다.
 
 ```python
-    # IGPU 환경이므로 Norm과 Matmul을 순차적으로 수행 (퓨전 아님!)
-    inputs_normalized = rms_norm(x_current, W["input_ln"][i])
+    # Attention 연산은 무조건 순수한 xs[0]이 담당!
+    inputs_normalized = rms_norm(xs[0], W["input_ln"][i])
 
     Q = hw_matmul(inputs_normalized, W["W_q"][i])
     K = hw_matmul(inputs_normalized, W["W_k"][i])
@@ -104,70 +102,73 @@ for i in range(35):
 
 ### 5. QK-Norm & RoPE : CPU
 
-**동작**: 거대한 행렬 곱셈 후 튀어버릴 수 있는 Q와 K의 크기를 한 번 더 정규화합니다. 이후 RoPE를 적용하여 단어의 상대적 위치 정보를 각도($\theta$)로 주입합니다.
+**동작** : 거대한 행렬 곱셈 후 튀어버릴 수 있는 Q와 K의 크기를 한 번 더 정규화합니다. 이후 RoPE를 적용하여 단어의 상대적 위치 정보를 각도($\theta$ )로 주입합니다.
 
-**주의사항**: 층마다 $\theta$ 값이 번갈아 적용됩니다. (0~3층: 10,000 / 4층: 1,000,000)
+**주의사항** : 층마다  $\theta$  값이 번갈아 적용됩니다. (Local 레이어: 10,000 / Global 레이어: 1,000,000)
 
 ```python
-    if W["gamma_q"][i] is not None:
-        Q, K = CPU_CORE.cpu_qk_norm(Q, K, W["gamma_q"][i], W["gamma_k"][i])
+    Q, K = CPU_CORE.cpu_qk_norm(Q, K, W["gamma_q"][i], W["gamma_k"][i])
 
     theta = 1_000_000.0 if (i % 5 == 4) else 10_000.0
     Q = CPU_CORE.cpu_rope(Q, pos=pos, theta_base=theta)
     K = CPU_CORE.cpu_rope(K, pos=pos, theta_base=theta)
 ```
 
-### 6. KV 캐시 (KV Cache) 라우팅 (20~34층 특수 기믹) : CPU
+### 6. KV 캐시 (KV Cache) 라우팅 및 무스케일(Unscaled) GQA : CPU
 
-**동작**: 20층부터 34층까지는 **자신의 KV 캐시를 업데이트하거나 사용하지 않고**, 18층(Local)과 19층(Global)의 캐시를 **강제로 끌어다 씁니다.**
+**동작** : 20층부터 34층까지는 **자신의 KV 캐시를 업데이트하거나 사용하지 않고** , 18층(Local)과 19층(Global)의 캐시를 **강제로 끌어다 씁니다.** 또한 어텐션 스코어를 계산할 때  $\sqrt{256}$  **으로 나누는 스케일링 과정을 완전히 생략** 합니다.
 
-💡 **무엇을 & 왜 하는 건가요?**
-
-**무엇을**: 후반부 레이어(20~34층)에서는 K, V 연산은 하지만 메모리에 자기 걸 저장하지 않아. 대신 GQA 연산 시 18층과 19층의 캐시 창고에서 데이터를 꺼내와.
-**왜**: 극단적인 메모리 절약을 위한 수술 기법이야. 딥 레이어로 갈수록 Attention 패턴이 고착화되는 성질을 이용해서, 가장 잘 학습된 18층(Local Window)과 19층(Global Window)의 캐시를 빌려 써도 성능 저하가 거의 없고 VRAM을 기하급수적으로 아낄 수 있거든.
+**무엇을** : 후반부 레이어(20~34층)에서는 캐시를 저장하지 않고 18층과 19층 창고에서 꺼내와 연산해. 이때 Q와 K의 내적 결과값을 차원의 제곱근으로 나누지 않고 바로 Softmax에 태워.
+**왜 (캐시 라우팅)** : 극단적인 VRAM 절약을 위한 수술 기법이야. 딥 레이어로 갈수록 Attention 패턴이 고착화되는 성질을 이용해서 가장 잘 학습된 18/19층의 캐시를 빌려 써.
+**왜 (무스케일 어텐션)** : Gemma 3N 구조의 핵심 규칙으로, Softcap이나 스케일링을 없애고 날것의 점수(Raw Score)를 사용해 모델의 표현력을 극대화하기 때문이야.
 
 ```python
-    # 0~19층: 정상적으로 자기 캐시 업데이트
-    # 20~34층: 자기 캐시 안 만들고 18/19층 꺼를 훔쳐씀!
+    # 0~19층: 정상적으로 자기 층의 KV를 캐시에 업데이트
+    # 20~34층: 새로 저장 안 함! 앞선 층의 캐시를 강제로 끌어옴!
     if i < 20:
-        CPU_CORE.cpu_update_kv_cache_static(K, V, i, pos, K_cache, V_cache)
-        cache_idx = i
+        CPU_CORE.cpu_update_kv_cache(K, V, i, K_cache, V_cache)
+        target_k_cache = K_cache[i]
+        target_v_cache = V_cache[i]
     else:
-        # 20층부터는 자기 캐시 무시하고 18층(Local) / 19층(Global) 캐시 차용
-        cache_idx = 19 if (i in FULL_ATTN_LAYERS) else 18
+        if i % 5 == 4:
+            target_k_cache = K_cache[19] # Global
+            target_v_cache = V_cache[19]
+        else:
+            target_k_cache = K_cache[18] # Local
+            target_v_cache = V_cache[18]
 
-    # Sliding Window vs Full Attention 분기
-    if i in FULL_ATTN_LAYERS:
-        target_k_cache = K_cache[cache_idx, :pos+1]
-        target_v_cache = V_cache[cache_idx, :pos+1]
-    else:
-        start_idx = max(0, pos + 1 - SLIDING_WINDOW)
-        target_k_cache = K_cache[cache_idx, start_idx:pos+1]
-        target_v_cache = V_cache[cache_idx, start_idx:pos+1]
-
-    attn_raw = CPU_CORE.cpu_gqa_static(Q, target_k_cache, target_v_cache)
+    # 주의: cpu_gqa 내부에서는 sqrt(256)으로 절대 나누지 않음!
+    attn_raw = CPU_CORE.cpu_gqa(Q, target_k_cache, target_v_cache)
 ```
 
-### 7. Output Projection & 1차 잔차 연결 : IGPU
+### 7. Output Projection, LAuReL 병렬 연산 및 1차 잔차 연결 : IGPU
+
+**동작** : GQA 결과를 프로젝션하는 동시에, **LAuReL 모듈을 병렬로 연산** 하여 결과를 더해줍니다. 이후 최종 합산값을  $1 / \sqrt{2.0}$  비율로 스케일링하여 잔차 연결을 마무리합니다.
 
 ```python
     attn_output = hw_matmul(attn_raw, W["W_o"][i])
+    
+    # LAuReL 연산 (Attention과 병렬 실행)
+    laurel_x = np.dot(inputs_normalized, W["laurel_left"][i])
+    laurel_x = np.dot(laurel_x, W["laurel_right"][i])
+    laurel_out_normed = inputs_normalized + rms_norm(laurel_x, W["laurel_norm"][i])
 
-    # LAuReL 연산(병렬) 생략 (조건부 False)
+    # Attention 결과 정규화 및 잔차 연결, 그리고 LAuReL 합산 및 스케일링
     attn_output = rms_norm(attn_output, W["post_attn_ln"][i])
-    attn_output += x_current
+    attn_output += xs[0]
+    attn_output = (attn_output + laurel_out_normed) * (1.0 / math.sqrt(2.0))
 ```
 
 ### [FFN (Feed-Forward Network) 블록]
 
-### 8. FFN 5% 극단적 희소성 (Sparsity) 수술 부위 (0~9층) : IGPU
+### 8. FFN 5% 극단적 희소성 (Sparsity) 수술 부위 (0~9층) : IGPU / CPU
 
 **동작**: 0층부터 9층까지는 FFN의 Gate 출력 중 상위 5%만 살리고 나머지 95%는 강제로 날려버립니다 (0으로 만듦).
 
 💡 **무엇을 & 왜 하는 건가요?**
 
-**무엇을**: 0~9층에서 Gate 활성화 값의 평균과 표준편차를 구해서 가우시안 통계(Threshold = $ \mu + 1.645 \cdot \sigma $)를 낸 뒤, 이 문턱을 넘는 상위 5%의 뉴런만 남겨둬.
-**왜**: NPU/IGPU에서 연산량을 획기적으로 줄이기 위해서야. 초반 레이어는 불필요한 노이즈가 많아서 95%를 날려버려도 성능 저하가 없고 연산 속도는 엄청나게 빨라지거든. 1-Cycle 퓨전이 아니라 이 'Sparsity Masking' 연산이 핵심이야.
+**무엇을** : 0~9층에서 Gate 활성화 값의 평균과 표준편차를 구해서 가우시안 통계(Threshold =  $ \mu + 1.645 \cdot \sigma $ )를 낸 뒤, 이 문턱을 넘는 상위 5%의 뉴런만 남겨둬.
+**왜**: NPU/IGPU에서 연산량을 획기적으로 줄이기 위해서야. 초반 레이어는 불필요한 노이즈가 많아서 95%를 날려버려도 성능 저하가 없고 연산 속도는 엄청나게 빨라지거든. 
 
 ```mermaid
 graph TD
@@ -187,19 +188,23 @@ graph TD
 ```python
     x_n2 = rms_norm(attn_output, W["pre_ffn_ln"][i])
 
-    if W["W_gate"][i] is not None:
+    if i < 10:  
+        # 0~9층: GeLU 융합 끄고 "순수 행렬곱" 값만 가져옴
+        gate_out = hw_matmul(x_n2, W["W_gate"][i], use_gelu=False)
+        up_out   = hw_matmul(x_n2, W["W_up"][i])
+        
+        # 순수 값으로 5% 커트라인 계산
+        cutoff = np.mean(gate_out) + np.std(gate_out) * 1.6448536
+        sparse_gate = np.maximum(gate_out - cutoff, 0.0) 
+        
+        hidden = CPU_CORE.gelu(sparse_gate) * up_out
+    else:
+        # 10층 이후: 커트라인 없이 초고속 GeLU 융합 커널 사용
         gate_out = hw_matmul(x_n2, W["W_gate"][i], use_gelu=True)
-
-        # [0~9층 특수 기믹] FFN 5% Sparsity 수술
-        if i < 10:
-            mean_val = np.mean(gate_out)
-            std_val = np.std(gate_out)
-            threshold = mean_val + (1.645 * std_val) # Top 5% 가우시안 문턱값
-            gate_out = np.where(gate_out < threshold, 0.0, gate_out)
-
-        up_out = hw_matmul(x_n2, W["W_up"][i])
+        up_out   = hw_matmul(x_n2, W["W_up"][i])
         hidden = gate_out * up_out
-        mlp_out = hw_matmul(hidden, W["W_down"][i])
+
+    mlp_out = hw_matmul(hidden, W["W_down"][i])
 ```
 
 ### 9. 잔차 연결 및 AltUp 렌즈 반영 : IGPU
@@ -211,32 +216,32 @@ graph TD
 
 ### 10. PLE 주입 (그림자 스트림 전용) : CPU
 
-**동작**: 레이어의 가장 마지막 단계에서, 현재 레이어 번호 정보를 담은 PLE를 주입합니다. 단, **절대 메인 스트림(`xs[0]`)에 넣지 않고 오직 그림자 스트림(`xs[1~3]`)에만 선택적으로 넣는 것**이 핵심입니다.
+**동작** : 레이어의 가장 마지막 단계에서, 현재 레이어 번호 정보를 담은 PLE를 주입합니다. 단, **절대 메인 스트림(`xs[0]`)에 넣지 않고 오직 그림자 스트림(`xs[1~3]`)에만 선택적으로 넣는 것** 이 핵심입니다.
 
 💡 **무엇을 & 왜 하는 건가요?**
 
-**무엇을**: 레이어 시작부가 아닌 맨 끝에서, `xs[1]`, `xs[2]`, `xs[3]` 에만 PLE 벡터를 더해줘.
-**왜**: 메인 연산 경로(Attn/FFN)의 순수성은 유지하면서, 뒤에 숨어다니는 그림자 스트림들이 "아 우리가 지금 몇 층을 지나는구나" 하고 컨텍스트를 기억하게 만드는 매우 교묘한 설계야. 기존 문서처럼 Phase 2 시작하자마자 메인 스트림에 주입한다는 건 완전히 잘못된 설명이야!
+**무엇을** : 레이어 시작부가 아닌 맨 끝에서, `xs[1]`, `xs[2]`, `xs[3]` 에만 PLE 벡터를 더해줘.
+**왜** : 메인 연산 경로(Attn/FFN)의 순수성은 유지하면서, 뒤에 숨어다니는 그림자 스트림들이 "아 우리가 지금 몇 층을 지나는구나" 하고 컨텍스트를 기억하게 만드는 매우 교묘한 설계야.
 
 ```python
-    # AltUp 잔차 계산
     activated = outputs * W["altup_scale"][i]
     innovation = activated - xs_pred[0]
+    
+    mod_corr = get_router_modalities(activated, W["altup_rn"][i], W["altup_router"][i])
+    corr_coefs = np.dot(W["altup_corr"][i], mod_corr) + 1.0
 
-    # xs_pred[0] 렌즈를 바탕으로 새로운 xs 생성
     xs_new = xs_pred.copy()
-
-    # ... (스트림 업데이트 로직) ...
+    for k in range(4):
+        xs_new[k] = xs_pred[k] + corr_coefs[k] * innovation
 
     # [핵심] PLE는 레이어 맨 마지막에 그림자 스트림(xs[1~3])에만 주입!
-    if use_ple and W["ple_gate"][i] is not None:
-        pli = pli_all[i]
-        gate_ple = CPU_CORE.gelu(np.dot(activated, W["ple_gate"][i])) * pli
-        mapped = rms_norm(np.dot(gate_ple, W["ple_proj"][i]), W["ple_post_ln"][i])
-
-        # xs[0]은 건드리지 않고 1, 2, 3번 스트림에만 더함
-        for k in range(1, 4):
-            xs_new[k] += mapped
+    pli = pli_all[i]
+    gate_ple = CPU_CORE.gelu(np.dot(activated, W["ple_gate"][i])) * pli
+    mapped = rms_norm(np.dot(gate_ple, W["ple_proj"][i]), W["ple_post_ln"][i])
+    
+    # xs[0]은 건드리지 않고 1, 2, 3번 스트림에만 더함
+    for k in range(1, 4):
+        xs_new[k] += mapped
 
     xs = xs_new
 ```
@@ -247,30 +252,41 @@ graph TD
 
 ### 11. Final RMSNorm & LM Head : IGPU
 
-**동작**: 35번 레이어를 통과해 고도로 압축된 최종 벡터를 전체 단어 사전 크기(25만 개)로 다시 비교합니다. 여기서도 NPU 퓨전이 아닌 순차 호출을 수행하며, 최종 Logit 값에 Softcapping (30.0)을 적용하여 값이 튀는 것을 막습니다.
+**동작** : 35번 레이어를 통과해 고도로 압축된 4개의 스트림을 하나로 결합한 뒤, 전체 단어 사전 크기(25만 개)로 다시 비교합니다. **Softcap 등 어떠한 스케일링 제약도 두지 않고 날것의 점수(Logits)를 구하는 것** 이 중요합니다.
 
 ```python
 def decode_logits(xs, altup_unprojs, W_final_norm, W_lm_head):
-    # IGPU 환경이므로 Norm 후 Matmul 분리 호출
-    x_final = rms_norm(xs[0], W_final_norm)
-    logits = np.dot(x_final, W_lm_head)
+    target_mag  = np.mean(xs[0] ** 2) ** 0.5
+    unembedded  = [xs[0]]
+    for k in range(3):
+        proj_x  = np.dot(xs[k + 1], altup_unprojs[k])
+        new_mag = np.mean(proj_x ** 2) ** 0.5
+        proj_x *= target_mag / max(new_mag, 1e-12)
+        unembedded.append(proj_x)
 
-    # 최종 Logit Softcapping (30.0)
-    logits = np.tanh(logits / 30.0) * 30.0
+    # 4개의 스트림 평균내서 통합
+    x_final = np.mean(np.stack(unembedded, axis=0), axis=0)
+    
+    x_final = rms_norm(x_final, W_final_norm)
+    logits  = np.dot(x_final, W_lm_head)
+    
+    # Softcap 없음! 바로 최댓값만 빼서 오버플로우 방지
+    logits -= np.max(logits)
     return logits
 ```
 
 **수학식**:
+
 $$
-\mathbf{logits} = \tanh \left( \frac{\text{RMSNorm}(\mathbf{x}) \cdot W_{embed}^T}{30.0} \right) \times 30.0
+\mathbf{logits} = \text{RMSNorm}(\mathbf{x}_{final}) \cdot W_{lm\_head}
 $$
 
 ### 12. Softmax 및 토큰 샘플링 : CPU
 
-**동작**: 점수들을 0~100% 확률로 바꾸고, 주사위를 굴리거나 제일 높은 걸 뽑아서 최종 단어를 선택합니다. 뽑힌 단어는 다시 Phase 1의 입력으로 들어가 꼬리를 뭅니다(Autoregressive).
+**동작**: 점수들을 확률로 바꾸고, 반복 패널티 등을 적용하여 최종 단어를 선택합니다. 뽑힌 단어는 다시 Phase 1의 입력으로 들어가 꼬리를 뭅니다(Autoregressive).
 
 ```python
-    next_token = _sample(logits, TEMPERATURE, TOP_P, TOP_K, REP_PENALTY, generated)
+    next_token = _sample(logits, TEMPERATURE, TOP_P, REP_PENALTY, generated)
     decoded = CPU_CORE.tokenizer.decode([next_token])
     print(decoded, end="", flush=True)
 ```
