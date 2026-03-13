@@ -1,0 +1,15 @@
+[시도한 내용] 
+Gemma 3N E4B 모델을 INT4로 양자화하여 로컬 환경(3GB VRAM)에서 구동 검증.
+
+[발생한 문제/에러 로그]
+1. BFloat16 tensors를 numpy로 직접 변환 시 TypeError 발생.
+2. INT16 기반의 기존 IGPU_CORE가 3GB VRAM에서 4B 모델을 감당하기 어려움 (8GB+ 필요).
+3. packed uint8 데이터를 Taichi 커널에서 효율적으로 처리해야 함.
+
+[해결 방법 및 결과]
+1. quantize.py에서 tensor.to(torch.float32).numpy()를 사용하여 BFloat16 문제 해결.
+2. per-row symmetric quantization (range [-8, 7]) 적용하여 2개의 4-bit 가중치를 1개의 uint8로 패킹.
+3. safeTensor.py를 수정하여 (packed, scale) 튜플 형태로 가중치 로드 지원.
+4. IGPU_CORE.py에 _gemv_int4 커널을 추가하여 VRAM에서 즉시 unpacking 및 연산 수행.
+5. CPU_CORE.py의 embedding 함수를 수정하여 quantized W_embed 지원.
+6. 결과: "안녕하세요! 😊 무엇을 도와드릴까요?..." 와 같이 매우 논리적이고 문맥에 맞는 한글 답변 생성 성공. 3GB VRAM 한계 내에서 정상 작동 확인.

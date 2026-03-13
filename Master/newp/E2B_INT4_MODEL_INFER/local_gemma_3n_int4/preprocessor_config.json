@@ -1,0 +1,52 @@
+{
+  "crop_size": null,
+  "data_format": "channels_first",
+  "default_to_square": false,
+  "device": null,
+  "disable_grouping": null,
+  "dither": 0.0,
+  "do_center_crop": null,
+  "do_convert_rgb": null,
+  "do_normalize": false,
+  "do_rescale": true,
+  "do_resize": true,
+  "feature_extractor_type": "Gemma3nAudioFeatureExtractor",
+  "feature_size": 128,
+  "fft_length": 1024,
+  "fft_overdrive": true,
+  "frame_length": 512,
+  "hop_length": 160,
+  "image_mean": [
+    0.5,
+    0.5,
+    0.5
+  ],
+  "image_processor_type": "SiglipImageProcessorFast",
+  "image_seq_length": 256,
+  "image_std": [
+    0.5,
+    0.5,
+    0.5
+  ],
+  "input_data_format": null,
+  "input_scale_factor": 1.0,
+  "max_frequency": 7600.0,
+  "mel_floor": 1e-05,
+  "min_frequency": 125.0,
+  "padding_side": "right",
+  "padding_value": 0.0,
+  "per_bin_mean": null,
+  "per_bin_stddev": null,
+  "preemphasis": 0.97,
+  "preemphasis_htk_flavor": true,
+  "processor_class": "Gemma3nProcessor",
+  "resample": 2,
+  "rescale_factor": 0.00392156862745098,
+  "return_attention_mask": true,
+  "return_tensors": null,
+  "sampling_rate": 16000,
+  "size": {
+    "height": 768,
+    "width": 768
+  }
+}

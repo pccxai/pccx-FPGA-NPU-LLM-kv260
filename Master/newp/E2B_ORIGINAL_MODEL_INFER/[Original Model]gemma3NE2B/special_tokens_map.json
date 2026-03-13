@@ -1,0 +1,36 @@
+{
+  "audio_token": "<audio_soft_token>",
+  "boa_token": "<start_of_audio>",
+  "boi_token": "<start_of_image>",
+  "bos_token": {
+    "content": "<bos>",
+    "lstrip": false,
+    "normalized": false,
+    "rstrip": false,
+    "single_word": false
+  },
+  "eoa_token": "<end_of_audio>",
+  "eoi_token": "<end_of_image>",
+  "eos_token": {
+    "content": "<eos>",
+    "lstrip": false,
+    "normalized": false,
+    "rstrip": false,
+    "single_word": false
+  },
+  "image_token": "<image_soft_token>",
+  "pad_token": {
+    "content": "<pad>",
+    "lstrip": false,
+    "normalized": false,
+    "rstrip": false,
+    "single_word": false
+  },
+  "unk_token": {
+    "content": "<unk>",
+    "lstrip": false,
+    "normalized": false,
+    "rstrip": false,
+    "single_word": false
+  }
+}
