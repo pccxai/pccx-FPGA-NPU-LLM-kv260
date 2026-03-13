@@ -1,0 +1,5 @@
+{
+  "audio_seq_length": 188,
+  "image_seq_length": 256,
+  "processor_class": "Gemma3nProcessor"
+}

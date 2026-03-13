@@ -1,3 +1,38 @@
+# Project: TinyNPU-RTL
+
+## 1. Project Overview
+* **Core Goal:** Gemma 3N E2B 모델을 INT4로 양자화(Quantization)하여 Kria KV260 FPGA 보드(로컬 커스텀 NPU)에서 구동.
+* **Current Phase:** KV260 이식 전, 로컬 PC 환경에서 파이썬 및 Vulkan을 활용한 양자화 및 추론 파이프라인 사전 검증.
+
+## 2. Hardware Environment (Local Prototyping)
+* **CPU:** AMD Ryzen 4500U
+* **RAM:** 16GB (Swap 32GB)
+* **VRAM:** 3GB (내장 그래픽)
+* **OS:** Ubuntu Linux
+* **Python Env:** `pynq_env` 가상환경 사용
+
+## 3. Directory Structure
+프로젝트의 최상위 폴더는 `TinyNPU-RTL`이며, 역할에 따라 다음과 같이 구분된다.
+
+### `/Architecture`
+* 프로젝트 전체 구조 및 데이터 흐름을 설명하는 문서 폴더.
+* KV260, FPGA 설계, SystemVerilog, Python 스택 등의 아키텍처 다이어그램 및 마크다운 문서 포함.
+
+### `/gemma3N_In_npu_Project` (FPGA Hardware)
+* KV260 보드에서 트랜스포머 연산을 가속하기 위한 하드웨어 설계 폴더.
+* Systolic Array, 행렬 곱셈(MatMul) 가속기 등 커스텀 NPU 설계를 위한 Vivado 프로젝트, SystemVerilog 코드, IP, Testbench 파일들이 위치함.
+
+### `/Master` (Python Software & Controller)
+* AI 모델 로드, 양자화 전처리, 그리고 추후 FPGA 제어를 담당하는 파이썬 코드 폴더. 현재 가장 집중하고 있는 작업 공간.
+* **목표 [1]:** 양자화되지 않은 원본 Gemma 3N E2B 모델 구동 및 완벽한 채팅 스트리밍 출력 검증 (실제 GPT/Gemini 수준의 대화 UI 구현).
+* **목표 [2]:** 모델을 INT4로 양자화한 후 로컬 환경(3GB VRAM)에 맞춰 구동 및 채팅 스트리밍 출력 검증.
+* **목표 [3]:** FPGA 하드웨어 설계 완료 후, KV260의 Master(Linux)로서 Slave(FPGA)에 명령을 내리고 AXI DMA를 통한 메모리 컨트롤 및 통신 로직 완성.
+
+## 4. AI Assistant Rules
+* 파이썬 스크립트 실행 및 패키지 관리는 반드시 `/home/hwkim/Desktop/github/TinyNPU-RTL/pynq_env/bin/python` 경로의 가상환경을 통할 것.
+* 파이썬 코드 설계 시, 추후 C++/Vulkan 또는 FPGA(SystemVerilog)로 데이터가 넘어갈 것을 대비하여 Numpy 배열의 데이터 타입과 형태(Shape)를 엄격하게 관리할 것.
+* 현재 로컬 환경의 VRAM 3GB 한계를 인지하고, OOM(Out of Memory)이 발생하지 않도록 목표 [1]은 CPU/System RAM 위주로, 목표 [2]는 메모리 최적화에 집중할 것.
+
 # Gemini CLI System Context: Gemma 3N Custom NPU Project
 
 ## 👤 User Profile
