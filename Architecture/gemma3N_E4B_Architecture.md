@@ -274,6 +274,39 @@ graph TD
 
 *(여기까지의 과정을 35개 레이어에 걸쳐 반복합니다.)*
 
+## [NEW] INT4 양자화 및 메모리 최적화 (E4B_INT4_MODEL_INFER)
+
+Gemma 3N E4B 모델을 모바일/엣지 디바이스나 RAM 제한이 엄격한 환경(예: 800MB 수준의 RAM 환경)에서 구동하기 위해, 강력한 **INT4 양자화(Quantization) 및 메모리 구조화 기법**이 적용되었습니다 (`Master/newp/E4B_INT4_MODEL_INFER` 폴더 참조).
+
+### 1. INT4 가중치 패킹 (Weight Packing)
+메모리 절약을 위해 거대한 가중치 행렬들은 INT4 형태로 압축됩니다. 메모리에는 4비트 자료형이 없기 때문에, **두 개의 INT4 가중치를 하나의 8비트 정수(`uint8`)로 패킹**하여 저장합니다 (상위 4비트, 하위 4비트).
+이를 통해 가중치 행렬의 크기가 정확히 절반(`K_in // 2`)으로 줄어들어 VRAM 사용량이 획기적으로 감소합니다.
+추론(Forward Pass) 시 하드웨어(CPU/NPU/IGPU) 코어 내부에서 비트 연산(`& 0x0F`, `>> 4`)을 통해 실시간으로 압축을 풀고, 저장된 `Scale` 값을 곱해 Float32로 복원(Dequantize)하여 행렬 곱을 수행합니다.
+
+### 2. 메모리 맵(Mmap) 기반 부분 로딩: `W_embed` & `W_ple`
+입력 프롬프트를 처리할 때, 26만 개가 넘는 거대한 사전 크기를 가진 `W_embed`(임베딩)와 `W_ple`를 한 번에 RAM에 올리면 메모리가 터집니다(OOM).
+이를 방지하기 위해 **Mmap(메모리 맵핑)** 기술을 활용합니다. 전체 가중치를 메모리에 로드하지 않고 디스크에 매핑해둔 뒤, 모델이 현재 처리 중인 `token_id`에 해당하는 **단 한 줄의 가중치(약 1KB ~ 4.5KB)**만 디스크에서 즉시 읽어옵니다.
+
+```python
+# Phase 1: W_embed 디스크에서 딱 1KB만 로드
+x0 = CPU_CORE.embedding(safe_token_id, W_embed[0], W_embed[1])
+
+# Phase 1.5: W_ple 디스크에서 딱 4.5KB만 로드
+unpacked_w_ple = CPU_CORE.embedding(safe_token_id, W_ple_packed, W_ple_scale)
+```
+
+### 3. Logit Softcapping (오버플로우 방지 및 안정성)
+최종 단계에서, 모델 출력의 불안정성을 잡고 환각 현상을 억제하기 위해 **Gemma 3 전용 Final Logit Soft-capping 기법**이 부활했습니다.
+출력 값(Logits)이 너무 커지는 것을 방지하기 위해 `30.0`을 기준으로 `Tanh` 함수를 씌워 값을 억제합니다.
+
+```python
+# 💡 [핵심] Gemma 3 전용 Final Logit Soft-capping (30.0)
+logits = 30.0 * np.tanh(logits / 30.0)
+```
+이 한 줄의 코드가 모델의 문법적 지능을 비약적으로 끌어올리고, 루프에 빠지는 현상(Repetition)을 절대적으로 방어합니다.
+
+---
+
 ## Phase 3: 최종 출력 (대답 내놓기)
 
 ### 17 & 18. Final RMSNorm & LM Head 퓨전 : NPU
