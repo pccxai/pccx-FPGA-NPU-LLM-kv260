@@ -1,122 +1,92 @@
-import sys
+import ctypes
 import numpy as np
-import safeTensor
-
-def get_total_size(obj):
-    total = sys.getsizeof(obj)  # 리스트 자체 크기 먼저 시작
-    
-    for item in obj:
-        if isinstance(item, np.ndarray):
-            # 넘파이 배열: 데이터 크기(nbytes) + 객체 헤더 크기
-            total += item.nbytes + sys.getsizeof(item)
-        else:
-            # 튜플 등 일반 객체
-            total += sys.getsizeof(item)
-    
-    # --- 여기서부터 루프 밖으로 빼야 전체 합산본으로 계산됩니다 ---
-    gb_size = total / (1024 ** 3)
-    mb_bit_size = (total * 8) / (1024 ** 2)
-    Mb_size = total / (1024 * 1024)
-    return f"{gb_size:.10f} | {Mb_size:.6f} | {mb_bit_size:.4f}"
-
-def calculate_memory_usage(obj):
-    # 1. 기본 객체 자체의 헤더 크기 측정
-    total = sys.getsizeof(obj)
-    
-    # 2. 내부 요소 순회 (리스트, 튜플 등 반복 가능한 객체인 경우)
-    if isinstance(obj, (list, tuple)):
-        for item in obj:
-            if isinstance(item, np.ndarray):
-                # 넘파이 배열: 실제 데이터(nbytes) + 객체 관리용 헤더 크기
-                total += item.nbytes + sys.getsizeof(item)
-            else:
-                # 그 외 내부 객체(또 다른 튜플, 숫자 등)
-                total += sys.getsizeof(item)
-                
-    # 3. 입력 객체가 단일 Numpy 배열인 경우 처리
-    elif isinstance(obj, np.ndarray):
-        total = obj.nbytes + sys.getsizeof(obj)
-
-    # 단위 변환 계산
-    gb_size = total / (1024 ** 3)
-    mb_size = total / (1024 ** 2)
-    mb_bit_size = (total * 8) / (1024 ** 2) # Megabit (Mb) 단위
-    
-    return f"{gb_size:.10f} GB | {mb_size:.6f} MB | {mb_bit_size:.4f} Mb (bits)"
-
-
-
-def debug():
-    W_embed, W_ple, norm_ple, W_ple_proj, altup_projs, altup_unprojs, \
-        W_final_norm, W_lm_head, W = safeTensor.load_local_weights()
-    print(f"""|name|type|[0] type|GB size|MB size|mb_bit_size|\n
-|---|---|---|---|---|---|""")
-    
-    dictKey = []
-    for name1 in dictKey:
-        print(f"{name1} | {type(W[name1])} | {type(W[name1][0])} | {get_total_size(W[name1])} |\n")
-    
-    print(f"""
-W_embed | {type(W_embed)} | - | {calculate_memory_usage(W_embed)} |\n
-W_ple | {type(W_ple)} | - | {calculate_memory_usage(W_ple)} |\n
-norm_ple | {type(norm_ple)} | - | {calculate_memory_usage(norm_ple)} |\n
-W_ple_proj | {type(W_ple_proj)} | - | {calculate_memory_usage(W_ple_proj)} |\n
-altup_projs | {type(altup_projs)} | - | {calculate_memory_usage(altup_projs)} |\n
-altup_unprojs | {type(altup_unprojs)} | - | {calculate_memory_usage(altup_unprojs)} |\n
-W_final_norm | {type(W_final_norm)} | - | {calculate_memory_usage(W_final_norm)} |\n
-W_lm_head | {type(W_lm_head)} | - | {calculate_memory_usage(W_lm_head)} |\n
-""")
-import numpy as np
-from safetensors.torch import load_file
-import glob
 import os
-import gc
+import time
 
-# 💡 회원님의 safeTensor.py 와 동일한 절대경로 로직 적용!
+# 1. DLL 경로 설정 및 로드
 base_dir = os.path.dirname(os.path.abspath(__file__))
-model_dir = os.path.join(base_dir, "local_gemma_3n_int4")
+dll_path = os.path.join(base_dir, "C_DLL", "my_accelerator.so")
+c_lib = ctypes.CDLL(dll_path)
 
-# 폴더 안의 safetensors 파일들 찾기
-st_files = sorted(glob.glob(os.path.join(model_dir, "*.safetensors")))
+# 2. C 함수 시그니처 정의 (매우 중요! 이거 안 하면 포인터 에러로 튕김)
+# C_CONTIGUOUS: 메모리가 C언어 배열처럼 1차원으로 예쁘게 이어져 있는지 강제 확인
+c_lib.run_RMSNorm_inplace.argtypes = [
+    np.ctypeslib.ndpointer(dtype=np.float32, ndim=1, flags='C_CONTIGUOUS'), # x
+    np.ctypeslib.ndpointer(dtype=np.float32, ndim=1, flags='C_CONTIGUOUS'), # gamma
+    ctypes.c_int # length
+]
+c_lib.run_RMSNorm_inplace.restype = None
 
-if len(st_files) == 0:
-    print(f"❌ 에러: {model_dir} 경로에서 safetensors 파일을 한 개도 찾지 못했습니다.")
-    print("스크립트 파일이 main.py와 같은 위치(최상단 폴더)에 있는지 확인해 주세요!")
-    exit(1)
+# 3. 파이썬 래퍼 함수 (호출용)
+def c_gelu(x_array):
+    # 만약 메모리가 꼬여있다면 일렬로 정렬 (일반적으로 np.dot 결과는 이미 정렬되어 있음)
+    if not x_array.flags['C_CONTIGUOUS']:
+        x_array = np.ascontiguousarray(x_array)
+        
+    # 복사(Copy) 없이 원본 배열의 주소만 C로 넘겨서 덮어쓰기!
+    c_lib.run_gelu_inplace(x_array, x_array.size)
+    return x_array
 
-target_keys = {
-    "model.language_model.embed_tokens.weight": "W_embed_packed.npy",
-    "model.language_model.embed_tokens.weight.scale": "W_embed_scale.npy",
-    "model.language_model.embed_tokens_per_layer.weight": "W_ple_packed.npy",
-    "model.language_model.embed_tokens_per_layer.weight.scale": "W_ple_scale.npy",
-}
+# 래퍼 함수
+def c_rms_norm(x_array, gamma_array):
+    if not x_array.flags['C_CONTIGUOUS']:
+        x_array = np.ascontiguousarray(x_array)
+    if not gamma_array.flags['C_CONTIGUOUS']:
+        gamma_array = np.ascontiguousarray(gamma_array)
+        
+    c_lib.run_RMSNorm_inplace(x_array, gamma_array, x_array.size)
+    return x_array
 
-found_count = 0
 
-print(f"🔍 [{model_dir}] 폴더에서 수색을 시작합니다. (발견된 파일: {len(st_files)}개)")
+def py_gelu(x):
+        return 0.5 * x * (1 + np.tanh(np.sqrt(2 / np.pi) * (x + 0.044715 * (x**3))))
 
-for st_file in st_files:
-    print(f"\n📂 열어보는 중: {os.path.basename(st_file)}")
-    tensors = load_file(st_file)
+def py_rms_norm(x, gamma):
+    rms = np.sqrt(np.mean(x ** 2) + 1e-6)
+    return (x / rms) * gamma
+
+# --- 테스트 및 벤치마크 ---
+if __name__ == "__main__":
+    # 기존 파이썬 GeLU (비교용)
     
-    for key in list(target_keys.keys()):
-        if key in tensors:
-            npy_filename = os.path.join(base_dir, target_keys[key])
-            print(f"  👉 타겟 발견! [{key}]")
-            print(f"     ➔ {target_keys[key]} 파일로 저장 중... ⏳")
-            
-            # numpy 배열로 변환해서 저장
-            np.save(npy_filename, tensors[key].numpy())
-            
-            del target_keys[key]
-            found_count += 1
-            
-    del tensors
-    gc.collect()
+    # Gemma 차원 크기로 테스트
+    print("데이터 생성 중...")
 
-print("\n" + "-" * 50)
-if found_count == 4:
-    print("🎉 완벽합니다! 4개의 필수 텐서를 모두 성공적으로 분리했습니다.")
-    print("이제 이 스크립트가 있는 폴더에 4개의 .npy 파일이 생성되었습니다.")
-else:
-    print(f"⚠️ 일부 텐서를 찾지 못했습니다. 못 찾은 항목: {list(target_keys.keys())}")
+    dim = 2048 * 2048
+    test_x = np.random.randn(dim).astype(np.float32)
+    test_gamma = np.random.randn(dim).astype(np.float32)
+
+    # Gemma의 통상적인 은닉층 크기 (예: 2048 차원)
+    # test_data = np.random.randn(2048 * 2048).astype(np.float32)
+    
+    # 공정한 대결을 위해 데이터 복사 (C함수는 원본을 덮어쓰기 때문)
+    #data_for_py = test_x.copy()
+    #data_for_c = test_x.copy()
+
+    # 1. 파이썬 속도 측정
+    start = time.perf_counter()
+    #res_py = py_gelu(data_for_py)
+    res_py = py_rms_norm(test_x.copy(), test_gamma)
+    py_time = time.perf_counter() - start
+
+    # 2. C DLL 속도 측정
+    start = time.perf_counter()
+    # res_c = c_gelu(data_for_c)
+    res_c = c_rms_norm(test_x.copy(), test_gamma)
+    c_time = time.perf_counter() - start
+
+    print(f"\n--- 결과 ---")
+    print(f"Python Time : {py_time * 1000:.5f} ms")
+    print(f"C DLL Time  : {c_time * 1000:.5f} ms")
+    
+    if c_time > 0:
+        print(f"🔥 속도 향상: 약 {py_time / c_time:.1f}배 빠름!")
+
+    # 3. 정확도 검증 (소수점 아래 미세 오차 허용)
+    diff = np.max(np.abs(res_py - res_c))
+    print(f"최대 오차(Max Diff): {diff:.8f}")
+    
+    if diff < 1e-5:
+        print("✅ 완벽하게 일치합니다! 하드웨어 포팅 대성공!")
+    else:
+        print("❌ 오차가 큽니다. 타입이나 컴파일러 옵션 확인 필요.")

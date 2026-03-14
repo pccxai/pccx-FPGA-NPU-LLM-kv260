@@ -1,0 +1,58 @@
+#version 450
+// 한 번에 32개의 Output(행)을 병렬로 계산 (워크그룹 크기)
+layout (local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
+
+// 영구 버퍼들
+layout(binding = 0) readonly buffer InputX { float x[]; };
+// 💡 핵심: uint[] 가 아니라 uvec4[] (16바이트 벡터) 배열로 선언!
+layout(binding = 1) readonly buffer MatP { uvec4 mat_vec4[]; }; 
+layout(binding = 2) readonly buffer Scale { float scale[]; };
+layout(binding = 3) writeonly buffer Output { float out_vec[]; };
+
+// Push Constants
+layout(push_constant) uniform PushConstants {
+    uint M_out;
+    uint K_in_vector4s; // 💡 K차원을 uvec4 단위(32개 INT4)로 나눈 개수
+} params;
+
+void main() {
+    uint row = gl_GlobalInvocationID.x;
+    if (row >= params.M_out) return;
+
+    float acc = 0.0;
+    // 행렬 버퍼 내 해당 행의 시작 uvec4 인덱스 계산
+    uint row_offset = row * params.K_in_vector4s;
+
+    // 🚀 루프 최적화 (1루프당 16바이트를 읽어서 32개의 INT4 가중치를 한 방에 처리!)
+    for (uint k = 0; k < params.K_in_vector4s; k++) {
+        // 💡 128비트 양동이 싹쓸이!
+        uvec4 packed_128 = mat_vec4[row_offset + k];
+        // 벡터 x의 시작 인덱스 (1 uvec4당 32개 INT4 커버)
+        uint x_idx = k * 32; 
+
+        // 💡 uvec4 안의 4개 uint32 요소를 차례로 Unpacking
+        for (int v = 0; v < 4; v++) {
+            uint packed_32 = packed_128[v]; // x, y, z, w 성분
+            uint x_v_idx = x_idx + (v * 8); // uint 하나당 8개 x 요소 담당
+
+            // 32비트를 8비트씩 4번 쪼개서 언패킹 (기존 로직 유지하되 인덱스 주의)
+            for (int i = 0; i < 4; i++) {
+                uint byte_val = (packed_32 >> (i * 8)) & 0xFF;
+                
+                // 하위 4비트 처리 (Sign-extension)
+                int low = int(byte_val & 0x0F);
+                if (low > 7) low -= 16;
+                
+                // 상위 4비트 처리 (Sign-extension)
+                int high = int((byte_val >> 4) & 0x0F);
+                if (high > 7) high -= 16;
+
+                // 벡터 x의 값과 곱해서 누적
+                acc += x[x_v_idx + i * 2] * float(low) + x[x_v_idx + i * 2 + 1] * float(high);
+            }
+        }
+    }
+    
+    // 최종 결과에 Scale을 곱해서 출력 버퍼에 기록
+    out_vec[row] = acc * scale[row];
+}
