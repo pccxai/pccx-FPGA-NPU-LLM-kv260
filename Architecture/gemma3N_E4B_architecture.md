@@ -1,7 +1,6 @@
 # Gemma 3N E4B Forward Pass: 하드웨어(CPU/IGPU) 분배 및 코드 매핑
 
-이 문서는 Gemma 3 4B 모델에 "안녕하세요" 라는 텍스트가 입력되어 처리되는 전체 Forward Pass 과정을 다룹니다. 상세한 개념 설명, 데이터 흐름(Mermaid), 그리고 IGPU 가속 환경과 Python (`main.py`) 제어 코드를 모두 통합했습니다.
-특히 기존 문서에서 누락되었거나 불일치했던 **35개 레이어 구조** , 4-Stream AltUp 라우터, 18/19층 KV 캐시 강제 차용(Routing), 극단적 FFN Sparsity, PLE 그림자 스트림 주입, 그리고 IGPU 기반의 분리형 하드웨어 가속 등의 핵심 기믹들을 완벽하게 반영했습니다.
+이 문서는 Gemma3N-E4B(Int4) 모델에 "안녕하세요" 라는 텍스트가 입력되어 처리되는 전체 Forward Pass 과정을 다룹니다.    
 
 ## Phase 1: 입력 및 임베딩 처리
 
@@ -9,32 +8,22 @@
 
 **동작** : AI는 한글을 직접 못 읽으므로, 입력 텍스트 "안녕하세요"를 자기가 아는 정수 ID 번호표로 바꿉니다. ("안녕" -> 4512번, "하세요" -> 8931번 등). 단순한 사전 검색 작업이라 CPU가 처리합니다.
 
-💡 **무엇을 & 왜 하는 건가요?**
-
-**무엇을** : 사람이 쓰는 자연어(글자)를 컴퓨터가 처리할 수 있는 고유한 숫자(ID) 로 치환하는 작업이야.
-**왜** : 컴퓨터 연산기(ALU/MAC)는 숫자만 계산할 수 있으니까! 텍스트 그대로는 행렬 곱셈을 할 수가 없어서, 모델이 미리 학습해둔 25만 개의 단어 사전과 대조해서 고유 번호를 부여하는 필수 전처리 과정이야.
+* 사람이 쓰는 자연어(글자)는 디지털 연산(ALU/MAC)이 처리할 수 있는 고유한 숫자(ID)로 행렬 곱셈을 할 수 있게 변환한다, 
+* 모델이 미리 학습해둔 25만 개의 단어 사전인 json과 대조해서 고유 번호를 부여하는 필수 전처리 과정이다.
 
 **Shape** : token_ids: [T] (1차원 배열, 여기서  $T$  는 토큰 수)
 
 ```python
-# 1. 가중치 로드
-W_embed, W_ple, norm_ple, W_ple_proj, altup_projs, altup_unprojs, W_final_norm, W_lm_head, W = safeTensor.load_local_weights()
-
-K_cache = [[] for _ in range(35)]
-V_cache = [[] for _ in range(35)]
-
 prompt = "안녕 하세요"
 input_tokens = CPU_CORE.tokenize(prompt)
 ```
 
 ### 2. 임베딩 (Embedding) 및 AltUp 초기화 : CPU / IGPU
 
-**동작**: 해당 번호를 거대한 사전에서 찾아 긴 숫자 배열(벡터) 로 바꿉니다. 그리고 Gemma 3N의 핵심인 **AltUp 4-Stream** 구조를 위해, 입력된 데이터를 4개의 다중 스트림(`xs[0]`~`xs[3]`)으로 분할(Projection)합니다.
+**동작**: 해당 번호를 거대한 사전에서 찾아 긴 숫자 배열(벡터) 로 바꿉니다. 그리고 Gemma 3N E4B의 핵심인 **AltUp 4-Stream** 구조를 위해, 입력된 데이터를 4개의 다중 스트림(`xs[0]`~`xs[3]`)으로 분할(Projection)합니다.
 
-💡 **무엇을 & 왜 하는 건가요?**
-
-**무엇을** : 단순한 정수 ID(예: 4512)를 2048개의 소수점으로 이루어진 연속적인 수치(벡터) 로 변환하고, 이를 4개의 병렬 스트림으로 복제 및 투영시켜.
-**왜 (AltUp)** : 단일 스트림으로 연산하는 것보다, 여러 스트림으로 쪼개서 각기 다른 관점의 정보를 담아두면 훨씬 적은 파라미터로도 모델의 표현력이 대폭 상승하기 때문이야.
+* 단순한 정수 ID(예: 4512)를 2048개의 소수점으로 이루어진 연속적인 수치(벡터) 로 변환하고, 이를 4개의 병렬 스트림으로 복제 및 투영시킨다.  
+> 단일 스트림으로 연산하는 것보다, 여러 스트림으로 쪼개서 각기 다른 관점의 정보를 담아두면 훨씬 적은 파라미터로도 모델의 표현력이 대폭 상승하기 때문이야.
 
 **Shape** : xs: [4, T, 2048]
 
@@ -55,11 +44,11 @@ for k in range(3):
     xs[k + 1] = hw_matmul(x, altup_projs[k])
 ```
 
-**수학식** :
+**수학식** :  
 
 $$
 \mathbf{xs}[0] = W_{embed}[\text{token\_ids}]
-$$
+$$  
 
 ## Phase 2: Transformer Block (35번 반복 시작)
 
@@ -72,12 +61,10 @@ for i in range(35):
 
 ### 3. AltUp Router (Tanh 기반 혼합) : IGPU
 
-**동작** : 4개의 다중 스트림(Main 1개 + Shadow 3개)을 섞어 임시 스트림(`xs_pred[0]`)을 만듭니다. 이때 Softmax가 아닌 **Tanh** 활성화를 사용하는 것이 핵심입니다.
+**동작** : 4개의 다중 스트림(Main 1개 + Shadow 3개)을 섞어 temporal stream(`xs_pred[0]`)을 만듭니다. 이때 Softmax가 아닌 **Tanh** activation function을 사용하는 것이 핵심입니다.
 
-💡 **무엇을 & 왜 하는 건가요?**
-
-**무엇을** : 각 스트림의 데이터를 Tanh를 통과한 가중치와 곱해서 섞어줘(Mixing).
-**왜** : Tanh로 스케일링을 해야 그라디언트가 부드러워지고 안정적으로 섞이거든. 이때 만들어진 `xs_pred[0]`은 메인 연산(Attn/FFN)에 들어가지 않고, 나중에 잔차 연결을 위한 '임시 렌즈'로만 쓰여. 진짜 연산은 오직 순수한 `xs[0]`만 들어가는 점이 중요해!
+* 각 스트림의 데이터를 Tanh를 통과한 weight 곱해서 섞어줘(Mixing).
+> Tanh로 scaling할 경우 gradient 부드러워지고 안정적으로 섞이거든. 이때 만들어진 `xs_pred[0]`은 메인 연산(Attn/FFN)에 들어가지 않고, 나중에 residual-network 위한 '임시 렌즈'로만 쓰여. 진짜 연산은 오직 순수한 `xs[0]`만 들어가는 점이 중요해!
 
 ```python
     modalities = get_router_modalities(xs[0], W["altup_rn"][i], W["altup_router"][i])
@@ -87,9 +74,9 @@ for i in range(35):
     xs_pred = xs + np.dot(coef_mat, xs)
 ```
 
-### 4. Pre-Attention RMSNorm & Q,K,V 계산 : IGPU
+### 4. Pre-Attention RMSNorm & Q,K,V 계산 : `IGPU`
 
-**동작 (RMSNorm & 하드웨어 가속기)** : AI가 데이터 크기에 휘둘리지 않게 볼륨을 평준화합니다. `ACCEL_MODE = "IGPU"` 환경에 맞춰 **rms_norm과 hw_matmul을 분리하여 순차적으로 호출** 합니다.
+**동작 (RMSNorm & 하드웨어 가속기)** : AI가 데이터 크기에 휘둘리지 않게 볼륨을 평준화합니다. `ACCEL_MODE = "IGPU"` 환경에 맞춰 rms_norm과 hw_matmul을 분리하여 sequential하게 호출 합니다.
 
 ```python
     # Attention 연산은 무조건 순수한 xs[0]이 담당!
@@ -104,7 +91,9 @@ for i in range(35):
 
 **동작** : 거대한 행렬 곱셈 후 튀어버릴 수 있는 Q와 K의 크기를 한 번 더 정규화합니다. 이후 RoPE를 적용하여 단어의 상대적 위치 정보를 각도($\theta$ )로 주입합니다.
 
-**주의사항** : 층마다  $\theta$  값이 번갈아 적용됩니다. (Local 레이어: 10,000 / Global 레이어: 1,000,000)
+**주의사항** : 층마다  $\theta$  값이 번갈아 적용됩니다. 
+> Local 레이어: 10,000 
+> Global 레이어: 1,000,000
 
 ```python
     Q, K = CPU_CORE.cpu_qk_norm(Q, K, W["gamma_q"][i], W["gamma_k"][i])
