@@ -3,8 +3,8 @@ flowchart TB
     %% ============================================================
     %% External Inputs
     %% ============================================================
-    DMA["🖥️ DMA / ARM CPU\n(dma_we, dma_addr,\ndma_write_data,\nstart_mac)"]
-    LAYER_IN["🌐 Layer Input\n(layer_valid_in,\ni_token_mean_sq,\ni_token_vector,\ni_weight_matrix)"]
+    DMA[" DMA / ARM CPU\n(dma_we, dma_addr,\ndma_write_data,\nstart_mac)"]
+    LAYER_IN[" Layer Input\n(layer_valid_in,\ni_token_mean_sq,\ni_token_vector,\ni_weight_matrix)"]
 
     %% ============================================================
     %% TOP: npu_core_top_NxN
@@ -14,7 +14,7 @@ flowchart TB
 
         subgraph PING_PONG["ping_pong_bram  [DATA_WIDTH=512, ADDR_WIDTH=9]"]
             direction TB
-            MUX["🔀 DMA / NPU MUX\n(switch_buffer)"]
+            MUX[" DMA / NPU MUX\n(switch_buffer)"]
             subgraph BRAMs["Dual BRAM Bank"]
                 direction LR
                 BRAM0["simple_bram #0\n[Port A / Port B]"]
@@ -26,9 +26,9 @@ flowchart TB
             BRAM1 -->|"rdata_1_a / rdata_1_b"| MUX
         end
 
-        FSM["⚙️ FSM\n(32-Cycle Streaming)\nstate, fire_cnt\nread_addr, i_clear_global"]
+        FSM[" FSM\n(32-Cycle Streaming)\nstate, fire_cnt\nread_addr, i_clear_global"]
 
-        UNPACK["📦 Vector Unpacker\n512-bit → 8-bit × 32 (A)\n512-bit → 8-bit × 32 (B)"]
+        UNPACK[" Vector Unpacker\n512-bit → 8-bit × 32 (A)\n512-bit → 8-bit × 32 (B)"]
 
         subgraph SYSTOLIC["systolic_NxN  [ARRAY_SIZE=32]"]
             direction TB
@@ -47,12 +47,12 @@ flowchart TB
                 DC0 ~~~ DC1 ~~~ DCN
             end
 
-            MAC_ARRAY["🔲 mac_unit (PE) Array\n32 × 32 = 1,024 PEs\n(i_a, i_b, i_valid, i_clear)\n→ o_a, o_b, o_valid, o_acc"]
+            MAC_ARRAY[" mac_unit (PE) Array\n32 × 32 = 1,024 PEs\n(i_a, i_b, i_valid, i_clear)\n→ o_a, o_b, o_valid, o_acc"]
             DELAY_ROW -->|"wire_a[i][0]"| MAC_ARRAY
             DELAY_COL -->|"wire_b[0][i]"| MAC_ARRAY
         end
 
-        GELU["⚡ gelu_lut × 1,024\n(32×32 Parallel)\ndata_in → data_out"]
+        GELU[" gelu_lut × 1,024\n(32×32 Parallel)\ndata_in → data_out"]
 
         %% Internal connections
         FSM -->|"read_addr"| PING_PONG
@@ -72,9 +72,9 @@ flowchart TB
 
         RMS["rmsnorm_inv_sqrt\n(i_mean_sq → o_inv_sqrt)\nvalid_in → valid_out"]
 
-        SCALE["📐 Vector Scaling\n(always_ff)\nx = token × inv_sqrt >> 15"]
+        SCALE[" Vector Scaling\n(always_ff)\nx = token × inv_sqrt >> 15"]
 
-        SHIFT["⏱️ 32-Cycle Shift Reg\n(MAC latency simulation)"]
+        SHIFT[" 32-Cycle Shift Reg\n(MAC latency simulation)"]
 
         SOFT["softmax_exp_unit\n(i_x → o_exp)\nvalid_in → valid_out"]
 
@@ -96,9 +96,9 @@ flowchart TB
     %% ============================================================
     %% Outputs
     %% ============================================================
-    GELU -->|"out_gelu[32][32]\n(signed 8-bit)"| OUT_GELU["📤 out_gelu\n(NPU Final Output)"]
-    MAC_ARRAY -->|"out_acc[32][32]\n(signed 32-bit)"| OUT_ACC["📤 out_acc\n(Raw Accumulator)"]
-    SOFT -->|"soft_valid_out\nsoft_out_val"| OUT_LAYER["📤 layer_valid_out\no_softmax_prob\n(Gemma Final Output)"]
+    GELU -->|"out_gelu[32][32]\n(signed 8-bit)"| OUT_GELU[" out_gelu\n(NPU Final Output)"]
+    MAC_ARRAY -->|"out_acc[32][32]\n(signed 32-bit)"| OUT_ACC[" out_acc\n(Raw Accumulator)"]
+    SOFT -->|"soft_valid_out\nsoft_out_val"| OUT_LAYER[" layer_valid_out\no_softmax_prob\n(Gemma Final Output)"]
 
     %% ============================================================
     %% Styling

@@ -50,7 +50,7 @@ def _get_or_upload_weight(weight_data):
     pass
 
 # ================================================================
-# 🚀 C++ 기반 초고속 멀티코어 행렬곱 연산
+#  C++ 기반 초고속 멀티코어 행렬곱 연산
 # ================================================================
 def igpu_matmul(x_vec: np.ndarray, weight_data) -> np.ndarray:
     x_f32 = np.ascontiguousarray(x_vec.astype(np.float32))
@@ -95,4 +95,4 @@ def warmup():
     dummy_p = np.zeros((2048, 1024), dtype=np.uint8)
     dummy_s = np.zeros(2048, dtype=np.float32)
     igpu_matmul(dummy_x, (dummy_p, dummy_s))
-    print("[CPU_GEMV] 워밍업 완료! 코어 6개 장전 완료 🚀")
+    print("[CPU_GEMV] 워밍업 완료! 코어 6개 장전 완료 ")

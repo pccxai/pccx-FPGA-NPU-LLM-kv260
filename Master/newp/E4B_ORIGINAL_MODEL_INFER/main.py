@@ -142,12 +142,12 @@ def decode_logits(xs, altup_unprojs, W_final_norm, W_lm_head):
     x_final = np.mean(np.stack(unembedded, axis=0), axis=0)
     x_final = rms_norm(x_final, W_final_norm)
 
-    # 🚀 메모리 최적화: W_lm_head가 float16 (1GB) → float32 (2GB) copy 제거
+    #  메모리 최적화: W_lm_head가 float16 (1GB) → float32 (2GB) copy 제거
     # x_final을 float16으로 내려 dot 계산 → 결과만 float32로 복원
     # 임시 메모리: (vocab,) float16 = 512KB (기존 방식 대비 극도로 작음)
     #logits = np.dot(x_final.astype(np.float16), W_lm_head).astype(np.float32)
     #logits -= np.max(logits)
-    # 🚀 수정된 부분: np.max(logits) 빼는 부분 삭제 (페널티 정상 작동을 위함)
+    #  수정된 부분: np.max(logits) 빼는 부분 삭제 (페널티 정상 작동을 위함)
     logits = np.dot(x_final.astype(np.float16), W_lm_head).astype(np.float32)
     return logits
 
@@ -164,7 +164,7 @@ def main():
         W_final_norm, W_lm_head, W = safeTensor.load_local_weights()
 
     # ============================================================
-    # 🚀 핵심 메모리 최적화:
+    #  핵심 메모리 최적화:
     # 모든 IGPU 경로 가중치를 VRAM(INT16)에 선업로드 후 float16 원본 해제
     # 효과: layers["W_q"][i] 등 float16 배열 ~3.5GB → WeightProxy(작은 객체)로 교체
     # ============================================================
@@ -174,7 +174,7 @@ def main():
     prompt = "<start_of_turn>user\n안녕 하세요<end_of_turn>\n<start_of_turn>model\n"
     input_tokens = CPU_CORE.tokenize(prompt)
 
-    # 🚀 KV 캐시 None 초기화 (cpu_update_kv_cache가 None 여부로 최초/concat 판단)
+    #  KV 캐시 None 초기화 (cpu_update_kv_cache가 None 여부로 최초/concat 판단)
     K_cache = [None for _ in range(35)]
     V_cache = [None for _ in range(35)]
 

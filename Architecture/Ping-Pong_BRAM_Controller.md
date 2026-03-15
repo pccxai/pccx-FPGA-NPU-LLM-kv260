@@ -3,11 +3,11 @@
 ## Overall Structure (NPU = Mini GPU)
 The data flow of the entire system running on the edge board (PYNQ-Z2) is:
 
-> DDR (Main Memory) ↔ BRAM ↔ Systolic Array (Computation Unit)
+> DDR (Main Memory)  BRAM  Systolic Array (Computation Unit)
 
 Translating this to a CUDA environment:
 
-> Host RAM ↔ Shared Memory ↔ CUDA Cores
+> Host RAM  Shared Memory  CUDA Cores
 
 This design implements the deepest hardware core part where data is fetched from Shared Memory, computed in CUDA Cores, and then stored back.
 

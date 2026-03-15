@@ -6,7 +6,7 @@ module gemma_npu_axi #
     parameter integer C_S00_AXI_ADDR_WIDTH = 5
 )
 (
-    // 🔥 [NEW] AXI-Stream 포트 (이게 보여야 성공!)
+    //  [NEW] AXI-Stream 포트 (이게 보여야 성공!)
     input  wire [31:0] s_axis_tdata,
     input  wire        s_axis_tvalid,
     output wire        s_axis_tready,

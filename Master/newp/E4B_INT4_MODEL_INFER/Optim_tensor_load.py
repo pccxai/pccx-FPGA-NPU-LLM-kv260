@@ -105,11 +105,11 @@ out_dir = os.path.join(base_dir, "mmap_weights")
 os.makedirs(out_dir, exist_ok=True)
 
 st_files = sorted(glob.glob(os.path.join(model_dir, "*.safetensors")))
-print(f"🚀 총 {len(st_files)}개의 Safetensors 파일을 개별 npy로 쪼갭니다...")
+print(f" 총 {len(st_files)}개의 Safetensors 파일을 개별 npy로 쪼갭니다...")
 
 count = 0
 for st_file in st_files:
-    print(f"📂 변환 중: {os.path.basename(st_file)}")
+    print(f" 변환 중: {os.path.basename(st_file)}")
     tensors = load_file(st_file)
     
     # 미리 scale 파일이 있는지 확인하여 INT4 여부 판별
@@ -122,7 +122,7 @@ for st_file in st_files:
             
         arr = val.numpy()
         
-        # 💡 [핵심 버그 수정] INT4(양자화) 텐서는 차원이 꼬이므로 절대 뒤집지 않음!
+        #  [핵심 버그 수정] INT4(양자화) 텐서는 차원이 꼬이므로 절대 뒤집지 않음!
         is_quantized = k in quantized_bases or k.endswith(".scale")
         needs_transpose = False
         
@@ -152,4 +152,4 @@ for st_file in st_files:
     del tensors
     gc.collect()
 
-print(f"✅ 총 {count}개 변환 완료! (INT4 보호 완벽 적용)")
+print(f" 총 {count}개 변환 완료! (INT4 보호 완벽 적용)")

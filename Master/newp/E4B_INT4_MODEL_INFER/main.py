@@ -130,7 +130,7 @@ def forward_one_token(token_id, pos, W, W_embed, W_ple_packed, W_ple_scale, norm
     pli_all = (x_proj_normed + y) * (1.0 / math.sqrt(2.0))
 
     # ====================================================================
-    # 🚀 Dataflow 파이프라인 진입 직전, 최초의 가중치(Q) 장전!
+    #  Dataflow 파이프라인 진입 직전, 최초의 가중치(Q) 장전!
     # ====================================================================
     ping_pong = 0
     hw_prefetch(W["W_q"][0], ping_pong)
@@ -251,7 +251,7 @@ def forward_one_token(token_id, pos, W, W_embed, W_ple_packed, W_ple_scale, norm
     return xs
 
 def decode_logits(xs, altup_unprojs, W_final_norm, W_lm_head):
-    # 🚀 CPU가 연산하는 동안, 0번 버퍼에 초거대 W_lm_head 장전 시작! (비동기)
+    #  CPU가 연산하는 동안, 0번 버퍼에 초거대 W_lm_head 장전 시작! (비동기)
     hw_prefetch(W_lm_head, 0)
     
     target_mag = np.mean(xs[0] ** 2) ** 0.5
@@ -264,7 +264,7 @@ def decode_logits(xs, altup_unprojs, W_final_norm, W_lm_head):
     x_final = np.mean(np.stack(unembedded, axis=0), axis=0)
     x_final = rms_norm(x_final, W_final_norm)
     
-    # 🚀 연산이 끝난 x_final을 아까 장전해 둔 0번 버퍼에 쏴서 즉시 발사!
+    #  연산이 끝난 x_final을 아까 장전해 둔 0번 버퍼에 쏴서 즉시 발사!
     logits = hw_compute_pingpong(x_final, W_lm_head, buf_idx=0)
     return logits
 
@@ -408,7 +408,7 @@ def main():
                 
                 generated.append(next_token)
 
-                # 💡 [수정] UTF-8 한글 잘림 방지 및 특수토큰(<unused>) 숨기기
+                #  [수정] UTF-8 한글 잘림 방지 및 특수토큰(<unused>) 숨기기
                 # 지금까지 모인 전체 토큰을 디코딩하고, 특수 기호는 무시(skip)합니다.
                 current_text = CPU_CORE.tokenizer.decode(generated, skip_special_tokens=True)
                 

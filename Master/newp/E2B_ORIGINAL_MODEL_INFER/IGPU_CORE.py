@@ -44,7 +44,7 @@ def _gemv_int16_gelu(
         ))
 
 # ================================================================
-# 🚀 메모리 최적화: WeightProxy
+#  메모리 최적화: WeightProxy
 #
 # float16 원본 행렬을 VRAM(INT16)에 올린 뒤 RAM에서 해제.
 # layers["W_q"][i] 등을 이 객체로 교체 → float16 배열이 GC됨.
@@ -59,7 +59,7 @@ class WeightProxy:
         self.shape     = shape   # igpu_matmul에서 M, N = weight.shape 가 필요
 
 # ================================================================
-# 🚀 VRAM 캐시: 안정적인 정수 ID 기반
+#  VRAM 캐시: 안정적인 정수 ID 기반
 #
 # 기존 id(weight_mat) 방식의 문제:
 #   - float16 원본 해제 후 id()가 다른 객체에 재사용될 수 있음
@@ -120,7 +120,7 @@ def _get_output_buf(size: int) -> ti.ndarray:
     return _OUTPUT_BUF_POOL[size]
 
 # ================================================================
-# 🚀 메모리 최적화 핵심 함수: preload_and_free
+#  메모리 최적화 핵심 함수: preload_and_free
 #
 # 동작:
 #   1. W[key][i] (float16 배열)를 모두 VRAM에 INT16으로 업로드
@@ -191,4 +191,4 @@ def warmup():
         if d_id in _OBJID_TO_STABLE:
             del _OBJID_TO_STABLE[d_id]
 
-    print("[iGPU] 워밍업 완료! 🚀")
+    print("[iGPU] 워밍업 완료! ")

@@ -215,4 +215,4 @@ def warmup():
     dummy_s = np.zeros(2048, dtype=np.float32)
     
     igpu_matmul(dummy_x, (dummy_p, dummy_s))
-    print("[iGPU] Warmup Complete! 🚀")
+    print("[iGPU] Warmup Complete! ")

@@ -58,7 +58,7 @@ module rmsnorm_inv_sqrt (
     // 4. 파이프라인 2단계 (DSP48E2 연산: y = ax + b)
     // ----------------------------------------------------------------
     // DSP48E2는 27x18 곱셈을 지원. a(16비트) * x(23비트 부호확장) 완벽 매칭!
-    // 🔥 곱셈과 덧셈을 클럭 상관없이 '전선(Wire)'으로 즉시 계산!
+    //  곱셈과 덧셈을 클럭 상관없이 '전선(Wire)'으로 즉시 계산!
     logic signed [47:0] dsp_mult_comb;
     assign dsp_mult_comb = (reg_a * $signed({1'b0, reg_frac_x})) + reg_b; 
     
@@ -67,7 +67,7 @@ module rmsnorm_inv_sqrt (
             o_inv_sqrt <= 0;
             valid_out  <= 0;
         end else if (reg_valid) begin
-            // 🔥 이미 계산이 끝난 전선(comb)의 값을 안전하게 낚아챔!
+            //  이미 계산이 끝난 전선(comb)의 값을 안전하게 낚아챔!
             o_inv_sqrt <= dsp_mult_comb[30:15]; 
             valid_out  <= 1'b1;
         end else begin

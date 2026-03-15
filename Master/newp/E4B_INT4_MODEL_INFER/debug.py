@@ -80,13 +80,13 @@ if __name__ == "__main__":
     print(f"C DLL Time  : {c_time * 1000:.5f} ms")
     
     if c_time > 0:
-        print(f"🔥 속도 향상: 약 {py_time / c_time:.1f}배 빠름!")
+        print(f" 속도 향상: 약 {py_time / c_time:.1f}배 빠름!")
 
     # 3. 정확도 검증 (소수점 아래 미세 오차 허용)
     diff = np.max(np.abs(res_py - res_c))
     print(f"최대 오차(Max Diff): {diff:.8f}")
     
     if diff < 1e-5:
-        print("✅ 완벽하게 일치합니다! 하드웨어 포팅 대성공!")
+        print(" 완벽하게 일치합니다! 하드웨어 포팅 대성공!")
     else:
-        print("❌ 오차가 큽니다. 타입이나 컴파일러 옵션 확인 필요.")
+        print(" 오차가 큽니다. 타입이나 컴파일러 옵션 확인 필요.")

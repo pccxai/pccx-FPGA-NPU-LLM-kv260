@@ -13,7 +13,7 @@ module ping_pong_bram #(
     input  logic [ADDR_WIDTH-1:0] dma_addr,
     input  logic [DATA_WIDTH-1:0] dma_write_data,
     
-    // NPU 인터페이스 (💥 2차선 고속도로: A와 B를 동시에 읽음! 💥)
+    // NPU 인터페이스 ( 2차선 고속도로: A와 B를 동시에 읽음! )
     input  logic [ADDR_WIDTH-1:0] npu_addr_a,
     input  logic [ADDR_WIDTH-1:0] npu_addr_b,
     output logic [DATA_WIDTH-1:0] npu_read_data_a,

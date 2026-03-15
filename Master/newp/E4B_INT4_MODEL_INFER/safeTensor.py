@@ -154,7 +154,7 @@ def load_local_weights(model_dir=default_model_dir):
     # 1. W_embed 도 mmap으로 읽어오고 튜플로 묶습니다.
     W_embed_packed = np.load("Master/newp/E4B_INT4_MODEL_INFER/W_embed_packed.npy", mmap_mode='r')
     W_embed_scale  = np.load("Master/newp/E4B_INT4_MODEL_INFER/W_embed_scale.npy", mmap_mode='r')
-    W_embed = (W_embed_packed, W_embed_scale) # 💡 핵심: 튜플로 패키징!
+    W_embed = (W_embed_packed, W_embed_scale) #  핵심: 튜플로 패키징!
 
     # 2. W_ple 도 mmap으로 읽어옵니다.
     W_ple_packed   = np.load("Master/newp/E4B_INT4_MODEL_INFER/W_ple_packed.npy", mmap_mode='r')
@@ -203,7 +203,7 @@ def print_ram_usage(step_name):
     print(f"[{step_name}] RAM Usage: {rss_mb:.2f} MB")
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
-# 💡 이제 safetensors 폴더가 아니라 쪼개놓은 mmap_weights 폴더를 바라봅니다.
+#  이제 safetensors 폴더가 아니라 쪼개놓은 mmap_weights 폴더를 바라봅니다.
 mmap_dir = os.path.join(base_dir, "mmap_weights")
 
 def load_local_weights(model_dir=mmap_dir):
@@ -236,7 +236,7 @@ def load_local_weights(model_dir=mmap_dir):
         if k.endswith(".scale"):
             continue # 스케일은 본체(가중치)를 로드할 때 같이 로드함
             
-        # 💡 RAM 소모 0MB! (디스크 주소만 가져옴)
+        #  RAM 소모 0MB! (디스크 주소만 가져옴)
         val = np.load(os.path.join(model_dir, f"{k}.npy"), mmap_mode='r')
         
         # 만약 스케일값이 존재하는 양자화(INT4) 텐서라면, 튜플 (packed, scale) 로 묶어줌
@@ -249,7 +249,7 @@ def load_local_weights(model_dir=mmap_dir):
             layer_idx = int(match.group(1))
             sub_key = match.group(2)
             
-            # 💡 [핵심 버그 수정] 원본 이름표와 100% 완벽하게 일치시켰습니다!
+            #  [핵심 버그 수정] 원본 이름표와 100% 완벽하게 일치시켰습니다!
             if sub_key == "self_attn.q_proj.weight": layers["W_q"][layer_idx] = val
             elif sub_key == "self_attn.k_proj.weight": layers["W_k"][layer_idx] = val
             elif sub_key == "self_attn.v_proj.weight": layers["W_v"][layer_idx] = val
@@ -283,7 +283,7 @@ def load_local_weights(model_dir=mmap_dir):
 
     P = "model.language_model."
     
-    # 💡 튜플 및 배열 분해 (main.py 와의 완벽한 호환성 유지)
+    #  튜플 및 배열 분해 (main.py 와의 완벽한 호환성 유지)
     W_embed = globals_dict[P + "embed_tokens.weight"]
     W_ple_packed, W_ple_scale = globals_dict[P + "embed_tokens_per_layer.weight"]
     

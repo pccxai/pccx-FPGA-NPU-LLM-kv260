@@ -20,7 +20,7 @@ flowchart LR
         T2 --> T3["③ i_a=4, i_b=5 → acc=26"]
         T3 --> T4["④ i_a=10, i_b=10 → acc=126"]
         T4 --> T5["⑤ Output result via $display"]
-        T5 --> W1["⚠️ i_valid is unconnected\n→ Accumulates continuously"]
+        T5 --> W1[" i_valid is unconnected\n→ Accumulates continuously"]
     end
 
     subgraph tb_ping_pong["<h3>tb_ping_pong<br/>(PP-bram Verification)</h3>"]
@@ -33,7 +33,7 @@ flowchart LR
         P2 --> P3["③ sel=1 (Switch!)"]
         P3 --> P4["④ NPU sys_addr=0 → rdata=10"]
         P4 --> P5["⑤ Simultaneously DMA→BRAM_1[0]=30"]
-        P5 --> W2["⚠️ Synchronous read\nso data appears 1 cycle later"]
+        P5 --> W2[" Synchronous read\nso data appears 1 cycle later"]
     end
 
     subgraph tb_systolic["<h3>tb_systolic<br/>(systolic_2x2 Verification)</h3>"]
@@ -46,7 +46,7 @@ flowchart LR
         S2 --> S3["③ Input Wave 3"]
         S3 --> S4["④ in_valid=0 (Flush)"]
         S4 --> S5["⑤ PEs sequentially converge results"]
-        S5 --> W3["⚠️ PE(1,1) starts\n2 cycles later"]
+        S5 --> W3[" PE(1,1) starts\n2 cycles later"]
     end
 
     %% Transparent connecting lines to maintain the 3-column layout

@@ -10,7 +10,7 @@ module gemma_layer_top (
     input  logic               i_npu_start,     // 0x00 [Bit 0] (Kernel Launch!)
     input  logic               i_acc_clear,     // 0x00 [Bit 1] (누산기 리셋)
     input  logic [31:0]        i_rms_mean_sq,   // 0x08 (RMSNorm 분모)
-    input  logic               i_ping_pong_sel, // 0x0C (DMA ↔ NPU 스위치)
+    input  logic               i_ping_pong_sel, // 0x0C (DMA  NPU 스위치)
     input  logic               i_gelu_en,       // 0x10 [Bit 0] (GeLU 활성화)
     input  logic               i_softmax_en,    // 0x10 [Bit 1] (Softmax 활성화)
     output logic               o_npu_done,      // 0x04 [Bit 0] (연산 완료 깃발)
@@ -105,7 +105,7 @@ module gemma_layer_top (
     logic [7:0] raw_token_data  [0:31]; 
     logic [7:0] sys_weight_data [0:31]; 
 
-    // 🔥 [수정] 512비트 플랫(Flat) 벡터로 BRAM에서 받아서 배열로 풀기
+    //  [수정] 512비트 플랫(Flat) 벡터로 BRAM에서 받아서 배열로 풀기
     logic [511:0] flat_token_data;
     logic [511:0] flat_weight_data;
 
@@ -116,7 +116,7 @@ module gemma_layer_top (
         end
     end
 
-    // 🔥 [수정] 포트 이름 완벽 일치 및 포맷 캐스팅
+    //  [수정] 포트 이름 완벽 일치 및 포맷 캐스팅
     ping_pong_bram #(
         .DATA_WIDTH(512),
         .ADDR_WIDTH(9)
@@ -125,7 +125,7 @@ module gemma_layer_top (
         .switch_buffer(i_ping_pong_sel),
         .dma_we(i_dma_we_token),
         .dma_addr({1'b0, i_dma_addr_token}),          // 8bit -> 9bit 확장
-        .dma_write_data(i_dma_wdata_token), // 🔥 {504'd0, ...} 지우고 직결!        .npu_addr_a({3'd0, feed_counter}),            // 6bit -> 9bit 확장
+        .dma_write_data(i_dma_wdata_token), //  {504'd0, ...} 지우고 직결!        .npu_addr_a({3'd0, feed_counter}),            // 6bit -> 9bit 확장
         .npu_addr_b(9'd0),                            // 안 씀
         .npu_read_data_a(flat_token_data),            // 512bit 출력
         .npu_read_data_b()                            // 안 씀
@@ -139,13 +139,13 @@ module gemma_layer_top (
         .switch_buffer(i_ping_pong_sel),
         .dma_we(i_dma_we_weight),
         .dma_addr({1'b0, i_dma_addr_weight}),
-        .dma_write_data(i_dma_wdata_weight), // 🔥 {256'd0, ...} 지우고 직결!        .npu_addr_a({3'd0, feed_counter}),
+        .dma_write_data(i_dma_wdata_weight), //  {256'd0, ...} 지우고 직결!        .npu_addr_a({3'd0, feed_counter}),
         .npu_addr_b(9'd0),
         .npu_read_data_a(flat_weight_data),
         .npu_read_data_b()
     );
 
-    // ⚡ BRAM에서 나오는 즉시 RMSNorm 역제곱근을 곱해서 MAC으로 밀어넣기!
+    //  BRAM에서 나오는 즉시 RMSNorm 역제곱근을 곱해서 MAC으로 밀어넣기!
     logic [7:0] scaled_token_data [0:31];
     genvar i;
     generate
@@ -210,7 +210,7 @@ module gemma_layer_top (
     // [정공법] 전체 버스 밖으로 노출 (DMA 준비용)
     assign o_npu_result_all = dma_result_bus;
 
-    // 🔥 [필살기] 모든 PE(1024개)를 강제로 살려두기 위한 논리적 '닻(Anchor)'
+    //  [필살기] 모든 PE(1024개)를 강제로 살려두기 위한 논리적 '닻(Anchor)'
     // 1024비트 중 하나만 바뀌어도 이 값이 바뀌므로 Vivado는 PE를 삭제하지 못함!
     assign o_logic_anchor = ^dma_result_bus; 
 
@@ -228,7 +228,7 @@ module gemma_layer_top (
         .i_x(mac_attn_score), .valid_out(), .o_exp(softmax_prob)
     );
 
-    // 🔥 GeLU 하드웨어(LUT) 꽂기
+    //  GeLU 하드웨어(LUT) 꽂기
     logic signed [7:0] gelu_out_8bit;
     logic [15:0]       gelu_out;
 

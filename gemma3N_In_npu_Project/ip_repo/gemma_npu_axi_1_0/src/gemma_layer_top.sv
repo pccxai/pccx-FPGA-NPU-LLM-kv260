@@ -13,7 +13,7 @@ module gemma_layer_top #(
     input  logic               i_npu_start,     // 0x00 [Bit 0] (Kernel Launch!)
     input  logic               i_acc_clear,     // 0x00 [Bit 1] (누산기 리셋)
     input  logic [31:0]        i_rms_mean_sq,   // 0x08 (RMSNorm 분모)
-    input  logic               i_ping_pong_sel, // 0x0C (DMA ↔ NPU 스위치)
+    input  logic               i_ping_pong_sel, // 0x0C (DMA  NPU 스위치)
     input  logic               i_gelu_en,       // 0x10 [Bit 0] (GeLU 활성화)
     input  logic               i_softmax_en,    // 0x10 [Bit 1] (Softmax 활성화)
     output logic               o_npu_done,      // 0x04 [Bit 0] (연산 완료 깃발)
@@ -140,7 +140,7 @@ module gemma_layer_top #(
         .npu_read_data_b()
     );
 
-    // ⚡ BRAM에서 나오는 즉시 RMSNorm 역제곱근을 곱해서 MAC으로 밀어넣기!
+    //  BRAM에서 나오는 즉시 RMSNorm 역제곱근을 곱해서 MAC으로 밀어넣기!
     logic [7:0] scaled_token_data [0:31];
     genvar i;
     generate

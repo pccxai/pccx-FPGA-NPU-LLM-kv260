@@ -7,7 +7,7 @@ module gemma_npu_axi_slave_lite_v1_0_S00_AXI #
 )
 (
     // ---------------------------------------------------------
-    // 🔥 [NEW] AXI-Stream 인터페이스 (DMA와 고속 통신)
+    //  [NEW] AXI-Stream 인터페이스 (DMA와 고속 통신)
     // ---------------------------------------------------------
     // RX: DMA -> NPU (Token / Weight 수신)
     input  wire [31:0] s_axis_tdata,
@@ -80,7 +80,7 @@ module gemma_npu_axi_slave_lite_v1_0_S00_AXI #
     assign S_AXI_RVALID  = axi_rvalid;
     assign slv_reg_wren  = axi_wready && S_AXI_WVALID && axi_awready && S_AXI_AWVALID;
 
-    // AXI Write Logic (🔥 Auto-clear Pulse 추가)
+    // AXI Write Logic ( Auto-clear Pulse 추가)
     always @(posedge S_AXI_ACLK) begin
         if (S_AXI_ARESETN == 1'b0) begin
             axi_awready <= 1'b0;
@@ -121,7 +121,7 @@ module gemma_npu_axi_slave_lite_v1_0_S00_AXI #
                             if (S_AXI_WSTRB[byte_index]) slv_reg5[(byte_index*8) +: 8] <= S_AXI_WDATA[(byte_index*8) +: 8];
                 endcase
             end else begin
-                // 🔥 Auto-clear 로직: 레지스터 쓰기가 없는 사이클엔 무조건 0으로 내림 (Pulse 생성)
+                //  Auto-clear 로직: 레지스터 쓰기가 없는 사이클엔 무조건 0으로 내림 (Pulse 생성)
                 slv_reg0[0] <= 1'b0; // i_npu_start
                 slv_reg0[1] <= 1'b0; // i_acc_clear
             end
@@ -161,7 +161,7 @@ module gemma_npu_axi_slave_lite_v1_0_S00_AXI #
                          (axi_araddr[ADDR_LSB+OPT_MEM_ADDR_BITS:ADDR_LSB] == 3'h5) ? slv_reg5 : 0; 
 
     // =========================================================================
-    // 🔥 [RX] AXI-Stream -> BRAM 변환 (Packing FSM)
+    //  [RX] AXI-Stream -> BRAM 변환 (Packing FSM)
     // =========================================================================
     reg [511:0] rx_pack_reg;
     reg [3:0]   rx_beat_cnt;
@@ -207,7 +207,7 @@ module gemma_npu_axi_slave_lite_v1_0_S00_AXI #
     end
 
     // =========================================================================
-    // 🔥 [TX] NPU Result -> AXI-Stream 변환 (Unpacking FSM)
+    //  [TX] NPU Result -> AXI-Stream 변환 (Unpacking FSM)
     // =========================================================================
     wire [511:0] packed_results;
     genvar i;
