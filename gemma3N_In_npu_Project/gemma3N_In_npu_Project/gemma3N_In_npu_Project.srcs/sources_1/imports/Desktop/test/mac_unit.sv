@@ -13,7 +13,7 @@ module pe_unit (
     output logic        o_valid, 
     output logic [31:0] o_acc  
 );
-    // 곱셈과 누산을 한 줄에 작성하여 DSP48E2 내부 퓨전을 유도합니다.
+    // We drive the DSP48E2 internal fusion by writing the multiplication and accumulation in one line.
     always_ff @(posedge clk) begin
         if (!rst_n || i_clear) begin
             o_acc   <= 32'd0;

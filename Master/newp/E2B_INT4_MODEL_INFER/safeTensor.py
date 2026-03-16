@@ -7,10 +7,10 @@ import re
 from safetensors.torch import load_file
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
-# INT4 모델 폴더 경로
+# INT4 model folder path
 default_model_dir = os.path.join(base_dir, "local_gemma_3n_int4")
 
-# IGPU 경로를 타는 큰 행렬들의 suffix 목록
+# A suffix list of large matrices taking the IGPU path.
 _BIG_WEIGHT_SUFFIXES = (
     "q_proj.weight",
     "k_proj.weight",
@@ -30,7 +30,7 @@ _BIG_WEIGHT_SUFFIXES = (
 def load_local_weights(model_dir=default_model_dir):
     print(f"Loading INT4 Quantized Gemma E2B Weights from {model_dir}...")
     
-    # E2B는 30개 레이어
+    # E2B has 30 layers
     num_layers = 30
     layers = {
         "W_q": [None]*num_layers, "W_k": [None]*num_layers, "W_v": [None]*num_layers, "W_o": [None]*num_layers,
@@ -43,34 +43,34 @@ def load_local_weights(model_dir=default_model_dir):
     }
     
     globals_dict = {}
-    # 경로에 대괄호가 있을 수 있으므로 escape 처리 (여기서는 없지만 안전을 위해)
+    # Paths may contain square brackets, so escape them (not shown here, just to be safe)
     st_files = sorted(glob.glob(os.path.join(glob.escape(model_dir), "*.safetensors")))
     
     layer_pattern = re.compile(r"model\.language_model\.layers\.(\d+)\.(.*)")
     
-    # 스케일 값들을 저장할 딕셔너리
+    # Dictionary to store scale values
     scales = {}
     
     for filename in st_files:
         print(f"  Reading {os.path.basename(filename)}...")
         pt_tensors = load_file(filename)
         
-        # 1. 모든 스케일 값 먼저 수집
+        # 1. Collect all scale values ​​first
         for k in list(pt_tensors.keys()):
             if k.endswith(".scale"):
                 scales[k[:-6]] = pt_tensors.pop(k).numpy()
         
-        # 2. 가중치 로드 및 할당
+        # 2. Loading and assigning weights
         for k, v in pt_tensors.items():
             is_quantized = k in scales
             
             if is_quantized:
-                # 양자화된 경우: (패킹된 uint8, float32 스케일) 튜플로 저장
+                # If quantized: (packed uint8, float32 scale) stored as tuple
                 arr = v.numpy()
                 scale = scales[k]
                 val = (arr, scale)
             else:
-                # 양자화되지 않은 경우: 원래 dtype 유지 (quantize.py에서 float16으로 저장함)
+                # If not quantized: keep original dtype (stored as float16 in quantize.py)
                 arr = v.numpy()
                 
                 needs_transpose = False
@@ -130,7 +130,7 @@ def load_local_weights(model_dir=default_model_dir):
         del pt_tensors
         gc.collect()
 
-    # 글로벌 가중치 정리
+    # Global weight theorem
     P = "model.language_model."
     W_embed = globals_dict[P + "embed_tokens.weight"]
     W_ple = globals_dict[P + "embed_tokens_per_layer.weight"]
@@ -141,7 +141,7 @@ def load_local_weights(model_dir=default_model_dir):
     altup_unprojs = [globals_dict[P + f"altup_unembed_projections.{i}.weight"] for i in range(3)]
     W_final_norm = globals_dict[P + "norm.weight"]
 
-    # LM Head는 임베딩 가중치를 참조 (igpu_matmul에서 전치 처리됨)
+    # LM Head references the embedding weight (transposed in igpu_matmul)
     W_lm_head = W_embed
 
     del globals_dict

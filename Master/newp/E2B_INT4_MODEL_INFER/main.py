@@ -12,9 +12,9 @@ ACCEL_MODE = "IGPU"
 _IGPU_WEIGHT_KEYS = ["W_q", "W_k", "W_v", "W_o", "W_gate", "W_up", "W_down"]
 
 def hw_matmul(x, w, use_gelu=False):
-    """INT4 튜플을 지원하며, 1D/2D 입력(x)의 차원 에러를 방지하는 안전한 행렬 곱셈기"""
+    """Safe matrix multiplier that supports INT4 tuples and prevents dimension errors in 1D/2D inputs (x)"""
     if ACCEL_MODE == "IGPU":
-        # IGPU_CORE에서 에러가 나는 것을 방지하기 위해 차원 확인
+        # Check dimensions to prevent errors in IGPU_CORE
         return IGPU_CORE.igpu_matmul_gelu(x, w) if use_gelu else IGPU_CORE.igpu_matmul(x, w)
     else:
         if isinstance(w, tuple):
@@ -51,7 +51,7 @@ def forward_one_token(token_id, pos, W, W_embed, W_ple, norm_ple,
         xs[k + 1] = np.dot(x0, altup_projs[k])
         
     x_proj = hw_matmul(x0, W_ple_proj) / math.sqrt(2048.0)
-    # E2B 특성: 30 레이어로 reshape
+    # E2B characteristics: reshape into 30 layers
     x_proj = x_proj.reshape(30, 256)
     x_proj_f32 = x_proj.astype(np.float32)
     rms_vals   = np.sqrt(np.mean(x_proj_f32 ** 2, axis=1, keepdims=True) + 1e-6)
@@ -59,12 +59,12 @@ def forward_one_token(token_id, pos, W, W_embed, W_ple, norm_ple,
 
     safe_token_id = min(token_id, W_ple[0].shape[0] - 1)
     unpacked_w_ple = CPU_CORE.embedding(safe_token_id, W_ple)
-    # E2B 특성: 30 레이어로 reshape
+    # E2B characteristics: reshape into 30 layers
     y = unpacked_w_ple.reshape(30, 256) * math.sqrt(256.0)
 
     pli_all = (x_proj_normed + y) * (1.0 / math.sqrt(2.0))
 
-    # E2B 특성: 30번 루프
+    # E2B Feature: Loop 30
     for i in range(30):
         modalities  = get_router_modalities(xs[0], W["altup_rn"][i], W["altup_router"][i])
         coef_mat    = np.dot(W["altup_pred"][i], modalities).reshape(4, 4)
@@ -147,7 +147,7 @@ def decode_logits(xs, altup_unprojs, W_final_norm, W_lm_head):
         unembedded.append(proj_x)
     x_final = np.mean(np.stack(unembedded, axis=0), axis=0)
     x_final = rms_norm(x_final, W_final_norm)
-    # 수정: INT4 튜플을 안전하게 처리하기 위해 hw_matmul 사용
+    # Fix: Use hw_matmul to safely handle INT4 tuples.
     logits = hw_matmul(x_final, W_lm_head)
     return logits
 
@@ -182,9 +182,9 @@ def print_ram_usage(step_name):
 def main():
     print_ram_usage("1. Before Model Load")
 
-    TEMPERATURE    = 0.3   # 차분하게
+    TEMPERATURE    = 0.3   # calmly
     TOP_P          = 0.9
-    REP_PENALTY    = 1.05  # 1.15에서 1.05 정도로 낮춤 (거의 개입 안 함)
+    REP_PENALTY    = 1.05  # Lowered from 1.15 to around 1.05 (almost no intervention)
     MAX_NEW_TOKENS = 512
 
     IGPU_CORE.warmup()
@@ -192,36 +192,36 @@ def main():
     W_embed, W_ple, norm_ple, W_ple_proj, altup_projs, altup_unprojs, \
         W_final_norm, W_lm_head, W = safeTensor.load_local_weights()
 
-    # E2B 특징: W_lm_head와 W_embed를 동일하게 처리 (Vulkan/IGPU 환경에 맞춤)
+    # E2B Features: Handles W_lm_head and W_embed identically (tailored to Vulkan/IGPU environment)
     W_lm_head = W_embed
 
-    print("[메모리] 가중치 VRAM 최적화 중...")
+    print("[Memory] Optimizing weighted VRAM...")
     IGPU_CORE.preload_and_free(W, _IGPU_WEIGHT_KEYS)
 
     print_ram_usage("2. After Model Load")
 
-    # 전체 대화 히스토리 (간단한 형태)
-    # E2B 특성: 30 레이어로 KV 캐시 초기화
+    # Full conversation history (simple form)
+    # E2B Feature: KV Cache Initialization with 30 Layers
     K_cache = [None for _ in range(30)]
     V_cache = [None for _ in range(30)]
     cur_pos = 0
     print_ram_usage("3. After KV Cache Allocation")
 
-    print("\n--- 대화를 시작합니다 (종료: 'exit' 또는 'quit') ---")
+    print("\n--- Start conversation (end: 'exit' or 'quit') ---")
     while True:
         try:
             user_input = input("\nUser: ")
             if user_input.lower() in ["exit", "quit"]: break
             if not user_input.strip(): continue
 
-            # Chat Template 적용 (단순화)
+            # Apply Chat Template (simplification)
             prompt = f"<start_of_turn>user\n{user_input}<end_of_turn>\n<start_of_turn>model\n"
             input_tokens = CPU_CORE.tokenize(prompt)
             
             print("Model: ", end="", flush=True)
             
             xs = None
-            # Prefill (새로운 입력만 처리)
+            # Prefill (process only new input)
             for token_id in input_tokens:
                 xs = forward_one_token(token_id, cur_pos, W, W_embed, W_ple, norm_ple,
                                        W_ple_proj, altup_projs, K_cache, V_cache)
@@ -254,7 +254,7 @@ def main():
             print("\nExiting...")
             break
     print_ram_usage("5. After Generation")
-    print("\n[완료] 대화가 종료되었습니다.")
+    print("\n[Complete] The conversation has ended.")
 
 
 def get_real_memory_size(obj):

@@ -35,7 +35,7 @@ c_lib.run_gelu_inplace.restype = None
 
 # ROPE function
 c_lib.run_rope_inplace.argtypes = [
-    np.ctypeslib.ndpointer(dtype=np.float32, ndim=1, flags='C_CONTIGUOUS'), # x 배열
+    np.ctypeslib.ndpointer(dtype=np.float32, ndim=1, flags='C_CONTIGUOUS'), # x array
     ctypes.c_int,   # pos
     ctypes.c_float, # theta_base
     ctypes.c_int,   # num_heads
@@ -63,10 +63,10 @@ def embedding(token_id, W_packed, W_scale):
     
     packed_length = row_packed.size
     
-    # 2. 파이썬에서는 데이터를 담을 '결과용 빈 깡통 배열(C-Contiguous)'만 0초만에 딱 하나 만들어 줌
+    # 2. In Python, only one 'result empty can array (C-Contiguous)' to hold the data is created in 0 seconds.
     out_f32 = np.empty(packed_length * 2, dtype=np.float32)
     
-    # 3. C++ 커널에 주소만 던져주면 알아서 비트 쪼개고 채움
+    # 3. Just give the address to the C++ kernel and it will automatically split and fill the bits.
     c_lib.run_unpack_int4_inplace(row_packed, ctypes.c_float(row_scale), out_f32, packed_length)
     
     return out_f32
@@ -141,10 +141,10 @@ def cpu_rope(x, pos, theta_base):
     dim = 256
     num_heads = len(x) // dim
     
-    # 1. 혹시 모를 메모리 꼬임 방지를 위해 float32 1차원 연속 배열로 준비
+    # 1. Prepare as a float32 one-dimensional continuous array to prevent possible memory kinks.
     x_flat = np.ascontiguousarray(x.astype(np.float32).flatten())
     
-    # 2. C++ 커널에 주소 던져서 In-place 회전 (알아서 덮어써짐)
+    # 2. In-place rotation by throwing the address to the C++ kernel (automatically overwritten)
     c_lib.run_rope_inplace(x_flat, int(pos), float(theta_base), int(num_heads), int(dim))
     
     return x_flat

@@ -9,7 +9,7 @@ def gelu(x):
 def generate_lut_file(filename="C:/Users/breadk/Desktop/FPGA_Project/TinyNPU-RTL/gelu_table.mem"):
     with open(filename, 'w') as f:
         for i in range(65536):
-            # 하드웨어 16비트 주소 체계 매핑
+            # Hardware 16-bit address scheme mapping
             signed_i = i if i < 32768 else i - 65536
 
             float_val = signed_i * SCALE_IN
@@ -18,11 +18,11 @@ def generate_lut_file(filename="C:/Users/breadk/Desktop/FPGA_Project/TinyNPU-RTL
             int8_val = np.round(gelu_val / SCALE_OUT)
             int8_clipped = int(np.clip(int8_val, -128, 127))
 
-            # 정확히 2글자(8비트) Hex로만 저장!
+            # Save exactly 2 characters (8 bits) in Hex only.
             hex_str = f"{int8_clipped & 0xFF:02X}"
             f.write(f"{hex_str}\n")
 
-    print(" 오염 제거 완료! 순수 64KB GeLU LUT 생성 완료!")
+    print(" Decontamination complete! Pure 64KB GeLU LUT creation complete!")
 
 if __name__ == "__main__":
     generate_lut_file()

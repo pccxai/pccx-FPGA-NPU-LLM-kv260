@@ -15,7 +15,7 @@ vk_lib.init_vulkan_engine.restype = None
 
 os.chdir(base_dir)
 
-# 프로그램 켜질 때 GPU 딱 한 번 장전!
+# Load the GPU just once when the program is turned on.
 vk_lib.init_vulkan_engine()
 
 # <><><><><><><><><><><><><><><Parameters><><><><><><><><><><><><><><
@@ -67,7 +67,7 @@ def _get_or_upload_weight(weight_data): pass
 def warmup(): print("[Vulkan_GEMV] shader engine load compelete ")
 
 # ================================================================
-# 4. 행렬곱 인터페이스
+# 4. Matrix product interface
 # ================================================================
 def igpu_matmul(x_vec: np.ndarray, weight_data) -> np.ndarray:
     x_f32 = np.ascontiguousarray(x_vec.astype(np.float32))

@@ -8,7 +8,7 @@ ti.init(arch=ti.vulkan, fast_math=True)
 TILE_K = 128
 
 # ================================================================
-# Taichi GEMV 커널 (atomic_add 제거 버전 - 이전 최적화 유지)
+# Taichi GEMV kernel (version with atomic_add removed - retains previous optimizations)
 # ================================================================
 @ti.kernel
 def _gemv_int16(
@@ -44,57 +44,57 @@ def _gemv_int16_gelu(
         ))
 
 # ================================================================
-#  메모리 최적화: WeightProxy
+# Memory Optimization: WeightProxy
 #
-# float16 원본 행렬을 VRAM(INT16)에 올린 뒤 RAM에서 해제.
-# layers["W_q"][i] 등을 이 객체로 교체 → float16 배열이 GC됨.
-# .shape만 있으면 igpu_matmul이 정상 동작.
+# Load the float16 original matrix into VRAM (INT16) and release it from RAM.
+# Replace layers["W_q"][i], etc. with this object → float16 array is GCed.
+# As long as there is a .shape, igpu_matmul operates normally.
 # ================================================================
 class WeightProxy:
-    """VRAM 업로드 완료 후 float16 원본 대신 쓰는 경량 프록시."""
+    """Lightweight proxy used instead of float16 original after VRAM upload is completed."""
     __slots__ = ("stable_id", "shape")
 
     def __init__(self, stable_id: int, shape: tuple):
         self.stable_id = stable_id
-        self.shape     = shape   # igpu_matmul에서 M, N = weight.shape 가 필요
+        self.shape     = shape   # M, N = weight.shape required in igpu_matmul
 
 # ================================================================
-#  VRAM 캐시: 안정적인 정수 ID 기반
+# VRAM Cache: Based on reliable integer IDs
 #
-# 기존 id(weight_mat) 방식의 문제:
-#   - float16 원본 해제 후 id()가 다른 객체에 재사용될 수 있음
-#   - 그 경우 캐시 미스 → 재업로드
+# Problems with the existing id(weight_mat) method:
+# - id() can be reused for other objects after freeing the float16 original.
+# - In that case, cache miss → re-upload
 #
-# 새 방식: 업로드 시 순차 정수 stable_id 부여 → 영구 고유
+# New method: give sequential integer stable_id when uploading → permanently unique
 #   _VRAM_CACHE[stable_id] = (ti_mat, ti_scale)
-#   _OBJID_TO_STABLE[id(weight_mat)] = stable_id  (업로드 당시만 유효)
+# _OBJID_TO_STABLE[id(weight_mat)] = stable_id (valid only at the time of upload)
 # ================================================================
 _VRAM_CACHE:       dict = {}   # stable_id -> (ti_mat, ti_scale)
 _OBJID_TO_STABLE:  dict = {}   # id(array) -> stable_id
 _OUTPUT_BUF_POOL:  dict = {}   # output_size -> ti.ndarray
-_next_stable_id = [0]          # mutable counter (리스트로 클로저 우회)
+_next_stable_id = [0]          # mutable counter (bypassing closures with lists)
 
 def _get_or_upload_weight(weight_mat):
     """
-    WeightProxy이면 VRAM 캐시에서 즉시 반환.
-    float16/32 numpy 배열이면 INT16으로 양자화 후 VRAM 업로드.
-    이후 동일 배열 재호출 시 캐시에서 반환.
+    If WeightProxy, returns immediately from VRAM cache.
+    If it is a float16/32 numpy array, quantize it to INT16 and upload it to VRAM.
+    Afterwards, when the same array is recalled, it is returned from the cache.
     """
-    # --- WeightProxy 경로: 이미 업로드됨 ---
+    # --- WeightProxy path: Already uploaded ---
     if isinstance(weight_mat, WeightProxy):
         return _VRAM_CACHE[weight_mat.stable_id]
 
-    # --- numpy 배열 경로 ---
+    # --- numpy array path ---
     obj_id = id(weight_mat)
     if obj_id in _OBJID_TO_STABLE:
         stable_id = _OBJID_TO_STABLE[obj_id]
         return _VRAM_CACHE[stable_id]
 
-    # 처음 보는 가중치 → INT16 양자화 후 VRAM 업로드
+    # Weights seen for the first time → VRAM upload after INT16 quantization
     stable_id = _next_stable_id[0]
     _next_stable_id[0] += 1
 
-    # float16 또는 float32 입력 모두 처리 가능
+    # Can handle either float16 or float32 input
     mat_t    = weight_mat.T.astype(np.float32)
     max_vals = np.max(np.abs(mat_t), axis=1, keepdims=True)
     max_vals = np.maximum(max_vals, 1e-8)
@@ -120,15 +120,15 @@ def _get_output_buf(size: int) -> ti.ndarray:
     return _OUTPUT_BUF_POOL[size]
 
 # ================================================================
-#  메모리 최적화 핵심 함수: preload_and_free
+# Memory optimization core functions: preload_and_free
 #
-# 동작:
-#   1. W[key][i] (float16 배열)를 모두 VRAM에 INT16으로 업로드
-#   2. layers dict의 해당 항목을 WeightProxy로 교체
-#   3. gc.collect() → float16 배열 메모리 반환
+# movement:
+# 1. Upload all W[key][i] (float16 array) to VRAM as INT16
+# 2. Replace the corresponding item in layers dict with WeightProxy
+# 3. gc.collect() → return float16 array memory
 #
-# 효과: 토큰당 490회 from_numpy → 0회
-#        float16 큰 행렬 ~3.5GB → RAM 해제
+# Effect: 490 times per token from_numpy → 0 times
+# float16 large matrix ~3.5GB → free RAM
 # ================================================================
 def preload_and_free(W: dict, keys: list):
     total = sum(len(W[k]) for k in keys if k in W)
@@ -139,19 +139,19 @@ def preload_and_free(W: dict, keys: list):
             continue
         proxies = []
         for w in W[key]:
-            ti_mat, ti_scale = _get_or_upload_weight(w)   # VRAM 업로드
+            ti_mat, ti_scale = _get_or_upload_weight(w)   # VRAM upload
             obj_id    = id(w)
             stable_id = _OBJID_TO_STABLE[obj_id]
             proxies.append(WeightProxy(stable_id, w.shape))
             uploaded += 1
-        W[key] = proxies   # float16 배열 참조 해제 → GC 대상
-        print(f"  [{key}] {len(proxies)}개 → VRAM 이전 완료")
+        W[key] = proxies   # float16 array dereference → GC target
+        print(f" [{key}] {len(proxies)} → VRAM transfer complete")
 
     gc.collect()
-    print(f"[메모리] 총 {uploaded}/{total}개 가중치 VRAM 이전 & float 원본 해제 ✓")
+    print(f"[Memory] Total {uploaded}/{total} weights before VRAM & free float original ✓")
 
 # ================================================================
-# Public API (기존과 동일한 시그니처 유지)
+# Public API (maintain the same signature as before)
 # ================================================================
 def igpu_matmul(x_vec: np.ndarray, weight_mat) -> np.ndarray:
     x_f32   = x_vec.astype(np.float32)
@@ -173,11 +173,11 @@ def igpu_matmul_gelu(x_vec: np.ndarray, weight_mat) -> np.ndarray:
 
 def warmup():
     """
-    JIT 컴파일 + 워밍업.
-    더미 행렬 ID가 실제 가중치와 충돌하지 않도록
-    워밍업 완료 후 _OBJID_TO_STABLE 에서 제거.
+    JIT compilation + warm-up.
+    To ensure that dummy matrix IDs do not conflict with real weights
+    Removed from _OBJID_TO_STABLE after completing warm-up.
     """
-    print("[iGPU] JIT 워밍업 + INT16 NPU 시뮬레이션 모드 가동 중...")
+    print("[iGPU] JIT warming up + INT16 NPU simulation mode running...")
     dummy_x     = np.zeros(2048, dtype=np.float32)
     dummy_w     = np.random.randn(2048, 2048).astype(np.float32)
     dummy_w_big = np.random.randn(2048, 8192).astype(np.float32)
@@ -185,10 +185,10 @@ def warmup():
     igpu_matmul(dummy_x, dummy_w)
     igpu_matmul_gelu(dummy_x, dummy_w_big)
 
-    # 더미 항목 제거 (id 재사용으로 실제 가중치 캐시 오염 방지)
+    # Remove dummy entries (avoid polluting real weight cache by reusing ids)
     for dummy in [dummy_w, dummy_w_big]:
         d_id = id(dummy)
         if d_id in _OBJID_TO_STABLE:
             del _OBJID_TO_STABLE[d_id]
 
-    print("[iGPU] 워밍업 완료! ")
+    print("[iGPU] Warming up complete! ")

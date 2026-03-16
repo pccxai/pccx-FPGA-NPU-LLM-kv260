@@ -24,7 +24,7 @@ def print_ram_usage(step_name):
 base_dir = os.path.dirname(os.path.abspath(__file__))
 default_model_dir = os.path.join(base_dir, "local_gemma_3n_int4")
 
-# IGPU 경로를 타는 큰 행렬들의 suffix 목록
+# A suffix list of large matrices taking the IGPU path.
 _BIG_WEIGHT_SUFFIXES = (
     "q_proj.weight",
     "k_proj.weight",
@@ -151,12 +151,12 @@ def load_local_weights(model_dir=default_model_dir):
 
     P = "model.language_model."
     
-    # 1. W_embed 도 mmap으로 읽어오고 튜플로 묶습니다.
+    # 1. W_embed is also read using mmap and bundled into a tuple.
     W_embed_packed = np.load("Master/newp/E4B_INT4_MODEL_INFER/W_embed_packed.npy", mmap_mode='r')
     W_embed_scale  = np.load("Master/newp/E4B_INT4_MODEL_INFER/W_embed_scale.npy", mmap_mode='r')
-    W_embed = (W_embed_packed, W_embed_scale) #  핵심: 튜플로 패키징!
+    W_embed = (W_embed_packed, W_embed_scale) # Bottom line: packaging it as a tuple.
 
-    # 2. W_ple 도 mmap으로 읽어옵니다.
+    # 2. W_ple is also read using mmap.
     W_ple_packed   = np.load("Master/newp/E4B_INT4_MODEL_INFER/W_ple_packed.npy", mmap_mode='r')
     W_ple_scale    = np.load("Master/newp/E4B_INT4_MODEL_INFER/W_ple_scale.npy", mmap_mode='r')
 
@@ -167,7 +167,7 @@ def load_local_weights(model_dir=default_model_dir):
     altup_unprojs = [globals_dict[P + f"altup_unembed_projections.{i}.weight"] for i in range(3)]
     W_final_norm = globals_dict[P + "norm.weight"]
 
-    # 3. LM Head는 튜플로 묶인 W_embed를 그대로 참조하게 합니다.
+    # 3. LM Head refers to W_embed bound as a tuple.
     W_lm_head = W_embed
 
     del globals_dict
@@ -203,7 +203,7 @@ def print_ram_usage(step_name):
     print(f"[{step_name}] RAM Usage: {rss_mb:.2f} MB")
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
-#  이제 safetensors 폴더가 아니라 쪼개놓은 mmap_weights 폴더를 바라봅니다.
+# Now, rather than looking at the safetensors folder, we are looking at the split mmap_weights folder.
 mmap_dir = os.path.join(base_dir, "mmap_weights")
 
 def load_local_weights(model_dir=mmap_dir):
@@ -223,23 +223,23 @@ def load_local_weights(model_dir=mmap_dir):
     globals_dict = {}
     layer_pattern = re.compile(r"model\.language_model\.layers\.(\d+)\.(.*)")
     
-    # 디스크에 있는 모든 npy 파일 이름 추출
+    # Extract all npy file names on disk
     all_files = glob.glob(os.path.join(model_dir, "*.npy"))
     all_keys = [os.path.basename(f)[:-4] for f in all_files]
     
-    # .scale 로 끝나는 파일들은 짝꿍을 찾아주기 위해 딕셔너리로 분리
+    # Files ending in .scale are separated into a dictionary to find matches.
     scales = {k[:-6]: k for k in all_keys if k.endswith(".scale")}
     
     print_ram_usage("1. Start MMAP Virtual Mapping")
     
     for k in all_keys:
         if k.endswith(".scale"):
-            continue # 스케일은 본체(가중치)를 로드할 때 같이 로드함
+            continue # The scale is loaded when the main body (weight) is loaded.
             
-        #  RAM 소모 0MB! (디스크 주소만 가져옴)
+        # RAM consumption 0MB! (only disk address is taken)
         val = np.load(os.path.join(model_dir, f"{k}.npy"), mmap_mode='r')
         
-        # 만약 스케일값이 존재하는 양자화(INT4) 텐서라면, 튜플 (packed, scale) 로 묶어줌
+        # If it is a quantized (INT4) tensor with a scale value, it is grouped into a tuple (packed, scale).
         if k in scales:
             scale_val = np.load(os.path.join(model_dir, f"{scales[k]}.npy"), mmap_mode='r')
             val = (val, scale_val)
@@ -249,7 +249,7 @@ def load_local_weights(model_dir=mmap_dir):
             layer_idx = int(match.group(1))
             sub_key = match.group(2)
             
-            #  [핵심 버그 수정] 원본 이름표와 100% 완벽하게 일치시켰습니다!
+            # [Core bug fix] 100% perfect match to the original name tag.
             if sub_key == "self_attn.q_proj.weight": layers["W_q"][layer_idx] = val
             elif sub_key == "self_attn.k_proj.weight": layers["W_k"][layer_idx] = val
             elif sub_key == "self_attn.v_proj.weight": layers["W_v"][layer_idx] = val
@@ -283,7 +283,7 @@ def load_local_weights(model_dir=mmap_dir):
 
     P = "model.language_model."
     
-    #  튜플 및 배열 분해 (main.py 와의 완벽한 호환성 유지)
+    # Tuple and array decomposition (maintaining full compatibility with main.py)
     W_embed = globals_dict[P + "embed_tokens.weight"]
     W_ple_packed, W_ple_scale = globals_dict[P + "embed_tokens_per_layer.weight"]
     

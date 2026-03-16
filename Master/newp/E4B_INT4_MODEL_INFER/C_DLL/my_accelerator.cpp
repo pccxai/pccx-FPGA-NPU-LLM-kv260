@@ -4,12 +4,12 @@
 
 #define GELU_CONST 0.7978845608028654f
 
-// 파이썬 ctypes가 함수 이름을 찾을 수 있도록 C 규격으로 강제 내보내기!
+// Force export to C specification so Python ctypes can find function names.
 extern "C" {
-    // __restrict__: "이 포인터 메모리는 나 혼자만 쓴다!"라고 컴파일러에게 맹세하는 키워드. 
-    // 이거 없으면 컴파일러가 쫄아서 SIMD 병렬화를 제대로 못 해.
+    // __restrict__: A keyword that swears to the compiler that “this pointer memory is for me only!”
+    // Without this, the compiler is afraid and cannot perform SIMD parallelization properly.
 
-    // 배열의 포인터(*x)와 길이(length)만 받아서 덮어쓰기(In-place) 연산
+    // Overwrite (In-place) operation by receiving only the pointer (*x) and length of the array
     void run_gelu_inplace(float* __restrict__ x, int length) {
 
         #pragma omp simd
@@ -67,14 +67,14 @@ extern "C" {
     {
         int half = dim / 2;
 
-        // 헤드(Head)가 몇 개든, 각도는 똑같으니까 딱 한 번만(128번) 계산해서 캐시에 올려둠!
+        // No matter how many heads there are, the angle is the same, so it is calculated only once (128 times) and placed in the cache.
         float cos_vals[128];
         float sin_vals[128];
 
         #pragma omp simd
         for (int i = 0; i < half; i++)
         {
-            // 주파수 계산: 1.0 / (theta_base ^ (2 * i / dim))
+            // Frequency calculation: 1.0 / (theta_base ^ (2 * i / dim))
             float exp_val = (2.0f * (float)i) / (float)dim;
             float freq = 1.0f / std::pow(theta_base, exp_val);
             float angle = (float)pos * freq;
@@ -83,7 +83,7 @@ extern "C" {
             sin_vals[i] = std::sin(angle);
         }
 
-        // 각 헤드마다 돌면서 계산해 둔 cos, sin 값으로 회전(Rotation) 적용 (In-place 덮어쓰기)
+        // Rotation is applied to each head using the calculated cos and sin values ​​(In-place overwrite)
         for (int h = 0; h < num_heads; h++)
         {
             int head_offset = h * dim;

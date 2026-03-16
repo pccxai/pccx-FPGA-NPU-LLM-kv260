@@ -9,7 +9,7 @@ module result_ping_pong_bram #(
     input  logic rst_n,
     input  logic switch_buffer, // 0: NPU->B0, DMA->B1 | 1: NPU->B1, DMA->B0
 
-    // NPU Interface (32개 채널 동시 쓰기)
+    // NPU Interface (simultaneous writing of 32 channels)
     input  logic                   npu_we,
     input  logic [ADDR_WIDTH-1:0]  npu_addr,
     input  logic [DATA_WIDTH-1:0]  npu_data_in [0:ARRAY_SIZE-1],
@@ -19,7 +19,7 @@ module result_ping_pong_bram #(
     output logic [1023:0]          dma_data_out 
 );
 
-    // 내부 Flat 데이터 변환
+    // Internal flat data conversion
     logic [1023:0] npu_flat_data;
     always_comb begin
         for (int i = 0; i < ARRAY_SIZE; i++) begin

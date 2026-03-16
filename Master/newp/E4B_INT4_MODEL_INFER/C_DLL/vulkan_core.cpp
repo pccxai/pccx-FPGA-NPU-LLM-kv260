@@ -15,7 +15,7 @@ struct PushConstants
     uint32_t K_in_uints;
 };
 
-// 전역 Vulkan 핸들
+// Global Vulkan handle
 VkInstance instance;
 VkPhysicalDevice physicalDevice;
 VkDevice device;
@@ -25,17 +25,17 @@ VkPipeline computePipeline;
 VkPipelineLayout pipelineLayout;
 VkDescriptorSetLayout descriptorSetLayout;
 
-//  핑퐁용 배열 2개
+// 2 arrays for ping pong
 VkBuffer g_matBuf[2];
 VkDeviceMemory g_matMem[2];
 void *g_matMapped[2];
 VkDescriptorSet g_descriptorSet[2];
 
-// 단일 공유 버퍼
+// single shared buffer
 VkBuffer g_xBuf, g_scaleBuf, g_outBuf;
 VkDeviceMemory g_xMem, g_scaleMem, g_outMem;
 void *g_xMapped, *g_scaleMapped, *g_outMapped;
-//  주의: 단일 g_descriptorSet 선언은 삭제함! (위에서 배열로 선언했으므로)
+// Note: Single g_descriptorSet declaration deleted! (since it was declared as an array above)
 
 std::future<void> weight_loader;
 
@@ -182,7 +182,7 @@ extern "C"
         uint32_t groupCountX = (M_out + 31) / 32;
         vkCmdDispatch(commandBuffer, groupCountX, 1, 1);
 
-        //  주의: 여기서 memcpy(out, g_outMapped...) 하는 오류를 삭제함!
+        // NOTE: Removed error with memcpy(out, g_outMapped...) here.
 
         vkEndCommandBuffer(commandBuffer);
 
@@ -190,17 +190,17 @@ extern "C"
         vkQueueSubmit(computeQueue, 1, &submitInfo, VK_NULL_HANDLE);
         vkQueueWaitIdle(computeQueue);
 
-        //  계산 완료 후 여기서 딱 한 번만 결과를 뺌!
+        // After completing the calculation, subtract the result just once.
         memcpy(out, g_outMapped, M_out * sizeof(float));
 
         vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
     }
 
-    // 호환성을 위해 남겨둔 레거시 함수 (배열 인덱스 [0]으로 수정)
+    // Legacy functions left for compatibility (modified with array index [0])
     void run_vulkan_gemv(const float *x, const uint8_t *mat_p, const float *scale, float *out, int M_out, int K_in)
     {
         memcpy(g_xMapped, x, K_in * sizeof(float));
-        memcpy(g_matMapped[0], mat_p, M_out * (K_in / 2) * sizeof(uint8_t)); //  [0] 사용
+        memcpy(g_matMapped[0], mat_p, M_out * (K_in / 2) * sizeof(uint8_t)); // [0] Enabled
         memcpy(g_scaleMapped, scale, M_out * sizeof(float));
 
         VkCommandBufferAllocateInfo cmdAllocInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, nullptr, commandPool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1};
@@ -211,7 +211,7 @@ extern "C"
         vkBeginCommandBuffer(commandBuffer, &beginInfo);
 
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
-        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, &g_descriptorSet[0], 0, nullptr); //  [0] 사용
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, &g_descriptorSet[0], 0, nullptr); // [0] Enabled
 
         PushConstants pushParams;
         pushParams.M_out = (uint32_t)M_out;

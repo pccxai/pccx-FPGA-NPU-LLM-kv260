@@ -5,7 +5,7 @@ from safetensors.torch import load_file, save_file
 import gc
 import glob
 
-# 설정
+# setting
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ORIGINAL_MODEL_DIR = "/home/hwkim/Desktop/github/TinyNPU-RTL/Master/newp/E4B_ORIGINAL_MODEL_INFER/local_gemma_3n"
 SAVE_DIR = os.path.join(BASE_DIR, "local_gemma_3n_int4")

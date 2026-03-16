@@ -4,7 +4,7 @@ from transformers import AutoTokenizer
 import os
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
-# E2B 모델 폴더 이름에 맞춰 경로 수정
+# Modify the path to match the E2B model folder name
 model_id = os.path.join(base_dir, "[Original Model]gemma3NE2B")
 tokenizer = AutoTokenizer.from_pretrained(model_id, local_files_only=True)
 
@@ -14,7 +14,7 @@ def tokenize(text):
     return tokens
 
 def embedding(token_id, W_embed_real):
-    # W_embed_real이 float16이어도 .astype(float32)로 안전하게 변환
+    # Safely convert to .astype(float32) even if W_embed_real is float16
     x = W_embed_real[token_id].astype(np.float32)
     x = x * math.sqrt(2048.0)
     return x
@@ -26,7 +26,7 @@ def cpu_qk_norm(Q, K, gamma_q, gamma_k):
     Q_reshaped = Q.reshape(-1, 256)
     K_reshaped = K.reshape(-1, 256)
 
-    # float32 (이전 최적화 유지)
+    # float32 (keep previous optimizations)
     q_rms = np.sqrt(np.mean(Q_reshaped.astype(np.float32)**2, axis=1, keepdims=True) + 1e-6)
     k_rms = np.sqrt(np.mean(K_reshaped.astype(np.float32)**2, axis=1, keepdims=True) + 1e-6)
 
@@ -36,7 +36,7 @@ def cpu_qk_norm(Q, K, gamma_q, gamma_k):
     return Q_norm.flatten(), K_norm.flatten()
 
 # ================================================================
-# RoPE 주파수 캐시 (이전 최적화 유지)
+# RoPE frequency cache (retains previous optimizations)
 # ================================================================
 _rope_freq_cache: dict = {}
 
@@ -69,18 +69,18 @@ def cpu_rope(x, pos, theta_base):
     return out.flatten()
 
 # ================================================================
-#  메모리 최적화: KV 캐시를 float16으로 저장
+# Memory optimization: store KV cache as float16
 #
-# K, V 벡터를 float16으로 내려서 캐시 메모리 절반으로 감소.
-# cpu_gqa에서 float32로 복원해 연산 → 정밀도 유지.
-# 초기값: None (main.py에서 [None]*30 (E2B 레이어 수)로 초기화)
+# Decrease K, V vectors to float16 to reduce cache memory by half.
+# Restore float32 in cpu_gqa for calculation → maintain precision.
+# Initial value: None (initialized as [None]*30 (number of E2B layers) in main.py)
 # ================================================================
 def cpu_update_kv_cache(K_rope, V, layer_idx, K_cache, V_cache):
     """
-    K_rope, V를 float16으로 변환해 KV 캐시에 추가.
-    None이면 최초 생성, 아니면 concat.
+    K_rope, convert V to float16 and add to KV cache.
+    If None, create first, otherwise concat.
     """
-    # float16으로 저장해 메모리 절반 절약
+    # Save half the memory by saving as float16
     K_new = K_rope.astype(np.float16)[np.newaxis]  # (1, dim)
     V_new = V.astype(np.float16)[np.newaxis]        # (1, dim)
 
@@ -93,32 +93,32 @@ def cpu_update_kv_cache(K_rope, V, layer_idx, K_cache, V_cache):
 
 
 def cpu_gqa(Q_rope, K_cache_layer, V_cache_layer):
-    # Q를 (8, 256)에서 (2, 4, 256)으로 형태 변경
-    # 2는 KV 헤드 개수, 4는 KV 헤드 하나당 매핑되는 Q 헤드 개수
+    # Change the form Q from (8, 256) to (2, 4, 256)
+    # 2 is the number of KV heads, 4 is the number of Q heads mapped per KV head
     Q_reshaped = Q_rope.reshape(2, 4, 256).astype(np.float32)
 
-    # K, V 캐시 복원 후 형태 변경 (seq_len, 2, 256)
+    # Shape change after K, V cache restoration (seq_len, 2, 256)
     K_mat = K_cache_layer.astype(np.float32).reshape(-1, 2, 256)
     V_mat = V_cache_layer.astype(np.float32).reshape(-1, 2, 256)
 
-    # 행렬곱을 위해 K_mat 축 변경: (2, 256, seq_len)
+    # Change K_mat axis for matrix multiplication: (2, 256, seq_len)
     K_t = K_mat.transpose(1, 2, 0)
     
-    # 파이썬 for 문 없이 행렬곱 한 방에 처리 -> 결과 형태: (2, 4, seq_len)
+    # Process matrix multiplication in one step without a Python for statement -> Result type: (2, 4, seq_len)
     scores = np.matmul(Q_reshaped, K_t)
 
-    # 구글 공식 적용: Softmax 연산 한 번에 처리
+    # Application of Google formula: Softmax calculation processed at once
     scores_safe = scores - np.max(scores, axis=-1, keepdims=True)
     exp_scores = np.exp(scores_safe)
     probs = exp_scores / np.sum(exp_scores, axis=-1, keepdims=True)
 
-    # 행렬곱을 위해 V_mat 축 변경: (2, seq_len, 256)
+    # Change V_mat axis for matrix multiplication: (2, seq_len, 256)
     V_t = V_mat.transpose(1, 0, 2)
     
-    # 어텐션 출력 한 방에 계산 -> 결과 형태: (2, 4, 256)
+    # Calculate attention output in one step -> Result type: (2, 4, 256)
     attn_out = np.matmul(probs, V_t)
 
-    # 다시 1차원 벡터로 쫙 펴서 리턴
+    # Spread out and return as a 1-dimensional vector
     return attn_out.flatten()
 
 def cpu_sample_token(probs):
