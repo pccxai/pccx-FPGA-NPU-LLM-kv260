@@ -40,4 +40,4 @@ Profiling on the AMD Ryzen 4500U proves that the engine perfectly reached the ph
 * VRAM Usage: 19.15% (Minimal VRAM footprint achieved via Zero-Copy).
 
 ## Future Work
-* Based on the Ping-Pong Buffer and Vectorized Memory Access architectures verified in this project, the codebase will be ported to Vitis HLS C++ and synthesized into RTL targeting the Xilinx KV260 FPGA.
+* Based on the Ping-Pong Buffer and Vectorized Memory Access architectures verified in this project, the codebase will be ported to C++ and synthesized into RTL targeting the Xilinx KV260 FPGA.
