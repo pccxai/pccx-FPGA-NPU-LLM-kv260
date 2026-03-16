@@ -10,7 +10,7 @@ module softmax_exp_unit (
     output logic [15:0]        o_exp       
 );
 
-    // Q12 포맷: 1.442695 * 4096 = 5909
+    // Q12 format: 1.442695 * 4096 = 5909
     localparam logic signed [15:0] LOG2E_Q12 = 16'd5909;
 
     logic signed [31:0] reg_x_prime; 
@@ -31,11 +31,11 @@ module softmax_exp_unit (
     logic [4:0]  shift_amount;
     logic [9:0]  frac_part;
     
-    // 정수부: 32비트 중 상위 20비트 [31:12]. 
-    // 음수이므로, 우측 시프트 횟수(+5)로 쓰기 위해 2의 보수를 취함!
+    // Integer part: Highest 20 bits of 32 bits [31:12].
+    // Since it is a negative number, we take the 2's complement to write it as the number of right shifts (+5).
     assign shift_amount = ~(reg_x_prime[31:12]) + 1; 
     
-    // 소수부: 12비트 소수점 [11:0] 중에서, 1024분할 LUT(10비트)를 쓰니까 [11:2] 픽!
+    // Decimal part: Among the 12-bit decimal points [11:0], I pick [11:2] because I use a 1024-division LUT (10 bits).
     assign frac_part = reg_x_prime[11:2];      
 
     (* rom_style = "block" *) logic [15:0] lut_exp_frac [0:1023];

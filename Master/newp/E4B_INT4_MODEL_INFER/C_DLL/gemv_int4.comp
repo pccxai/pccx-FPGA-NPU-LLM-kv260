@@ -1,54 +1,54 @@
 #version 450
-//GPU 코어 수백 개가 동시에 실행할 커널 코드야. C언어랑 아주 비슷하게 생겼어.
-//여기서 우리가 아까 파이썬/Taichi로 짰던 INT4 언패킹(>> 4, & 0x0F)과 곱셈 누적(Dot Product)을 GPU 병렬 코드로 짤 거야.
-// 워크그룹 크기: 한 번에 32개의 Output(행)을 병렬로 계산
+//This is kernel code that hundreds of GPU cores will execute simultaneously. It looks very similar to the C language.
+//Here, will write INT4 unpacking (>> 4, & 0x0F) and multiplication accumulation (Dot Product), which we wrote earlier in Python/Taichi, as GPU parallel code.
+// Workgroup size: Parallel calculation of 32 outputs (rows) at a time
 layout (local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
-// CPU와 Zero-Copy로 공유할 메모리 버퍼들 (Binding 번호로 구분)
+// Memory buffers to be shared with CPU and Zero-Copy (differentiated by Binding number)
 layout(binding = 0) readonly buffer InputX { float x[]; };
-// GPU 성능을 위해 1바이트(uint8)가 아닌 4바이트(uint32) 배열로 통째로 읽어옴!
+// For GPU performance, read the entire array as a 4-byte (uint32) array instead of 1 byte (uint8).
 layout(binding = 1) readonly buffer MatP { uint mat[]; };
 layout(binding = 2) readonly buffer Scale { float scale[]; };
 layout(binding = 3) writeonly buffer Output { float out_vec[]; };
 
-// CPU에서 실행할 때 매번 넘겨줄 가벼운 변수들 (차원 크기)
+// Lightweight variables to pass each time when running on CPU (dimension size)
 layout(push_constant) uniform PushConstants {
     uint M_out;
-    uint K_in_uints; // K차원을 uint(4바이트=8개 INT4) 단위로 나눈 개수
+    uint K_in_uints; // Number of K dimensions divided by uint (4 bytes = 8 INT4)
 } params;
 
 void main() {
-    // 현재 스레드가 담당할 출력 행(Row) 번호
+    // Output row number to be handled by the current thread
     uint row = gl_GlobalInvocationID.x;
     
-    // 계산할 범위를 넘어가면 스레드 종료
+    // If the calculation range is exceeded, the thread terminates.
     if (row >= params.M_out) return;
 
     float acc = 0.0;
     uint row_offset = row * params.K_in_uints;
 
-    // 행렬곱 루프 (1루프당 4바이트를 읽어서 8개의 INT4 가중치를 처리!)
+    // Matrix multiplication loop (processes 8 INT4 weights by reading 4 bytes per loop!)
     for (uint k = 0; k < params.K_in_uints; k++) {
         uint packed_32 = mat[row_offset + k];
-        uint x_idx = k * 8; // 입력 벡터 x의 시작 인덱스
+        uint x_idx = k * 8; // Starting index of input vector x
 
-        // 32비트를 8비트씩 4번 쪼개서 언패킹
+        // Split 32 bits into 8 bits each 4 times and unpack
         for (int i = 0; i < 4; i++) {
             uint byte_val = (packed_32 >> (i * 8)) & 0xFF;
             
-            // 하위 4비트 처리 (Sign-extension)
+            // Lowest 4 bit processing (Sign-extension)
             int low = int(byte_val & 0x0F);
             if (low > 7) low -= 16;
             
-            // 상위 4비트 처리 (Sign-extension)
+            // Processing of the upper 4 bits (Sign-extension)
             int high = int((byte_val >> 4) & 0x0F);
             if (high > 7) high -= 16;
 
-            // 벡터 x의 값과 곱해서 누적
+            // Accumulate by multiplying by the value of vector x
             acc += x[x_idx + i * 2] * float(low) + x[x_idx + i * 2 + 1] * float(high);
         }
     }
     
-    // 최종 결과에 Scale을 곱해서 출력 버퍼에 기록
+    // Multiply the final result by Scale and write it to the output buffer.
     out_vec[row] = acc * scale[row];
 }

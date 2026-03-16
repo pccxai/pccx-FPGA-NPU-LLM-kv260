@@ -7,22 +7,22 @@ module gemma_npu_axi_slave_lite_v1_0_S00_AXI #
 )
 (
     // ---------------------------------------------------------
-    //  [NEW] AXI-Stream 인터페이스 (DMA와 고속 통신)
+    // [NEW] AXI-Stream interface (DMA and high-speed communication)
     // ---------------------------------------------------------
-    // RX: DMA -> NPU (Token / Weight 수신)
+    // RX: DMA -> NPU (Token / Weight reception)
     input  wire [31:0] s_axis_tdata,
     input  wire        s_axis_tvalid,
     output wire        s_axis_tready,
     input  wire        s_axis_tlast,
     
-    // TX: NPU -> DMA (Result 송신)
+    // TX: NPU -> DMA (Result transmission)
     output wire [31:0] m_axis_tdata,
     output wire        m_axis_tvalid,
     input  wire        m_axis_tready,
     output wire        m_axis_tlast,
 
     // ---------------------------------------------------------
-    // AXI-Lite 기본 인터페이스
+    // AXI-Lite basic interface
     // ---------------------------------------------------------
     input wire  S_AXI_ACLK,
     input wire  S_AXI_ARESETN,
@@ -80,7 +80,7 @@ module gemma_npu_axi_slave_lite_v1_0_S00_AXI #
     assign S_AXI_RVALID  = axi_rvalid;
     assign slv_reg_wren  = axi_wready && S_AXI_WVALID && axi_awready && S_AXI_AWVALID;
 
-    // AXI Write Logic ( Auto-clear Pulse 추가)
+    // AXI Write Logic (Auto-clear Pulse added)
     always @(posedge S_AXI_ACLK) begin
         if (S_AXI_ARESETN == 1'b0) begin
             axi_awready <= 1'b0;
@@ -89,7 +89,7 @@ module gemma_npu_axi_slave_lite_v1_0_S00_AXI #
             slv_reg0 <= 0; slv_reg1 <= 0; slv_reg2 <= 0;
             slv_reg3 <= 0; slv_reg4 <= 0; slv_reg5 <= 0;
         end else begin
-            // ... (기본 AXI Write Ready 제어 생략 - 기존 로직과 동일하게 동작)
+            // ... (Omit basic AXI Write Ready control - operates the same as existing logic)
             if (~axi_awready && S_AXI_AWVALID && S_AXI_WVALID) begin
                 axi_awready <= 1'b1;
                 axi_wready  <= 1'b1;
@@ -121,7 +121,7 @@ module gemma_npu_axi_slave_lite_v1_0_S00_AXI #
                             if (S_AXI_WSTRB[byte_index]) slv_reg5[(byte_index*8) +: 8] <= S_AXI_WDATA[(byte_index*8) +: 8];
                 endcase
             end else begin
-                //  Auto-clear 로직: 레지스터 쓰기가 없는 사이클엔 무조건 0으로 내림 (Pulse 생성)
+                // Auto-clear logic: Unconditionally lowers to 0 in cycles without register writing (pulse generation)
                 slv_reg0[0] <= 1'b0; // i_npu_start
                 slv_reg0[1] <= 1'b0; // i_acc_clear
             end
@@ -152,7 +152,7 @@ module gemma_npu_axi_slave_lite_v1_0_S00_AXI #
     wire        w_npu_done;
     wire [1023:0] w_npu_result_all;
 
-    // 0x10 번지에 w_npu_done(Bit 16)과 w_final_result(Bit 15:0) 할당
+    // Assign w_npu_done (Bit 16) and w_final_result (Bit 15:0) to address 0x10.
     assign S_AXI_RDATA = (axi_araddr[ADDR_LSB+OPT_MEM_ADDR_BITS:ADDR_LSB] == 3'h0) ? slv_reg0 : 
                          (axi_araddr[ADDR_LSB+OPT_MEM_ADDR_BITS:ADDR_LSB] == 3'h1) ? slv_reg1 :
                          (axi_araddr[ADDR_LSB+OPT_MEM_ADDR_BITS:ADDR_LSB] == 3'h2) ? slv_reg2 : 
@@ -161,7 +161,7 @@ module gemma_npu_axi_slave_lite_v1_0_S00_AXI #
                          (axi_araddr[ADDR_LSB+OPT_MEM_ADDR_BITS:ADDR_LSB] == 3'h5) ? slv_reg5 : 0; 
 
     // =========================================================================
-    //  [RX] AXI-Stream -> BRAM 변환 (Packing FSM)
+    // [RX] AXI-Stream -> BRAM conversion (Packing FSM)
     // =========================================================================
     reg [511:0] rx_pack_reg;
     reg [3:0]   rx_beat_cnt;
@@ -190,7 +190,7 @@ module gemma_npu_axi_slave_lite_v1_0_S00_AXI #
                     rx_beat_cnt <= 0;
                     r_dma_wdata <= {s_axis_tdata, rx_pack_reg[511:32]};
                     
-                    // slv_reg5[0] 이 0이면 Token BRAM, 1이면 Weight BRAM으로 쓰기
+                    // If slv_reg5[0] is 0, it is used as Token BRAM, and if it is 1, it is written as Weight BRAM.
                     if (slv_reg5[0] == 1'b0) r_dma_we_token  <= 1'b1;
                     else                     r_dma_we_weight <= 1'b1;
                     
@@ -201,18 +201,18 @@ module gemma_npu_axi_slave_lite_v1_0_S00_AXI #
             end
 
             if (s_axis_tlast) begin
-                rx_bram_addr <= 0; // 전송 끝나면 BRAM 포인터 0으로 리셋
+                rx_bram_addr <= 0; // When the transfer is completed, the BRAM pointer is reset to 0.
             end
         end
     end
 
     // =========================================================================
-    //  [TX] NPU Result -> AXI-Stream 변환 (Unpacking FSM)
+    // [TX] NPU Result -> AXI-Stream conversion (Unpacking FSM)
     // =========================================================================
     wire [511:0] packed_results;
     genvar i;
     generate
-        // 32채널의 MAC 32비트 결과 중 하위 16비트만 뽑아서 512비트로 패킹 (파이썬이 int16으로 받으므로)
+        // Among the 32-channel MAC 32-bit results, only the lower 16 bits are extracted and packed into 512 bits (since Python receives them as int16).
         for (i=0; i<32; i=i+1) begin : pack_loop
             assign packed_results[i*16 +: 16] = w_npu_result_all[i*32 +: 16];
         end
@@ -231,14 +231,14 @@ module gemma_npu_axi_slave_lite_v1_0_S00_AXI #
             tx_active <= 0;
             tx_beat_cnt <= 0;
         end else begin
-            // NPU 연산 완료 펄스(w_npu_done)가 튀면 DMA 전송 시작!
+            // When the NPU operation completion pulse (w_npu_done) occurs, DMA transfer begins.
             if (w_npu_done && !tx_active) begin
                 tx_active <= 1'b1;
                 tx_beat_cnt <= 0;
                 tx_shift_reg <= packed_results;
             end else if (tx_active && m_axis_tready) begin
                 if (tx_beat_cnt == 15) begin
-                    tx_active <= 1'b0; // 16번(512비트) 쏘면 전송 끝
+                    tx_active <= 1'b0; // Transmission ends after shooting 16 times (512 bits)
                 end else begin
                     tx_beat_cnt <= tx_beat_cnt + 1;
                     tx_shift_reg <= {32'd0, tx_shift_reg[511:32]};
@@ -248,7 +248,7 @@ module gemma_npu_axi_slave_lite_v1_0_S00_AXI #
     end
 
     // =========================================================================
-    // NPU Top 모듈 인스턴시에이션 (gemma_layer_top)
+    // NPU Top module instance (gemma_layer_top)
     // =========================================================================
     gemma_layer_top u_npu_core (
         .clk                (S_AXI_ACLK),
@@ -263,7 +263,7 @@ module gemma_npu_axi_slave_lite_v1_0_S00_AXI #
         .o_npu_done         (w_npu_done),      
         .o_logic_anchor     (),  
 
-        // 위에서 만든 FSM 출력값을 NPU BRAM으로 연결
+        // Connect the FSM output created above to NPU BRAM
         .i_dma_we_token     (r_dma_we_token),          
         .i_dma_addr_token   (rx_bram_addr[7:0]),        
         .i_dma_wdata_token  (r_dma_wdata),      

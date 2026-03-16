@@ -1,13 +1,13 @@
 `timescale 1ns / 1ps
 
 module systolic_NxN #(
-    parameter ARRAY_SIZE = 32 // 32x32 아키텍처!
+    parameter ARRAY_SIZE = 32 // 32x32 architecture.
 )(
     input  logic clk,
     input  logic rst_n,
-    input  logic i_clear, //  외부(Top FSM)에서 받는 글로벌 클리어 신호
+    input  logic i_clear, // Global clear signal received from outside (Top FSM)
 
-    // npu_core_top에서 '동시'에 쏟아지는 64개 데이터
+    // 64 data pouring ‘simultaneously’ from npu_core_top
     input  logic [7:0] in_a [0:ARRAY_SIZE-1], 
     input  logic [7:0] in_b [0:ARRAY_SIZE-1],
     input  logic       in_valid,
@@ -15,10 +15,10 @@ module systolic_NxN #(
     output logic [ARRAY_SIZE*ARRAY_SIZE*32-1:0] out_acc_flat
 );
 
-    // 내부 연산용 2차원 배열
+    // Two-dimensional array for internal operations
     logic [31:0] out_acc [0:ARRAY_SIZE-1][0:ARRAY_SIZE-1];
 
-    // 2차원 -> 1차원 Flat 변환
+    // 2D -> 1D Flat conversion
     genvar r, c;
     generate
         for (r = 0; r < ARRAY_SIZE; r++) begin
@@ -28,13 +28,13 @@ module systolic_NxN #(
         end
     endgenerate
 
-    // 각 PE들 사이를 연결할 내부 전선
+    // Internal wires to connect between each PE
     logic [7:0] wire_a [0:ARRAY_SIZE-1][0:ARRAY_SIZE];
     logic [7:0] wire_b [0:ARRAY_SIZE][0:ARRAY_SIZE-1];
     logic       wire_v [0:ARRAY_SIZE-1][0:ARRAY_SIZE-1]; 
 
     // -----------------------------------------------------------------
-    // Delay Line을 이용한 입력 데이터 계단식 지연 (Wavefront Skewing)
+    // Input data cascade delay using Delay Line (Wavefront Skewing)
     // -----------------------------------------------------------------
     genvar i;
     generate
@@ -52,14 +52,14 @@ module systolic_NxN #(
     endgenerate
 
     // -----------------------------------------------------------------
-    // 2D PE Array 생성 (mac_unit 4,096개 자동 복사)
+    // Create 2D PE Array (automatically copy 4,096 mac_units)
     // -----------------------------------------------------------------
     genvar row, col;
     generate
         for (row = 0; row < ARRAY_SIZE; row++) begin : row_loop
             for (col = 0; col < ARRAY_SIZE; col++) begin : col_loop
                 
-                //  클로드 지적 반영: 변수 선언을 if 밖으로 빼서 합성 호환성 100% 확보!
+                // Reflecting Claude's point: 100% composition compatibility is secured by removing variable declarations outside of if.
                 logic current_i_valid;
                 
                 if (row == 0 && col == 0) begin
@@ -72,7 +72,7 @@ module systolic_NxN #(
 
                 pe_unit u_pe (
                     .clk(clk), .rst_n(rst_n),
-                    .i_clear(i_clear),                //  4096개 PE에 동시 클리어 배선!
+                    .i_clear(i_clear),                // Simultaneous clear wiring to 4096 PEs.
                     .i_valid(current_i_valid),
                     .i_a(wire_a[row][col]),
                     .i_b(wire_b[row][col]),

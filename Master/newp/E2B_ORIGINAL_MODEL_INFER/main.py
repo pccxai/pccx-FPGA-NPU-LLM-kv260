@@ -6,7 +6,7 @@ import IGPU_CORE
 
 ACCEL_MODE = "IGPU"
 
-# IGPU 경로를 타는 레이어 큰 행렬 키 목록
+# Layer big matrix key list that takes the IGPU route
 _IGPU_WEIGHT_KEYS = ["W_q", "W_k", "W_v", "W_o", "W_gate", "W_up", "W_down"]
 
 def hw_matmul(x, w, use_gelu=False):
@@ -35,7 +35,7 @@ def forward_one_token(token_id, pos, W, W_embed, W_ple, norm_ple,
     for k in range(3):
         xs[k + 1] = np.dot(x0, altup_projs[k])
 
-    # PLE (E2B는 30개 레이어)
+    # PLE (E2B has 30 layers)
     x_proj = np.dot(x0, W_ple_proj) / math.sqrt(2048.0)
     x_proj = x_proj.reshape(30, 256)
 
@@ -60,12 +60,12 @@ def forward_one_token(token_id, pos, W, W_embed, W_ple, norm_ple,
 
         Q, K = CPU_CORE.cpu_qk_norm(Q, K, W["gamma_q"][i], W["gamma_k"][i])
 
-        # E2B: 4개 sliding(10k) + 1개 full(1M) 패턴
+        # E2B: 4 sliding(10k) + 1 full(1M) pattern
         theta = 1_000_000.0 if (i % 5 == 4) else 10_000.0
         Q     = CPU_CORE.cpu_rope(Q, pos=pos, theta_base=theta)
         K     = CPU_CORE.cpu_rope(K, pos=pos, theta_base=theta)
 
-        # KV 캐시 라우팅: E2B (30층, 10층 공유) -> 20층부터 공유
+        # KV Cache Routing: E2B (30th floor, 10th floor shared) -> Shared from the 20th floor
         if i < 20:
             CPU_CORE.cpu_update_kv_cache(K, V, i, K_cache, V_cache)
             target_k_cache = K_cache[i]
@@ -75,8 +75,8 @@ def forward_one_token(token_id, pos, W, W_embed, W_ple, norm_ple,
                 target_k_cache = K_cache[19] # Global
             else:
                 target_k_cache = K_cache[18] # Local
-            target_v_cache = V_cache[i % 1] # dummy (cpu_gqa는 v_cache shape만 맞으면 됨)
-            # 사실 cpu_gqa가 target_v_cache도 필요하므로 로직 수정
+            target_v_cache = V_cache[i % 1] # dummy (cpu_gqa only needs to match v_cache shape)
+            # In fact, cpu_gqa also needs target_v_cache, so modify the logic
             if i % 5 == 4:
                 target_v_cache = V_cache[19]
             else:
@@ -95,7 +95,7 @@ def forward_one_token(token_id, pos, W, W_embed, W_ple, norm_ple,
 
         x_n2 = rms_norm(attn_output, W["pre_ffn_ln"][i])
 
-        # FFN Sparsity (0~9층)
+        # FFN Sparsity (0~9F)
         if i < 10:
             gate_out = hw_matmul(x_n2, W["W_gate"][i], use_gelu=False)
             up_out   = hw_matmul(x_n2, W["W_up"][i])
@@ -154,23 +154,23 @@ def main():
     W_embed, W_ple, norm_ple, W_ple_proj, altup_projs, altup_unprojs, \
         W_final_norm, W_lm_head, W = safeTensor.load_local_weights()
 
-    print("[메모리] IGPU 가중치 VRAM 선업로드 시작...")
+    print("[Memory] IGPU weighted VRAM pre-upload start...")
     IGPU_CORE.preload_and_free(W, _IGPU_WEIGHT_KEYS)
 
-    # 최종 검증을 위한 일상 대화 프롬프트
-    prompt = "<start_of_turn>user\n오늘 날씨가 정말 좋은데, 서울에서 산책하기 좋은 장소 3곳만 추천해주고 이유도 짧게 설명해줘.<end_of_turn>\n<start_of_turn>model\n"
+    # Daily conversation prompts for final verification
+    prompt = "<start_of_turn>user\nThe weather is really nice today. Please recommend 3 good places for a walk in Seoul and briefly explain why.<end_of_turn>\n<start_of_turn>model\n"
     input_tokens = CPU_CORE.tokenize(prompt)
 
     K_cache = [None for _ in range(30)]
     V_cache = [None for _ in range(30)]
 
-    print(f"Prefill: {len(input_tokens)} 토큰 처리 중...")
+    print(f"Prefill: {len(input_tokens)} processing tokens...")
     xs = None
     for pos, token_id in enumerate(input_tokens):
         xs = forward_one_token(token_id, pos, W, W_embed, W_ple, norm_ple,
                                W_ple_proj, altup_projs, K_cache, V_cache)
 
-    print("\n[생성 시작]")
+    print("\n[Start creation]")
     print(prompt, end="", flush=True)
 
     STOP_TOKENS = [1, 106]
@@ -194,7 +194,7 @@ def main():
         next_token = _sample(logits, TEMPERATURE, TOP_P, REP_PENALTY, generated)
         cur_pos   += 1
 
-    print(f"\n\n[완료] 총 {len(generated)}개 토큰 생성")
+    print(f"\n\n[Complete] Generate a total of {len(generated)} tokens")
 
 def _sample(logits: np.ndarray, temperature: float, top_p: float,
             rep_penalty: float, generated: list) -> int:

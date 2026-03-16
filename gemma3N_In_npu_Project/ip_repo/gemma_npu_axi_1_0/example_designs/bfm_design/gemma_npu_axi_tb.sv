@@ -106,11 +106,11 @@ axi_ready_gen                           arready_gen2;
 xil_axi_payload_byte                    data_mem[xil_axi_ulong];  
 gemma_npu_axi_bfm_1_master_0_0_mst_t          mst_agent_0;
 
-  // 매크로 대신 실제 모듈 이름(gemma_npu_axi) 사용
+  // Use actual module name (gemma_npu_axi) instead of macro
   gemma_npu_axi DUT(
       .s00_axi_aresetn(reset), 
       .s00_axi_aclk(clock),
-      // 새로 추가된 포트들에 더미 연결 (Syntax Error 방지)
+      // Dummy connection to newly added ports (prevention of syntax error)
       .i_dma_we_token(1'b0),
       .i_dma_addr_token(8'd0),
       .i_dma_wdata_token(8'd0),
@@ -122,7 +122,7 @@ gemma_npu_axi_bfm_1_master_0_0_mst_t          mst_agent_0;
     ); 
   
 initial begin
-   // 매크로 대신 실제 경로(DUT 내부 슬레이브 인스턴스) 사용
+   // Use real paths (slave instances inside the DUT) instead of macros
    mst_agent_0 = new("master vip agent",DUT.gemma_npu_axi_slave_lite_v1_0_S00_AXI_inst.S_AXI);
    mst_agent_0.vif_proxy.set_dummy_drive_type(XIL_AXI_VIF_DRIVE_NONE); 
    mst_agent_0.set_agent_tag("Master VIP"); 

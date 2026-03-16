@@ -79,12 +79,12 @@ def rms_norm(x, gamma):
     return (x_f32 / rms) * gamma
 '''
 def hw_prefetch(w, buf_idx):
-    """다음 가중치가 INT4 튜플이면 백그라운드 스레드로 몰래 가져옴"""
+    """If the next weight is an INT4 tuple, fetch it secretly in a background thread"""
     if ACCEL_MODE == "IGPU" and isinstance(w, tuple):
         FAST_MATRIX_CORE.prefetch_weight(w, buf_idx)
 
 def hw_compute_pingpong(x, w, buf_idx, use_gelu=False):
-    """현재 버퍼(buf_idx)로 계산 발사! 튜플이 아니면 일반 행렬곱으로 우회"""
+    """Fire calculation with current buffer (buf_idx)! If it is not a tuple, bypass to general matrix multiplication"""
     if ACCEL_MODE == "IGPU" and isinstance(w, tuple):
         out = FAST_MATRIX_CORE.compute_pingpong(x, w, buf_idx)
         return CPU_CORE.gelu(out) if use_gelu else out
@@ -92,13 +92,13 @@ def hw_compute_pingpong(x, w, buf_idx, use_gelu=False):
         return hw_matmul(x, w, use_gelu)
     
 def rms_norm(x, gamma):
-    # 입력 x를 float32로 변환하면서 독립적인 연속 배열 생성 (원본 파이썬 로직 유지)
+    # Create an independent contiguous array while converting input x to float32 (maintaining the original Python logic)
     x_f32 = np.ascontiguousarray(x.astype(np.float32))
     
-    # gamma 가중치도 안전하게 float32 연속 배열로 보장
+    # The gamma weights are also safely guaranteed to be float32 contiguous arrays.
     gamma_c = np.ascontiguousarray(gamma.astype(np.float32))
     
-    # C++ In-place 덮어쓰기 연산! (x_f32 내부 값이 결과로 바뀜)
+    # C++ In-place overwrite operation! (x_f32 internal value is replaced by result)
     c_lib.run_RMSNorm_inplace(x_f32, gamma_c, x_f32.size)
     
     return x_f32
@@ -130,7 +130,7 @@ def forward_one_token(token_id, pos, W, W_embed, W_ple_packed, W_ple_scale, norm
     pli_all = (x_proj_normed + y) * (1.0 / math.sqrt(2.0))
 
     # ====================================================================
-    #  Dataflow 파이프라인 진입 직전, 최초의 가중치(Q) 장전!
+    # Just before entering the dataflow pipeline, load the first weight (Q).
     # ====================================================================
     ping_pong = 0
     hw_prefetch(W["W_q"][0], ping_pong)
@@ -225,7 +225,7 @@ def forward_one_token(token_id, pos, W, W_embed, W_ple_packed, W_ple_scale, norm
         # ----------------------------------------------------
         # 7. Down
         curr_buf = ping_pong; next_buf = 1 - ping_pong
-        # 다음 레이어가 존재하면 다음 레이어의 첫 타자(Q)를 장전!
+        # If the next layer exists, load the first batter (Q) of the next layer.
         if i < NUM_LAYERS - 1:
             hw_prefetch(W["W_q"][i+1], next_buf)
             
@@ -251,7 +251,7 @@ def forward_one_token(token_id, pos, W, W_embed, W_ple_packed, W_ple_scale, norm
     return xs
 
 def decode_logits(xs, altup_unprojs, W_final_norm, W_lm_head):
-    #  CPU가 연산하는 동안, 0번 버퍼에 초거대 W_lm_head 장전 시작! (비동기)
+    # While the CPU is calculating, start loading the ultra-large W_lm_head into buffer 0! (asynchronous)
     hw_prefetch(W_lm_head, 0)
     
     target_mag = np.mean(xs[0] ** 2) ** 0.5
@@ -264,14 +264,14 @@ def decode_logits(xs, altup_unprojs, W_final_norm, W_lm_head):
     x_final = np.mean(np.stack(unembedded, axis=0), axis=0)
     x_final = rms_norm(x_final, W_final_norm)
     
-    #  연산이 끝난 x_final을 아까 장전해 둔 0번 버퍼에 쏴서 즉시 발사!
+    # Immediately fire the x_final that has completed the calculation into the previously loaded buffer number 0.
     logits = hw_compute_pingpong(x_final, W_lm_head, buf_idx=0)
     return logits
 
 def _sample(logits: np.ndarray, temperature: float, top_p: float,
             rep_penalty: float, generated: list) -> int:
     
-    # 1. Repetition Penalty (파이썬 로직 유지 - 토큰 수가 적어서 오버헤드 미미함)
+    # 1. Repetition Penalty (maintain Python logic - overhead is minimal due to small number of tokens)
     if rep_penalty != 1.0 and len(generated) > 0:
         for token in set(generated):
             if logits[token] < 0:
@@ -285,16 +285,16 @@ def _sample(logits: np.ndarray, temperature: float, top_p: float,
     #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
     # softmax in dll(C) - SIMD
 
-    # 메모리 꼬임 방지를 위해 float32 연속 배열로 확정
+    # Confirmed as float32 contiguous array to prevent memory kinks
     logits_f32 = np.ascontiguousarray(logits.astype(np.float32))
     
-    # C++ 커널에 던지면, logits_f32 배열 내부 값이 '확률(probs)' 값으로 싹 다 바뀜!
+    # When thrown into the C++ kernel, the values ​​inside the logits_f32 array are completely changed to 'probs' values.
     c_lib.run_softmax_inplace(logits_f32, logits_f32.size, float(temperature))
     
-    probs = logits_f32 # 이름만 probs로 매핑
+    probs = logits_f32 # Map only names to probs
     #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
 
-    # Top-p sampling (이 부분도 나중에 C++로 넘길 수 있지만 일단 유지)
+    # Top-p sampling (this part can also be transferred to C++ later, but maintained for now)
     if top_p < 1.0:
         sorted_idx  = np.argsort(probs)[::-1]
         cumsum      = np.cumsum(probs[sorted_idx])
@@ -340,9 +340,9 @@ def print_ram_usage(step_name):
 def main():
     print_ram_usage("1. Before Model Load")
     
-    TEMPERATURE    = 0.65    # 0.3은 너무 딱딱해서 반복에 빠지기 쉬움. 0.6으로 상향!
+    TEMPERATURE    = 0.65    # 0.3 is too rigid and easy to fall into repetition. Upgraded to 0.6.
     TOP_P          = 0.9    
-    REP_PENALTY    = 1.15   # 1.02 -> 1.15 로 대폭 상향! (반복 루프 절대 방어)
+    REP_PENALTY    = 1.15   # Significant increase from 1.02 to 1.15! (repeat loop absolute defense)
     MAX_NEW_TOKENS = 2048   # Max sequence len
     KV_CACHE_DIM   = 512
 
@@ -353,13 +353,13 @@ def main():
     
 
 
-    print("[메모리] 가중치 VRAM 최적화 중...")
+    print("[Memory] Optimizing weighted VRAM...")
     FAST_MATRIX_CORE.preload_and_free(W, _IGPU_WEIGHT_KEYS)
     FAST_MATRIX_CORE._get_or_upload_weight(W_lm_head)
 
     print_ram_usage("2. After Model Load")
 
-    # 전체 대화 히스토리 (간단한 형태)
+    # Full conversation history (simple form)
     history_tokens = []
     #K_cache = [None for _ in range(35)]
     #V_cache = [None for _ in range(35)]
@@ -369,21 +369,21 @@ def main():
     cur_pos = 0
     print_ram_usage("3. After KV Cache Allocation")
 
-    print("\n--- 대화를 시작합니다 (종료: 'exit' 또는 'quit') ---")
+    print("\n--- Start conversation (end: 'exit' or 'quit') ---")
     while True:
         try:
             user_input = input("\nUser: ")
             if user_input.lower() in ["exit", "quit"]: break
             if not user_input.strip(): continue
 
-            # Chat Template 적용 (단순화)
+            # Apply Chat Template (simplification)
             prompt = f"<start_of_turn>user\n{user_input}<end_of_turn>\n<start_of_turn>model\n"
             input_tokens = CPU_CORE.tokenize(prompt)
             
             print("Model: ", end="", flush=True)
             
             xs = None
-            # Prefill (새로운 입력만 처리)
+            # Prefill (process only new input)
             for token_id in input_tokens:
                 xs = forward_one_token(token_id, cur_pos, W, W_embed, W_ple_packed, W_ple_scale, norm_ple,
                                        W_ple_proj, altup_projs, K_cache, V_cache)
@@ -408,15 +408,15 @@ def main():
                 
                 generated.append(next_token)
 
-                #  [수정] UTF-8 한글 잘림 방지 및 특수토큰(<unused>) 숨기기
-                # 지금까지 모인 전체 토큰을 디코딩하고, 특수 기호는 무시(skip)합니다.
+                # [Edit] Prevent truncation of UTF-8 Korean characters and hide special tokens (<unused>)
+                # Decode all tokens collected so far, skipping any special symbols.
                 current_text = CPU_CORE.tokenizer.decode(generated, skip_special_tokens=True)
                 
-                # 새로 추가된 부분(새 글자)만 잘라서 화면에 출력합니다.
+                # Only the newly added parts (new letters) are cut and displayed on the screen.
                 new_text = current_text[len(printed_text):]
                 print(new_text, end="", flush=True)
                 
-                # 출력한 텍스트 상태 업데이트
+                # Update the status of printed text
                 printed_text = current_text
 
                 xs = forward_one_token(next_token, cur_pos, W, W_embed, W_ple_packed, W_ple_scale,
@@ -431,7 +431,7 @@ def main():
             break
     print_ram_usage("5. After Generation")
 
-    print("\n[완료] 대화가 종료되었습니다.")
+    print("\n[Complete] The conversation has ended.")
 
 #import size_check
 
