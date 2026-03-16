@@ -6,8 +6,8 @@ import IGPU_CORE
 
 ACCEL_MODE = "IGPU"
 
-# IGPU 경로를 타는 레이어 큰 행렬 키 목록
-# preload_and_free가 이것들을 VRAM에 올린 뒤 float16 원본 해제
+# Layer big matrix key list that takes the IGPU route
+# free float16 original after preload_and_free loads them into VRAM
 _IGPU_WEIGHT_KEYS = ["W_q", "W_k", "W_v", "W_o", "W_gate", "W_up", "W_down"]
 
 def hw_matmul(x, w, use_gelu=False):
@@ -18,7 +18,7 @@ def hw_matmul(x, w, use_gelu=False):
         return CPU_CORE.gelu(out) if use_gelu else out
 
 def rms_norm(x, gamma):
-    # float32 (이전 최적화 유지)
+    # float32 (keep previous optimizations)
     x_f32 = x.astype(np.float32)
     rms   = np.sqrt(np.mean(x_f32 ** 2) + 1e-6)
     return (x_f32 / rms) * gamma
@@ -30,7 +30,7 @@ def get_router_modalities(x, w_norm, w_router):
 def forward_one_token(token_id, pos, W, W_embed, W_ple, norm_ple,
                       W_ple_proj, altup_projs, K_cache, V_cache):
 
-    x0 = CPU_CORE.embedding(token_id, W_embed)   # W_embed float16 → float32 변환 내부 처리
+    x0 = CPU_CORE.embedding(token_id, W_embed)   # W_embed float16 → float32 conversion internal processing
     xs = np.zeros((4, 2048), dtype=np.float32)
     xs[0] = x0
     for k in range(3):
@@ -39,12 +39,12 @@ def forward_one_token(token_id, pos, W, W_embed, W_ple, norm_ple,
     x_proj = np.dot(x0, W_ple_proj) / math.sqrt(2048.0)
     x_proj = x_proj.reshape(35, 256)
 
-    # pli_all 배치 계산 (이전 최적화 유지)
+    # pli_all batch calculation (keep previous optimization)
     x_proj_f32 = x_proj.astype(np.float32)
     rms_vals   = np.sqrt(np.mean(x_proj_f32 ** 2, axis=1, keepdims=True) + 1e-6)
     x_proj_normed = (x_proj_f32 / rms_vals) * norm_ple
 
-    # W_ple이 float16이어도 즉시 float32로 변환
+    # Even if W_ple is float16, it is immediately converted to float32
     y = W_ple[min(token_id, W_ple.shape[0] - 1)].astype(np.float32).reshape(35, 256) * math.sqrt(256.0)
     pli_all = (x_proj_normed + y) * (1.0 / math.sqrt(2.0))
 
@@ -57,9 +57,9 @@ def forward_one_token(token_id, pos, W, W_embed, W_ple, norm_ple,
         inputs_normalized = rms_norm(x, W["input_ln"][i])
 
         # ==========================================
-        # QKV 투영 및 RoPE
-        # W["W_q"][i] 등은 WeightProxy 또는 float16 배열
-        # igpu_matmul이 두 경우 모두 처리
+        # QKV projection and RoPE
+        # W["W_q"][i] etc is a WeightProxy or float16 array
+        # igpu_matmul handles both cases
         # ==========================================
         Q = hw_matmul(inputs_normalized, W["W_q"][i])
         K = hw_matmul(inputs_normalized, W["W_k"][i])
@@ -72,7 +72,7 @@ def forward_one_token(token_id, pos, W, W_embed, W_ple, norm_ple,
         K     = CPU_CORE.cpu_rope(K, pos=pos, theta_base=theta)
 
         # ==========================================
-        # KV 캐시 라우팅 (기존 로직 유지)
+        # KV cache routing (maintain existing logic)
         # ==========================================
         if i < 20:
             CPU_CORE.cpu_update_kv_cache(K, V, i, K_cache, V_cache)
@@ -118,13 +118,13 @@ def forward_one_token(token_id, pos, W, W_embed, W_ple, norm_ple,
         mod_corr   = get_router_modalities(activated, W["altup_rn"][i], W["altup_router"][i])
         corr_coefs = np.dot(W["altup_corr"][i], mod_corr) + 1.0
 
-        # 벡터화 (이전 최적화 유지)
+        # Vectorize (keep previous optimizations)
         xs_new = xs_pred + corr_coefs[:, np.newaxis] * innovation
 
         pli      = pli_all[i]
         gate_ple = CPU_CORE.gelu(np.dot(activated, W["ple_gate"][i])) * pli
         mapped   = rms_norm(np.dot(gate_ple, W["ple_proj"][i]), W["ple_post_ln"][i])
-        xs_new[1:] += mapped   # 브로드캐스트 (이전 최적화 유지)
+        xs_new[1:] += mapped   # Broadcast (maintains previous optimization)
 
         xs = xs_new
 
@@ -142,12 +142,12 @@ def decode_logits(xs, altup_unprojs, W_final_norm, W_lm_head):
     x_final = np.mean(np.stack(unembedded, axis=0), axis=0)
     x_final = rms_norm(x_final, W_final_norm)
 
-    #  메모리 최적화: W_lm_head가 float16 (1GB) → float32 (2GB) copy 제거
-    # x_final을 float16으로 내려 dot 계산 → 결과만 float32로 복원
-    # 임시 메모리: (vocab,) float16 = 512KB (기존 방식 대비 극도로 작음)
+    # Memory optimization: W_lm_head removes float16 (1GB) → float32 (2GB) copy
+    # Calculate dot by lowering x_final to float16 → restore only the result to float32
+    # Temporary memory: (vocab,) float16 = 512KB (extremely small compared to traditional methods)
     #logits = np.dot(x_final.astype(np.float16), W_lm_head).astype(np.float32)
     #logits -= np.max(logits)
-    #  수정된 부분: np.max(logits) 빼는 부분 삭제 (페널티 정상 작동을 위함)
+    # Modified part: Delete the part excluding np.max(logits) (for normal operation of penalty)
     logits = np.dot(x_final.astype(np.float16), W_lm_head).astype(np.float32)
     return logits
 
@@ -164,27 +164,27 @@ def main():
         W_final_norm, W_lm_head, W = safeTensor.load_local_weights()
 
     # ============================================================
-    #  핵심 메모리 최적화:
-    # 모든 IGPU 경로 가중치를 VRAM(INT16)에 선업로드 후 float16 원본 해제
-    # 효과: layers["W_q"][i] 등 float16 배열 ~3.5GB → WeightProxy(작은 객체)로 교체
+    # Core memory optimization:
+    # Upload all IGPU path weights to VRAM (INT16) and release float16 original.
+    # Effect: float16 array such as layers["W_q"][i] ~3.5GB → Replaced with WeightProxy (small object)
     # ============================================================
-    print("[메모리] IGPU 가중치 VRAM 선업로드 시작 (float16 원본 해제 예정)...")
+    print("[Memory] IGPU weighted VRAM pre-upload start (float16 original to be released)...")
     IGPU_CORE.preload_and_free(W, _IGPU_WEIGHT_KEYS)
 
-    prompt = "<start_of_turn>user\n안녕 하세요<end_of_turn>\n<start_of_turn>model\n"
+    prompt = "<start_of_turn>user\nHello<end_of_turn>\n<start_of_turn>model\n"
     input_tokens = CPU_CORE.tokenize(prompt)
 
-    #  KV 캐시 None 초기화 (cpu_update_kv_cache가 None 여부로 최초/concat 판단)
+    # Initialize KV cache to None (initial/concat judgment based on whether cpu_update_kv_cache is None)
     K_cache = [None for _ in range(35)]
     V_cache = [None for _ in range(35)]
 
-    print(f"Prefill: {len(input_tokens)} 토큰 처리 중...")
+    print(f"Prefill: {len(input_tokens)} processing tokens...")
     xs = None
     for pos, token_id in enumerate(input_tokens):
         xs = forward_one_token(token_id, pos, W, W_embed, W_ple, norm_ple,
                                W_ple_proj, altup_projs, K_cache, V_cache)
 
-    print("\n[생성 시작]")
+    print("\n[Start creation]")
     print(prompt, end="", flush=True)
 
     STOP_TOKENS = [1, 106]
@@ -208,7 +208,7 @@ def main():
         next_token = _sample(logits, TEMPERATURE, TOP_P, REP_PENALTY, generated)
         cur_pos   += 1
 
-    print(f"\n\n[완료] 총 {len(generated)}개 토큰 생성")
+    print(f"\n\n[Complete] Generate a total of {len(generated)} tokens")
 
 def _sample(logits: np.ndarray, temperature: float, top_p: float,
             rep_penalty: float, generated: list) -> int:

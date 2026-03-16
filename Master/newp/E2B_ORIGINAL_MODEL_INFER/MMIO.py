@@ -1,7 +1,7 @@
 import numpy as np
 import sys
 
-#  PC 시뮬레이션 모드 토글 (보드 오면 False로 변경!)
+# Toggle PC simulation mode (change to False when board arrives!)
 SIMULATION_MODE = True
 
 if not SIMULATION_MODE:
@@ -23,7 +23,7 @@ else:
     npu_control = None
     dma = None
     
-    # pynq allocate 대신 일반 Numpy 메모리 할당 (cudaMallocHost 대신 일반 malloc 쓰는 격)
+    # Allocate regular Numpy memory instead of pynq allocate (equivalent to using regular malloc instead of cudaMallocHost)
     ping_token  = np.zeros((32,), dtype=np.int16)
     ping_weight = np.zeros((32, 32), dtype=np.int16)
     pong_token  = np.zeros((32,), dtype=np.int16)

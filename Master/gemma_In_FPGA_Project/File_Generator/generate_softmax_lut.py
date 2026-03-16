@@ -1,41 +1,41 @@
 import numpy as np
 
 def generate_softmax_frac_lut(filename="softmax_frac.mem"):
-    print(" Softmax 2^x (소수부) 1024분할 BRAM 컨닝페이퍼 생성 시작...")
+    print(" Start creating Softmax 2^x (decimal part) 1024 division BRAM cheat sheet...")
 
     NUM_ENTRIES = 1024
 
-    #  하드웨어 스케일링 팩터 (Q1.15 포맷)
-    # 1.0이라는 숫자를 하드웨어의 32768 (2^15)로 뻥튀기!
-    # 왜냐? 2^0.999... 는 거의 2.0에 가까우므로,
-    # 2.0 * 32768 = 65536 이 되어 16비트(0~65535) 통에 소름 돋게 딱 꽉 차게 들어감!
+    # Hardware scaling factor (Q1.15 format)
+    # The number 1.0 is changed to 32768 (2^15) in hardware.
+    # Why? Since 2^0.999... is close to 2.0,
+    # 2.0 * 32768 = 65536, which fills the 16-bit (0~65535) box to a scary degree.
     SCALE_FACTOR = 32768.0
 
     hex_list = []
 
     for i in range(NUM_ENTRIES):
-        # 1. 구간 인덱스(0~1023)를 0.0 ~ 0.999... 의 소수점 값으로 변환
+        # 1. Convert the interval index (0 to 1023) to a decimal value of 0.0 to 0.999...
         frac_val = i / float(NUM_ENTRIES)
 
-        # 2. 2^(소수부) 정답 계산 (결과는 1.0 ~ 1.999... 사이로 나옴)
+        # 2. Calculate the correct answer with 2^(decimal part) (results are between 1.0 and 1.999...)
         y = np.power(2.0, frac_val)
 
-        # 3. 하드웨어 정수(16비트)로 스케일링 및 반올림
+        # 3. Scaling and rounding to hardware integer (16 bits)
         int_y = int(np.round(y * SCALE_FACTOR))
 
-        # 4. 16비트 Unsigned 범위(0 ~ 65535)로 클리핑 (오버플로우 방지)
+        # 4. Clipping to 16-bit Unsigned range (0 to 65535) (overflow prevention)
         int_y = int(np.clip(int_y, 0, 65535))
 
-        # 5. 4자리 Hex 문자열로 이쁘게 포장
+        # 5. Beautifully packaged with 4-digit hex string
         hex_list.append(f"{int_y & 0xFFFF:04X}")
 
-    # 파일로 굽기
+    # Burn to file
     with open(filename, 'w') as f:
         for h in hex_list:
             f.write(f"{h}\n")
 
-    print(f" 2^x 소수부 컨닝페이퍼(16-bit) {NUM_ENTRIES}개 저장 완료! -> {filename}")
-    print(" 이제 FPGA는 e^x 지수함수를 덧셈과 시프트만으로 씹어먹습니다!")
+    print(f" 2^x decimal cheat sheet (16-bit) {NUM_ENTRIES} saved! -> {filename}")
+    print("Now the FPGA eats the e^x exponential function with just addition and shift!")
 
 if __name__ == "__main__":
     generate_softmax_frac_lut()

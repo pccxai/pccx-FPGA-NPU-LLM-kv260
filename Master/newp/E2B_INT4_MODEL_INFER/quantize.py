@@ -5,9 +5,9 @@ from safetensors.torch import load_file, save_file
 import gc
 import glob
 
-# 설정
+# setting
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-# E2B 원본 모델 경로
+# E2B Source Model Path
 ORIGINAL_MODEL_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "E2B_ORIGINAL_MODEL_INFER", "[Original Model]gemma3NE2B"))
 SAVE_DIR = os.path.join(BASE_DIR, "local_gemma_3n_int4")
 
@@ -62,7 +62,7 @@ def main():
         quantized_tensors = {}
         
         for name, tensor in tensors.items():
-            # 텍스트 모델 가중치만 처리
+            # Process only text model weights
             if "language_model" not in name:
                 continue
 

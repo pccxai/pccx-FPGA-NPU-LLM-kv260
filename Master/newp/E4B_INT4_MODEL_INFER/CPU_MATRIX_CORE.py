@@ -2,14 +2,14 @@ import numpy as np
 import os
 import ctypes
 
-# Taichi 제거됨!
+# Taichi eliminated.
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
 dll_path = os.path.join(base_dir, "C_DLL", "my_accelerator.so")
 c_lib = ctypes.CDLL(dll_path)
 
 # ================================================================
-# C++ DLL 파라미터 세팅
+# C++ DLL parameter setting
 # ================================================================
 c_lib.run_gemv_int4.argtypes = [
     np.ctypeslib.ndpointer(dtype=np.float32, ndim=1, flags='C_CONTIGUOUS'), # vec
@@ -31,7 +31,7 @@ c_lib.run_gemv_int4_gelu.argtypes = [
 ]
 c_lib.run_gemv_int4_gelu.restype = None
 
-# 출력 버퍼 풀 (메모리 재할당 방지)
+# Output buffer pool (avoid memory reallocation)
 _OUTPUT_BUF_POOL = {}
 
 def _get_output_buf(size: int) -> np.ndarray:
@@ -40,32 +40,32 @@ def _get_output_buf(size: int) -> np.ndarray:
     return _OUTPUT_BUF_POOL[size]
 
 # ================================================================
-# 인터페이스 유지 (기존 호환성을 위해 이름만 남김)
+# Maintain interface (only name remains for legacy compatibility)
 # ================================================================
 def preload_and_free(W: dict, keys: list):
-    print("[CPU_GEMV] Taichi 제거됨. RAM에서 직접 C++ SIMD 코어 6개 풀가동 모드 준비 완료!")
+    print("[CPU_GEMV] Taichi removed. Six C++ SIMD cores directly from RAM ready for full operation mode!")
     pass
 
 def _get_or_upload_weight(weight_data):
     pass
 
 # ================================================================
-#  C++ 기반 초고속 멀티코어 행렬곱 연산
+# C++-based ultra-fast multi-core matrix multiplication operation
 # ================================================================
 def igpu_matmul(x_vec: np.ndarray, weight_data) -> np.ndarray:
     x_f32 = np.ascontiguousarray(x_vec.astype(np.float32))
     
     if isinstance(weight_data, tuple):
-        # INT4 처리
+        # INT4 processing
         packed, scale = weight_data
         M_out = packed.shape[0]
         K_in = packed.shape[1] * 2
         
         out_buf = _get_output_buf(M_out)
         c_lib.run_gemv_int4(x_f32, packed, scale, out_buf, M_out, K_in)
-        return out_buf.copy() # 원본 보존을 위해 copy 반환
+        return out_buf.copy() # Return a copy to preserve the original
     else:
-        # Fallback (일반 행렬곱)
+        # Fallback (general matrix multiplication)
         w_f32 = np.ascontiguousarray(weight_data.astype(np.float32))
         return np.dot(x_f32, w_f32.T)
 
@@ -73,7 +73,7 @@ def igpu_matmul_gelu(x_vec: np.ndarray, weight_data) -> np.ndarray:
     x_f32 = np.ascontiguousarray(x_vec.astype(np.float32))
     
     if isinstance(weight_data, tuple):
-        # INT4 + GeLU 퓨전 처리
+        # INT4 + GeLU fusion processing
         packed, scale = weight_data
         M_out = packed.shape[0]
         K_in = packed.shape[1] * 2
@@ -85,14 +85,14 @@ def igpu_matmul_gelu(x_vec: np.ndarray, weight_data) -> np.ndarray:
         # Fallback
         w_f32 = np.ascontiguousarray(weight_data.astype(np.float32))
         out = np.dot(x_f32, w_f32.T)
-        # 파이썬 C_DLL GeLU 호출 (이미 CPU_CORE 쪽에 세팅되어 있지만 편의상 수동 호출 생략)
+        # Python C_DLL GeLU call (already set on CPU_CORE side, but manual call is omitted for convenience)
         import CPU_CORE
         return CPU_CORE.gelu(out)
 
 def warmup():
-    print("[CPU_GEMV] 멀티코어 AVX2 SIMD 엔진 워밍업 중...")
+    print("[CPU_GEMV] Warming up multicore AVX2 SIMD engine...")
     dummy_x = np.zeros(2048, dtype=np.float32)
     dummy_p = np.zeros((2048, 1024), dtype=np.uint8)
     dummy_s = np.zeros(2048, dtype=np.float32)
     igpu_matmul(dummy_x, (dummy_p, dummy_s))
-    print("[CPU_GEMV] 워밍업 완료! 코어 6개 장전 완료 ")
+    print("[CPU_GEMV] Warm-up complete! 6 cores loaded ")
