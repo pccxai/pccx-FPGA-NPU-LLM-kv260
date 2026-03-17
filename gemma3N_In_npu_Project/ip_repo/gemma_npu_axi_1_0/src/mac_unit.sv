@@ -17,13 +17,13 @@ module pe_unit (
     output logic signed [47:0] o_acc 
 );
     // 4 int4 x 4 int4 = 32bit (carry bitX <- overflow = 0)
-    '''
+    /*
     Pre-Adder: Receives two inputs and performs 27-bit addition/subtraction
 
     Multiplier: Multiplies the Pre-Adder result (27 bits) with another input (18 bits)
 
     ALU (Accumulator/Adder/Subtractor): Receives multiplication result (up to 45 bits) and performs 48-bit accumulation/operation
-    '''
+    */
     
     always_ff @(posedge clk) begin
         if (!rst_n || i_clear) begin
