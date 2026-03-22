@@ -1,43 +1,58 @@
-# TinyNPU-Vulkan-Engine: Bare-metal LLM Accelerator
+# TinyNPU-Gemma: Bare-Metal Gemma 3N LLM Accelerator on FPGA
 
-![Vulkan](https://img.shields.io/badge/Vulkan-Raw_API-red?logo=vulkan)
-![C++](https://img.shields.io/badge/C++-17-blue?logo=c%2B%2B)
-![Python](https://img.shields.io/badge/Python-3.x-yellow?logo=python)
-![Hardware](https://img.shields.io/badge/Target-FPGA_KV260-orange)
+## Project Overview
 
-This project is a bare-metal hardware acceleration simulator for Large Language Model (LLM, Gemma 3N INT4) inference, built entirely from scratch without relying on high-level deep learning frameworks.
+TinyNPU-Gemma is a custom SystemVerilog-based Neural Processing Unit (NPU) engineered specifically to accelerate a quantized Gemma 3N (E2B/E4B) Large Language Model on the Xilinx Kria KV260 FPGA. The architecture is meticulously designed to push the physical constraints of the KV260 platform, which is equipped with 1,248 DSP48E2 slices and 144 Block RAMs (BRAMs).
 
-Designed with future FPGA (Xilinx KV260) and NPU (Neural Processing Unit) deployment in mind, this engine analyzes hardware memory bottlenecks at the software (C++/Vulkan) level and fully verifies the HLS Dataflow pipeline through simulation.
+This project encompasses a full-stack hardware-software co-design approach, integrating a SystemVerilog hardware accelerator, Python-based Golden Models for Trace-Driven Verification, CPU SIMD optimizations, and a high-performance AXI Direct Memory Access (AXI DMA) pipeline.
 
-## Key Optimizations
+## System Architecture and Components
 
-To push the physical limits (Memory Bandwidth) of an integrated GPU (AMD Ryzen 4500U with Radeon Vega 6) in a UMA (Unified Memory Architecture) environment, the following optimization techniques were applied:
+### 1. SystemVerilog NPU and Hardware Acceleration
 
-### 1. Raw Vulkan Compute Shader & Zero-Copy Memory
-* Replaced heavy Python/Taichi wrappers with direct Raw Vulkan API control in C++.
-* Mapped Zero-Copy Persistent Buffers using `VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT`, effectively reducing VRAM data transfer overhead (`memcpy`) between the CPU (RAM) and iGPU to near zero.
+The core of the accelerator is implemented in SystemVerilog, featuring a highly optimized **32x32 Systolic Array MAC Engine**. This engine is tailored to maximize the utilization of the Xilinx DSP48E2 slices, executing low-precision INT8/INT4 matrix multiplications with high throughput.
 
-### 2. 128-bit Vectorized Memory Access (uvec4)
-* To resolve the iGPU's `Texture Addresser` bottleneck, memory access within the GLSL compute shader was vectorized from 32-bit (4-byte) units to 128-bit (`uvec4`, 16-byte) units.
-* Maximized the efficiency of the GPU memory controller, reaching the physical bandwidth limit.
+To alleviate memory bandwidth bottlenecks, the NPU employs **Dual-Port Ping-Pong BRAMs** with a 512-bit wide data path. This configuration packs the upper 256-bit weights and lower 256-bit activations, enabling parallel read and write operations that perfectly hide memory copy latency behind hardware computation time.
 
-### 3. Asynchronous Ping-Pong Double Buffering (Dataflow)
-* Implemented a Ping-Pong Buffer structure to simulate `#pragma HLS DATAFLOW` behavior in software.
-* Utilized C++ `std::async` background threads. While the iGPU performs matrix multiplication with Buffer A, the CPU prefetches the next weight matrix into Buffer B. This perfectly hides memory copy latency behind hardware computation time.
+Furthermore, custom hardware accelerators have been developed for critical non-linear functions:
+*   **RMSNorm Accelerator:** Executes in 1 clock cycle.
+*   **GeLU Accelerator:** Executes in 1 clock cycle.
+*   **Softmax Accelerator:** Executes in 3 clock cycles.
 
-### 4. Static KV Caching (Zero-Allocation)
-* To prevent dynamic memory reallocation overhead and memory leaks in Python as the context length grows, a massive static cache buffer is pre-allocated during the initial model load.
+### DSP48E2 Architecture Utilization
 
----
+The Systolic Array heavily relies on the DSP48E2 blocks to perform multiply-accumulate (MAC) operations efficiently.
 
-## Hardware Profiling Results
+![DSP48E2 Architecture](IMG_2852.jpeg)
+*Figure 1: Internal architecture of the DSP48E2 slice utilized for the Systolic Array MAC Engine.*
 
-Profiling on the AMD Ryzen 4500U proves that the engine perfectly reached the physical memory bandwidth limit (Memory Bound):
+### 2. AXI Direct Memory Access (AXI DMA)
 
-* Memory Clock: 82.14% (RAM is operating at peak speed to feed weights to the GPU).
-* Texture Addresser: 62.50% (Significantly stabilized from 80% after the 128-bit `uvec4` optimization).
-* Shader Clock: 13.56% (The iGPU computation cores are highly optimized and waiting for data, demonstrating an absolute Memory Wall).
-* VRAM Usage: 19.15% (Minimal VRAM footprint achieved via Zero-Copy).
+Data movement between the Processing System (PS) and Programmable Logic (PL) is orchestrated via a high-performance **AXI DMA** interface. The DMA engine manages high-speed, zero-copy data transfers between the host CPU memory and the NPU's internal BRAMs. By utilizing stream-based communication, the AXI DMA ensures that the Systolic Array is continuously fed with weights and activations, preventing pipeline stalls and reaching the physical memory bandwidth limits of the system.
+
+### 3. CPU SIMD Optimizations and Python Golden Model
+
+The software stack includes a highly optimized Python environment responsible for model quantization, preprocessing, and trace generation.
+To accelerate software-side preprocessing and inference emulation, we leverage **CPU SIMD (Single Instruction, Multiple Data)** instructions and vectorized memory access patterns.
+
+The bit-width strategy utilizes INT8/INT4 quantization for inputs and weights, maintaining intermediate 16-bit or 32-bit accumulation to prevent overflow before requantization.
+
+Hardware verification relies strictly on **Trace-Driven Verification**, requiring a bit-true match (0% error rate) between the SystemVerilog RTL simulation and a Python (NumPy/PyTorch) golden model.
+
+### 4. Gemma 3N Architecture Specifics
+
+The accelerator is specifically tuned for the idiosyncratic architectural features of the Gemma 3N E4B/E2B model:
+
+*   **AltUp Router:** The router mixes four multi-streams (xs[0] to xs[3]). It applies a hyperbolic tangent scaling scaled by dimension (Tanh(Norm(x)/2048)*W), leaving the main stream (xs[0]) untouched.
+*   **RMSNorm Optimization:** The RMSNorm implementation enforces scale_plus_one=False, ensuring no arbitrary +1.0 is added to the weights, strictly conforming to the Gemma specification.
+*   **Top-K Extraction:** The software stack employs numpy.argpartition instead of numpy.argsort for Top-K extraction during sequence generation. This reduces algorithmic complexity from O(N log N) to O(N), significantly enhancing generation speed.
+*   **Gaussian Top-K Sparsity:** Feed-Forward Network (FFN) layers 0-9 apply Gaussian Top-K Sparsity (0.95), effectively zeroing out the bottom 95% via ReLU to induce sparse activation.
+*   **Cache Reusability:** Layers 20-34 bypass local KV cache updates, forcefully reusing caches from Layer 18 (Local) and Layer 19 (Global) to drastically reduce memory footprint.
+
+## Verification and Testing
+
+All hardware modules have been verified via Trace-Driven Verification. The verification suite ensures bit-exact equivalence between the Python Golden Model and the SystemVerilog RTL output.
 
 ## Future Work
-* Based on the Ping-Pong Buffer and Vectorized Memory Access architectures verified in this project, the codebase will be ported to C++ and synthesized into RTL targeting the Xilinx KV260 FPGA.
+
+Future revisions will focus on deploying the synthesized RTL on the physical Xilinx Kria KV260 board, integrating bare-metal C++ drivers to manage the AXI DMA pipeline, and evaluating end-to-end inference latency.
