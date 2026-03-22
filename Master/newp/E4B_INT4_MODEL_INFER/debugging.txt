@@ -13,3 +13,15 @@ Gemma 3N E4B 모델을 INT4로 양자화하여 로컬 환경(3GB VRAM)에서 구
 4. IGPU_CORE.py에 _gemv_int4 커널을 추가하여 VRAM에서 즉시 unpacking 및 연산 수행.
 5. CPU_CORE.py의 embedding 함수를 수정하여 quantized W_embed 지원.
 6. 결과: "안녕하세요! 😊 무엇을 도와드릴까요?..." 와 같이 매우 논리적이고 문맥에 맞는 한글 답변 생성 성공. 3GB VRAM 한계 내에서 정상 작동 확인.
+
+
+[시도한 내용] 
+KV260 NPU V2 아키텍처 연동 계획 수립. 
+1단계: 5개 DMA (FMAP 1개, Weight 4개) 및 AXI GPIO 제어를 위한 I/O 테스트 파이썬 스크립트 작성 (NPU_IO_TEST.py).
+2단계: I/O 테스트 완료 후 모델(NPU_CORE.py) 연산 대체 적용.
+
+[발생한 문제/에러 로그] 
+(테스트 진행 대기 중)
+
+[해결 방법 및 결과] 
+(테스트 진행 대기 중)

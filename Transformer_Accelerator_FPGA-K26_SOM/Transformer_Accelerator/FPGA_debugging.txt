@@ -1,0 +1,51 @@
+[시도한 내용]
+1. Vivado V2 Architecture (NPU_top) 합성을 위한 Block Design 재생성 및 에러 수정.
+2. 지하 1층 누적기 `stlc_accumulator.sv`의 DSP48E2 Primitive에서 AREG와 ACASCREG 불일치 DRC 에러 발생하여 0으로 통일함.
+3. KV260 보드에 비트스트림 이식을 위한 네트워크(IP) 연결 셋업 시도 중.
+
+[발생한 문제/에러 로그]
+1. `module 'NPU' not found` 에러 (Vivado 빌드 캐시 꼬임)
+2. `[DRC AVAL-153] DSP48E2_AregAcascreg` 에러 (AREG=0 인데 ACASCREG가 기본값으로 묶여 발생)
+3. KV260 보드 `ip a` 결과 `eth0` 인터페이스가 UP 상태이나 DHCP(192.168.x.x) IP를 받아오지 못함 (`dhclient` 명령어 없음).
+
+[해결 방법 및 결과]
+1. Vivado TCL 스크립트를 통해 `reset_target all` 및 `generate_target`으로 캐시 날리고 Output Products 재생성. -> (해결)
+2. `stlc_accumulator.sv`에서 `.ACASCREG(0), .BCASCREG(0)` 속성을 명시적으로 0으로 맵핑하여 해결 후 Bitstream 재합성 중. -> (해결)
+3. 네트워크 문제 해결을 위해 `netplan`, `systemctl`, `udhcpc` 사용 혹은 고정 IP 할당 방식을 시도할 예정. -> (진행 중)[시도한 내용]\n보드와 PC간 네트워크 연결(고정 IP 설정) 완료. ping 통신 성공.\n[발생한 문제/에러 로그]\n없음\n[해결 방법 및 결과]\n192.168.0.250 할당 성공. 이제 비트스트림 추출만 기다리면 됨.
+[시도한 내용]\n보드로 NPU_IO_TEST.py 전송 시도\n[발생한 문제/에러 로그]\nscp 명령어 오타(줄바꿈)로 인한 구문 오류 및 Permission denied 발생\n[해결 방법 및 결과]\n터미널에서 한 줄로 이어서 치도록 안내 예정
+[시도한 내용]\nPC에서 보드(192.168.0.250)로 scp 전송 시도\n[발생한 문제/에러 로그]\nssh: connect to host 192.168.0.250 port 22: Connection timed out\n[해결 방법 및 결과]\n1. PC의 이더넷 어댑터 IP 대역 확인 (192.168.0.x 대역에 있는지)\n2. 보드의 IP가 날아갔는지 재확인 필요
+[시도한 내용]\nPC 측 네트워크 인터페이스 확인.\n[발생한 문제/에러 로그]\nPC에는 무선 랜(wlp1s0, 172.30.1.40)만 보이고, 유선 랜(이더넷) 어댑터가 보이지 않음.\n[해결 방법 및 결과]\n보드와 PC를 직결할 물리적 유선 이더넷 포트(USB to LAN 등)가 인식되지 않은 상태임을 안내.
+[시도한 내용]\nPC는 와이파이(172.30.1.40) 사용 중, KV260 보드는 유선으로 동일 공유기에 연결된 구조 파악\n[발생한 문제/에러 로그]\n보드에서 ip 할당을 받지 못하고 PC에서 보드로의 네트워크 경로가 불일치\n[해결 방법 및 결과]\n1. 보드에서 동일 공유기 대역(172.30.1.x)으로 IP를 받도록 재설정 필요\n2. 보드 터미널에서 udhcpc 또는 강제 IP(172.30.1.250) 할당 시도 제안
+[시도한 내용]\nKV260 보드에 PC 대역에 맞춰 172.30.1.250 강제 할당 및 PC에서 ping 테스트\n[발생한 문제/에러 로그]\nDestination Host Unreachable (100% packet loss)\n[해결 방법 및 결과]\n보드가 아직 공유기 게이트웨이를 찾지 못했거나 공유기 설정 상 통신이 막혀있음. USB 콘솔을 통해 직접 파일을 생성(복붙)하는 방향으로 최종 선회.
+[시도한 내용]\nVivado Bitstream 생성 성공 확인. DSP 사용량(Utilization) 분석.\n[발생한 문제/에러 로그]\n예상 DSP 사용량: 32x32(1024) + 32(ACC) = 1056개\n실제 합성(Synthesis) 후: 990개\n실제 배선(Implementation) 후: 759개\n-> Vivado의 최적화(opt_design) 과정에서 약 297개의 DSP가 날아감(Pruning).\n[해결 방법 및 결과]\n원인 분석 중. Dummy Data 연결, 상/하단 Edge 케이스 미연결 등으로 인한 자동 최적화 가능성 추정.
+[시도한 내용]\nPC에서 Python http.server 오픈 후 보드에서 wget으로 파일 수신 시도\n[발생한 문제/에러 로그]\nConnecting to 172.30.1.40:8000... failed: No route to host.\n[해결 방법 및 결과]\n보드 쪽 네트워크가 아직도 172.30.1.x 대역 게이트웨이를 찾지 못하거나, PC의 방화벽이 차단한 상태. ZMODEM (sz/rz) 방식 전송 고려 중.
+[시도한 내용]\nPC에서 Python http.server 오픈 후 보드에서 wget으로 파일 수신 시도\n[발생한 문제/에러 로그]\nConnecting to 172.30.1.40:8000... failed: No route to host.\n[해결 방법 및 결과]\n보드 쪽 네트워크가 아직도 172.30.1.x 대역 게이트웨이를 찾지 못하거나, PC의 방화벽이 차단한 상태. ZMODEM (sz/rz) 방식 전송 고려 중.
+[시도한 내용]\n네트워크 기반 파일 전송(scp, http.server, wget) 모두 실패 후 USB 메모리 드라이브 사용으로 전환\n[발생한 문제/에러 로그]\nN/A\n[해결 방법 및 결과]\n보드에 USB 메모리 마운트 후 NPU_wrapper.bit / .hwh 복사 시도 예정
+[시도한 내용]\nKV260 보드에 USB 메모리 마운트 시도\n[발생한 문제/에러 로그]\nmount: /mnt/usb: special device /dev/sda1 does not exist. (USB가 sda1으로 잡히지 않음)\n[해결 방법 및 결과]\nlsblk 명령어로 정확한 파티션 이름(sdb1, sdc1 등) 확인 후 재마운트 안내 예정
+[시도한 내용]\nKV260 보드에 USB 메모리 마운트 재시도 (mmcblk1)\n[발생한 문제/에러 로그]\nmount: /mnt/usb: /dev/mmcblk1 already mounted or mount point busy. (mmcblk1은 보드의 기본 SD카드 파티션임)\n[해결 방법 및 결과]\nmmcblk1은 운영체제가 돌아가는 SD카드이므로 USB가 아님을 인지. USB 파티션(sda1, sdb1 등)을 찾도록 안내.
+[시도한 내용]\nUSB 마운트 성공 및 NPU_wrapper.bit, NPU_wrapper.hwh, NPU_IO_TEST.py 보드에 세팅 완료\n[발생한 문제/에러 로그]\n없음\n[해결 방법 및 결과]\n파일 복사 성공. 이제 Python 스크립트 실행으로 5-DMA 및 GPIO I/O 통신 테스트 진입 대기.
+[시도한 내용]\n보드에서 sudo python3 NPU_IO_TEST.py 실행 시도\n[발생한 문제/에러 로그]\nModuleNotFoundError: No module named 'numpy'\n[해결 방법 및 결과]\nPYNQ 이미지는 보통 pynq 가상환경이 묶여있거나 기본 python이 아닌 특정 경로의 python에 라이브러리가 존재. kria 보드의 pynq 구동 환경 파악 후 올바른 python 실행 명령어 안내.
+[시도한 내용]\n보드 내에 내장된 PYNQ 가상환경 파이썬 탐색 및 실행 시도\n[발생한 문제/에러 로그]\n/usr/local/share/pynq-venv 등 기본 경로 부재. User가 Docker 컨테이너 내부에 환경(Ubuntu 22.04 + PYNQ)을 세팅했을 가능성 제기.\n[해결 단서]\nKria KV260의 경우 Xilinx 공식 Kria-PYNQ 이미지가 Docker 컨테이너 형태로 배포됨.\n[해결 방법 및 결과]\n보드에서 Docker 컨테이너 목록 확인 후 해당 컨테이너 내부로 진입(exec)하여 스크립트 실행 안내 예정.
+[시도한 내용]\n도커 컨테이너(npu_env) 내부로 비트스트림 및 스크립트 복사 시도\n[발생한 문제/에러 로그]\nno such directory\ntime=... level=error msg="Can't add file /home/ubuntu/NPU.hwh to tar: io: read/write on closed pipe"\n[해결 방법 및 결과]\n1. 복사하려는 대상 경로(/home/xilinx/jupyter_notebooks/)가 npu_env 컨테이너 내부에 존재하지 않음.\n2. 보드 호스트 쪽의 파일 이름 오타(NPU.hwh -> NPU_wrapper.hwh) 가능성 확인 후, 컨테이너의 루트(/)나 /workspace 같은 범용 폴더로 복사하도록 안내.
+[시도한 내용]\n도커 컨테이너(npu_env) 내부로 진입하여 NPU_IO_TEST.py 실행\n[발생한 문제/에러 로그]\n여전히 ModuleNotFoundError: No module named 'numpy' 발생\n[해결 방법 및 결과]\n1. npu_env 컨테이너가 PYNQ 공식 이미지가 아닌 깡통 우분투 기반일 가능성 높음.\n2. 보드가 인터넷에 연결되어 있지 않으므로 apt나 pip로 numpy를 설치할 수 없는 최악의 고립 상태.\n3. 해결책: PC에서 인터넷을 통해 numpy 바이너리(.whl)를 다운받고 USB로 옮겨서 오프라인 설치 시도 혹은 보드의 인터넷 문제 해결.
+[시도한 내용]\n보드 인터넷 연결 시도\n[발생한 문제/에러 로그]\nN/A\n[해결 방법 및 결과]\n공유기 대역과 맞춰서 DHCP 혹은 수동 IP 할당 및 DNS 설정 가이드 예정
+[시도한 내용]\n보드 인터넷 연결을 위해 systemd-networkd 재시작 및 eth0 up/down\n[발생한 문제/에러 로그]\neth0가 여전히 IP를 받아오지 못함 (inet 항목 없음)\n[해결 방법 및 결과]\nNetplan 설정 파일 확인 및 강제 DHCP 적용 시도 혹은 dhclient 수동 설치 방안 모색
+[시도한 내용]\nNetplan 설정 파일 생성 및 강제 DHCP 설정\n[발생한 문제/에러 로그]\nInvalid YAML: inconsistent indentation:\n[해결 방법 및 결과]\nYAML 파일은 들여쓰기(스페이스)와 콜론 뒤 띄어쓰기에 매우 민감함. 사용자가 터미널에 붙여넣는 과정에서 띄어쓰기가 어긋남. 정확한 스페이싱으로 다시 작성 안내.
+[시도한 내용]\nNetplan 설정 파일 올바른 들여쓰기로 재작성 및 적용\n[발생한 문제/에러 로그]\n없음\n[해결 방법 및 결과]\neth0 인터페이스에 DHCP로 정상적으로 172.30.1.81 IP가 할당됨. 보드 인터넷 연결 성공!
+[시도한 내용]\n도커 컨테이너 내부로 진입하여 인터넷(Numpy 설치) 준비\n[발생한 문제/에러 로그]\nN/A\n[해결 방법 및 결과]\n보드 인터넷이 뚫렸으므로, npu_env 컨테이너 안으로 들어가 pip install numpy를 실행할 예정
+[시도한 내용]\n도커 컨테이너(npu_env) 내부에서 pip install numpy 실행\n[발생한 문제/에러 로그]\nTemporary failure in name resolution (DNS 서버를 찾지 못해 도메인 이름을 IP로 바꾸지 못함)\n[해결 방법 및 결과]\n보드 호스트는 인터넷이 되지만, 도커 내부 컨테이너는 DNS(resolv.conf) 설정을 물려받지 못했음. 도커 내부의 /etc/resolv.conf 에 구글 DNS(8.8.8.8)를 수동으로 추가하여 해결 안내 예정.
+[시도한 내용]\n도커 컨테이너 내부 resolv.conf에 nameserver 8.8.8.8 추가 후 pip install 재시도\n[발생한 문제/에러 로그]\n여전히 Temporary failure in name resolution 에러 지속\n[해결 방법 및 결과]\n도커 데몬 자체가 보드의 바뀐 네트워크 인터페이스를 반영하지 못해 내부 브릿지 네트워크가 단절된 상태. 도커 컨테이너를 재시작(restart)하거나 Docker 서비스 자체를 재시작해야 함을 안내.
+[시도한 내용]\n도커 데몬 재시작 후 npu_env 내에서 pip install numpy 재시도\n[발생한 문제/에러 로그]\n여전히 Temporary failure in name resolution 발생. 컨테이너 내 ping 명령어조차 없음.\n[해결 방법 및 결과]\n도커 컨테이너(npu_env)가 외부 네트워크 브릿지와 완전히 격리된 설정(예: --network none)으로 생성되었거나, 브릿지 라우팅이 꼬인 상태. 이 네트워크 트러블슈팅에 시간을 더 쏟기보다, PC에서 .whl을 다운받아 오프라인으로 설치하는 가장 확실한 방법(Plan B)으로 선회.
+[시도한 내용]\n사용자가 도커 인터넷 연결을 포기하지 않고 뚫기로 결정함.\n[발생한 문제/에러 로그]\nN/A\n[해결 방법 및 결과]\n도커 네트워크 브릿지 점검, 컨테이너 네트워크 모드 확인, 그리고 host 네트워크 모드로 컨테이너를 재생성하는 방법 제안 등 도커 네트워크 트러블슈팅 진행 예정.
+[시도한 내용]\n--network host 옵션으로 도커 컨테이너 재생성 및 인터넷 연결 성공 (apt update 성공으로 추정)\n[발생한 문제/에러 로그]\npip: command not found\n[해결 방법 및 결과]\n깡통 우분투 이미지는 기본적으로 python3-pip가 설치되어 있지 않음. apt-get install python3-pip 실행 후 numpy 설치 안내 예정.
+[시도한 내용]\n--network host 옵션으로 도커 컨테이너 재생성 및 인터넷 연결 성공 (apt update 성공으로 추정)\n[발생한 문제/에러 로그]\npip: command not found\n[해결 방법 및 결과]\n깡통 우분투 이미지는 기본적으로 python3-pip가 설치되어 있지 않음. apt-get install python3-pip 실행 후 numpy 설치 안내 예정.
+[시도한 내용]\n도커 컨테이너 내부에서 apt update 실행\n[발생한 문제/에러 로그]\nTemporary failure resolving 'ports.ubuntu.com'\n[해결 방법 및 결과]\n--network host 옵션을 주었음에도 불구하고 도커 내부의 DNS resolving이 실패함. 호스트 OS(Kria 보드) 측의 DNS 설정이 Docker daemon에 제대로 전파되지 않은 고질적인 문제. 도커 내부 /etc/resolv.conf 에 구글 DNS를 다시 추가해주는 방법으로 우회 제안.
+[시도한 내용]\n도커 컨테이너 내부에서 apt update 실행\n[발생한 문제/에러 로그]\nTemporary failure resolving 'ports.ubuntu.com'\n[해결 방법 및 결과]\n--network host 옵션을 주었음에도 불구하고 도커 내부의 DNS resolving이 실패함. 호스트 OS(Kria 보드) 측의 DNS 설정이 Docker daemon에 제대로 전파되지 않은 고질적인 문제. 도커 내부 /etc/resolv.conf 에 구글 DNS를 다시 추가해주는 방법으로 우회 제안.
+[시도한 내용]\nDNS 수동 설정 후 apt update 재시도\n[발생한 문제/에러 로그]\nE: Could not get lock /var/lib/apt/lists/lock. It is held by process 18 (apt)\n[해결 방법 및 결과]\n이전의 실패한 apt 프로세스가 찌꺼기로 남아 apt 잠금을 쥐고 있는 상태. 강제로 해당 프로세스를 죽이거나 lock 파일을 지우도록 안내 예정.
+[시도한 내용]\napt 잠금 해제 후 apt update 재시도\n[발생한 문제/에러 로그]\n여전히 Temporary failure resolving 'ports.ubuntu.com' (DNS 실패)\n[해결 방법 및 결과]\n네트워크 브릿지나 DNS가 도커 레벨에서 단단히 꼬인 것으로 보임. 사용자의 시간을 절약하기 위해 이 이상 도커 네트워크 트러블슈팅을 중단하고 PC를 이용한 Offline wheel 파일 USB 전송 방식을 강력히 권고할 예정.
+[시도한 내용]\nPC에서 pip download numpy --platform aarch64 시도\n[발생한 문제/에러 로그]\nERROR: Could not find a version that satisfies the requirement numpy\n[해결 방법 및 결과]\npip download 시 platform 외에도 python_version, implementation, abi 등의 매개변수가 맞지 않으면 에러가 발생함. aarch64(manylinux2014)용 numpy wheel 파일을 wget이나 curl로 pypi 서버에서 직접 다운로드 받는 방식으로 우회.
+[시도한 내용]\nPC에서 다운로드한 Numpy wheel 파일을 USB로 옮겨 컨테이너 내 오프라인 설치 시도\n[발생한 문제/에러 로그]\npython3 command not found\n[해결 방법 및 결과]\n해당 ubuntu:22.04 기반 깡통 도커 컨테이너에는 파이썬조차 설치되어 있지 않은 극초기 상태임이 확정. 컨테이너 내부의 환경 세팅(apt install python3)을 진행하려면 결국 인터넷 연결이 필수적이거나, Kria 보드용 공식 PYNQ 이미지를 다시 풀(pull)받아야 하는 딜레마 상황 봉착.
+[시도한 내용]\n도커에서 빠져나와 호스트 OS(Kria 보드)에서 xilinx/kria-pynq:latest 공식 이미지 pull 시도\n[발생한 문제/에러 로그]\ndial tcp: lookup registry-1.docker.io on 127.0.0.53:53: server misbehaving\n[해결 방법 및 결과]\n보드 자체(호스트)의 DNS 서버 설정(systemd-resolved)이 비정상적으로 동작하여 도메인을 IP로 변환하지 못하는 상태. 호스트의 /etc/resolv.conf 심볼릭 링크를 깨고 강제로 8.8.8.8을 주입하여 DNS 문제를 원천 해결할 예정.
+[시도한 내용]\n호스트의 /etc/resolv.conf를 삭제하고 강제로 nameserver 8.8.8.8 을 기록하려 시도\n[발생한 문제/에러 로그]\nsudo: unable to resolve host kria: Temporary failure in name resolution\n[해결 방법 및 결과]\nsudo 명령어 자체가 호스트 이름(kria)을 /etc/hosts 나 /etc/resolv.conf를 통해 확인하는데, resolv.conf가 지워진 순간 sudo 딜레이/경고가 발생함. 하지만 텍스트 자체는 정상적으로 쓰였을 확률이 높으므로 바로 docker pull을 진행하거나, /etc/hosts 에 127.0.0.1 kria 를 추가하는 해결책을 안내함.
+[시도한 내용]\nDNS를 구글(8.8.8.8, 8.8.4.4)로 강제 설정 후 docker pull 재시도\n[발생한 문제/에러 로그]\ndial tcp: lookup registry-1.docker.io on 8.8.4.4:53: read udp 172.30.1.81:50486->8.8.4.4:53: i/o timeout\n[해결 방법 및 결과]\ni/o timeout은 도커나 보드의 문제가 아니라, 현재 연결된 공유기 혹은 네트워크 방화벽(사내/학교망 등)에서 외부(8.8.4.4)로 향하는 53번 포트(DNS 쿼리) UDP 통신 자체를 차단하고 있음을 의미함. 즉, 이 랜선은 외부 인터넷과 통신이 막혀있는 폐쇄망(혹은 보안망)임. 결국 아까 다운받아둔 USB 오프라인 설치(Numpy wheel)만이 유일한 해결책임을 확정.
+[시도한 내용]\n보드 인터넷 연결 실패(i/o timeout)로 인하여 오늘은 보드 테스트를 보류하고 작업 종료 결정.\n[발생한 문제/에러 로그]\nN/A\n[해결 방법 및 결과]\nGithub 커밋을 위한 요약(Description) 작성 및 금일 작업(Vivado V2 아키텍처 합성 성공 및 I/O 테스트 스크립트 작성) 마무리를 진행함.
