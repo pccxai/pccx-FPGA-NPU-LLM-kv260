@@ -1,0 +1,63 @@
+######################################################################################
+# This is a generated CSV file representing the addressing in design NPU
+#
+# Format:
+# Master Segment Name, Address Space, Slave Segment, Offset, Range ...
+#      Excluded (optional), Included (optional), Unassigned (optional)
+######################################################################################
+
+# 
+# Assignments in Address Space /DMA_FMAP/Data_MM2S
+#
+SEG_zynq_ultra_ps_e_0_HP0_DDR_LOW,/DMA_FMAP/Data_MM2S,/zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW,0x00000000,2G
+SEG_zynq_ultra_ps_e_0_HPC0_DDR_HIGH,/DMA_FMAP/Data_MM2S,/zynq_ultra_ps_e_0/SAXIGP0/HPC0_DDR_HIGH,0x0,1,Excluded
+SEG_zynq_ultra_ps_e_0_HPC0_DDR_LOW,/DMA_FMAP/Data_MM2S,/zynq_ultra_ps_e_0/SAXIGP0/HPC0_DDR_LOW,0x0,1,Excluded
+SEG_zynq_ultra_ps_e_0_HPC0_LPS_OCM,/DMA_FMAP/Data_MM2S,/zynq_ultra_ps_e_0/SAXIGP0/HPC0_LPS_OCM,0x0,1,Excluded
+SEG_zynq_ultra_ps_e_0_HPC0_QSPI,/DMA_FMAP/Data_MM2S,/zynq_ultra_ps_e_0/SAXIGP0/HPC0_QSPI,0x0,1,Excluded
+SEG_zynq_ultra_ps_e_0_HP0_DDR_HIGH,/DMA_FMAP/Data_MM2S,/zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH,0x800000000,32G
+SEG_zynq_ultra_ps_e_0_HP1_DDR_HIGH,/DMA_FMAP/Data_MM2S,/zynq_ultra_ps_e_0/SAXIGP3/HP1_DDR_HIGH,0x1800000000,32G
+# 
+# Assignments in Address Space /DMA_FMAP/Data_S2MM
+#
+SEG_zynq_ultra_ps_e_0_HPC0_DDR_LOW,/DMA_FMAP/Data_S2MM,/zynq_ultra_ps_e_0/SAXIGP0/HPC0_DDR_LOW,0x00000000,2G
+SEG_zynq_ultra_ps_e_0_HPC0_LPS_OCM,/DMA_FMAP/Data_S2MM,/zynq_ultra_ps_e_0/SAXIGP0/HPC0_LPS_OCM,0x0,1,Excluded
+SEG_zynq_ultra_ps_e_0_HPC0_QSPI,/DMA_FMAP/Data_S2MM,/zynq_ultra_ps_e_0/SAXIGP0/HPC0_QSPI,0x0,1,Excluded
+SEG_zynq_ultra_ps_e_0_HPC0_DDR_HIGH,/DMA_FMAP/Data_S2MM,/zynq_ultra_ps_e_0/SAXIGP0/HPC0_DDR_HIGH,0x800000000,32G
+# 
+# Assignments in Address Space /DMA_W_HP0/Data_MM2S
+#
+SEG_zynq_ultra_ps_e_0_HP0_LPS_OCM,/DMA_W_HP0/Data_MM2S,/zynq_ultra_ps_e_0/SAXIGP2/HP0_LPS_OCM,0x0,1,Excluded
+SEG_zynq_ultra_ps_e_0_HP0_QSPI,/DMA_W_HP0/Data_MM2S,/zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI,0x0,1,Excluded
+SEG_zynq_ultra_ps_e_0_HP0_DDR_LOW,/DMA_W_HP0/Data_MM2S,/zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW,0x40000000,1G
+SEG_zynq_ultra_ps_e_0_HP0_DDR_HIGH,/DMA_W_HP0/Data_MM2S,/zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH,0x800000000,32G
+# 
+# Assignments in Address Space /DMA_W_HP1/Data_MM2S
+#
+SEG_zynq_ultra_ps_e_0_HP1_LPS_OCM,/DMA_W_HP1/Data_MM2S,/zynq_ultra_ps_e_0/SAXIGP3/HP1_LPS_OCM,0x0,1,Excluded
+SEG_zynq_ultra_ps_e_0_HP1_QSPI,/DMA_W_HP1/Data_MM2S,/zynq_ultra_ps_e_0/SAXIGP3/HP1_QSPI,0x0,1,Excluded
+SEG_zynq_ultra_ps_e_0_HP1_DDR_LOW,/DMA_W_HP1/Data_MM2S,/zynq_ultra_ps_e_0/SAXIGP3/HP1_DDR_LOW,0x40000000,1G
+SEG_zynq_ultra_ps_e_0_HP1_DDR_HIGH,/DMA_W_HP1/Data_MM2S,/zynq_ultra_ps_e_0/SAXIGP3/HP1_DDR_HIGH,0x800000000,32G
+# 
+# Assignments in Address Space /DMA_W_HP2/Data_MM2S
+#
+SEG_zynq_ultra_ps_e_0_HP2_LPS_OCM,/DMA_W_HP2/Data_MM2S,/zynq_ultra_ps_e_0/SAXIGP4/HP2_LPS_OCM,0x0,1,Excluded
+SEG_zynq_ultra_ps_e_0_HP2_QSPI,/DMA_W_HP2/Data_MM2S,/zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI,0x0,1,Excluded
+SEG_zynq_ultra_ps_e_0_HP2_DDR_LOW,/DMA_W_HP2/Data_MM2S,/zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW,0x40000000,1G
+SEG_zynq_ultra_ps_e_0_HP2_DDR_HIGH,/DMA_W_HP2/Data_MM2S,/zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH,0x800000000,32G
+# 
+# Assignments in Address Space /DMA_W_HP3/Data_MM2S
+#
+SEG_zynq_ultra_ps_e_0_HP3_LPS_OCM,/DMA_W_HP3/Data_MM2S,/zynq_ultra_ps_e_0/SAXIGP5/HP3_LPS_OCM,0x0,1,Excluded
+SEG_zynq_ultra_ps_e_0_HP3_QSPI,/DMA_W_HP3/Data_MM2S,/zynq_ultra_ps_e_0/SAXIGP5/HP3_QSPI,0x0,1,Excluded
+SEG_zynq_ultra_ps_e_0_HP3_DDR_LOW,/DMA_W_HP3/Data_MM2S,/zynq_ultra_ps_e_0/SAXIGP5/HP3_DDR_LOW,0x1,1,Excluded
+SEG_zynq_ultra_ps_e_0_HP3_DDR_HIGH,/DMA_W_HP3/Data_MM2S,/zynq_ultra_ps_e_0/SAXIGP5/HP3_DDR_HIGH,0x800000000,32G
+# 
+# Assignments in Address Space /zynq_ultra_ps_e_0/Data
+#
+SEG_axi_gpio_0_Reg,/zynq_ultra_ps_e_0/Data,/axi_gpio_0/S_AXI/Reg,0xB0000000,64K
+SEG_axi_gpio_1_Reg,/zynq_ultra_ps_e_0/Data,/axi_gpio_1/S_AXI/Reg,0xB0010000,64K
+SEG_DMA_FMAP_Reg,/zynq_ultra_ps_e_0/Data,/DMA_FMAP/S_AXI_LITE/Reg,0xB0020000,64K
+SEG_DMA_W_HP0_Reg,/zynq_ultra_ps_e_0/Data,/DMA_W_HP0/S_AXI_LITE/Reg,0xB0030000,64K
+SEG_DMA_W_HP1_Reg,/zynq_ultra_ps_e_0/Data,/DMA_W_HP1/S_AXI_LITE/Reg,0xB0040000,64K
+SEG_DMA_W_HP2_Reg,/zynq_ultra_ps_e_0/Data,/DMA_W_HP2/S_AXI_LITE/Reg,0xB0050000,64K
+SEG_DMA_W_HP3_Reg,/zynq_ultra_ps_e_0/Data,/DMA_W_HP3/S_AXI_LITE/Reg,0xB0060000,64K

@@ -113,3 +113,8 @@ def compute_pingpong(x_vec: np.ndarray, weight_data, buf_idx: int) -> np.ndarray
     else:
         w_f32 = np.ascontiguousarray(weight_data.astype(np.float32))
         return np.dot(x_f32, w_f32.T)
+
+
+
+
+
