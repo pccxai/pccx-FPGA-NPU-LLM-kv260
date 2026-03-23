@@ -1,5 +1,16 @@
 # TinyNPU-Gemma: Bare-Metal Gemma 3N LLM Accelerator on FPGA
 
+![WIP](https://img.shields.io/badge/Status-Work_in_Progress-red)
+![Vulkan](https://img.shields.io/badge/Vulkan-Raw_API-red?logo=vulkan)
+![C++](https://img.shields.io/badge/C++-17-blue?logo=c%2B%2B)
+![Python](https://img.shields.io/badge/Python-3.x-yellow?logo=python)
+![Hardware](https://img.shields.io/badge/Target-FPGA_KV260-orange)
+
+> **notice: Active Developement in Progress**
+>
+> This repository is currently under active development. The codebase, architecture, and features are subject to change. The RTL synthesis targeting the Xilinx KV260 FPGA (including DSP48E2 integration) is still a work in progress. It is not yet ready for use.
+
+
 ## Project Overview
 
 TinyNPU-Gemma is a custom SystemVerilog-based Neural Processing Unit (NPU) engineered specifically to accelerate a quantized Gemma 3N (E2B/E4B) Large Language Model on the Xilinx Kria KV260 FPGA. The architecture is meticulously designed to push the physical constraints of the KV260 platform, which is equipped with 1,248 DSP48E2 slices and 144 Block RAMs (BRAMs).
@@ -53,6 +64,11 @@ The accelerator is specifically tuned for the idiosyncratic architectural featur
 
 All hardware modules have been verified via Trace-Driven Verification. The verification suite ensures bit-exact equivalence between the Python Golden Model and the SystemVerilog RTL output.
 
-## Future Work
+## Current Status & Future Work
 
-Future revisions will focus on deploying the synthesized RTL on the physical Xilinx Kria KV260 board, integrating bare-metal C++ drivers to manage the AXI DMA pipeline, and evaluating end-to-end inference latency.
+**Active Development Phase:**
+* The software simulation and Vulkan-based hardware memory bottleneck profiling have been successfully verified.
+* **Currently Working On:** Porting the verified dataflow pipeline to SystemVerilog/C++ for RTL synthesis targeting the **Xilinx KV260 FPGA**.
+* **Hardware Integration:** Actively implementing the systolic array architecture optimizing the utilization of **DSP48E2** slices to maximize compute density and meet 400MHz timing constraints.
+
+*Note: The hardware description files (e.g., `NPU_top.sv`, `stlc_global_fsm.sv`) in this repository are currently experimental and undergoing heavy testing.*
