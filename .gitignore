@@ -33,6 +33,7 @@ vivado.tcl
 *.cache/
 *.hw/
 *.sim/
+*.dcp
 
 # IP 관련 찌꺼기 (원본 .xci 파일은 트래킹하되, 생성된 폴더는 무시)
 *.ip_user_files/
@@ -84,3 +85,6 @@ Thumbs.db
 *.bsp/
 .gemini/
 gha-creds-*.json
+Transformer_Accelerator_FPGA-K26_SOM/Transformer_Accelerator/Transformer_Accelerator.srcs/utils_1/imports/synth_1/systolic_dsp_unit.dcp
+*.dcp
+/Transformer_Accelerator_FPGA-K26_SOM/Transformer_Accelerator/Transformer_Accelerator.srcs/utils_1/imports/synth_1

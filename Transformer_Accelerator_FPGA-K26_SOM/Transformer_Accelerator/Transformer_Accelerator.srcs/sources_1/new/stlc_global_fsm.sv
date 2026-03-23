@@ -15,6 +15,9 @@ module stlc_global_fsm (
     input  logic       npu_start,
     output logic       npu_done,
 
+    // ===| Status from Packer |===
+    input  logic       packer_busy,
+
     // ===| Datapath Control Signals |===
     // To Weight Dispatcher / Array
     output logic       i_weight_valid, // Enables horizontal weight shifting
@@ -87,8 +90,8 @@ module stlc_global_fsm (
 
             FLUSH_DRAIN: begin
                 // Wait for the final flush sequence to finish draining (approx 64 cycles)
-                // For simplicity, assuming a fixed drain time here.
-                if (cycle_cnt == 6'd63) // Wait enough time for pipeline to empty
+                // AND wait for the packer to send all results over AXI-Stream.
+                if (cycle_cnt >= 6'd63 && !packer_busy) 
                     next_state = DONE;
             end
 

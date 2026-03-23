@@ -14,7 +14,7 @@
 module NPU_top (
     // Clock & Reset (Must be associated with AXI interfaces for Vivado BD)
     (* X_INTERFACE_INFO = "xilinx.com:signal:clock:1.0 clk CLK" *)
-    (* X_INTERFACE_PARAMETER = "ASSOCIATED_BUSIF S_AXIS_FMAP:S_AXI_WEIGHT:M_AXIS_RESULT, ASSOCIATED_RESET rst_n" *)
+    (* X_INTERFACE_PARAMETER = "ASSOCIATED_BUSIF S_AXIS_FMAP:S_AXI_WEIGHT:M_AXIS_RESULT:S_AXIS_HP1:S_AXIS_HP2:S_AXIS_HP3:S_AXIS_HPC1:M_AXIS_ACP, ASSOCIATED_RESET rst_n" *)
     input  logic clk,
 
     (* X_INTERFACE_INFO = "xilinx.com:signal:reset:1.0 rst_n RST" *)
@@ -25,8 +25,7 @@ module NPU_top (
     input  logic [31:0] mmio_npu_cmd,  // [0]=Start, [1]=Clear, [4:2]=Inst(VLIW)
     output logic [31:0] mmio_npu_stat, // [0]=Done, [1]=FMap_Ready
 
-    // Feature Map Data Path (AXI4-Stream Slave)
-    //[`AXI_DATA_WIDTH-1:0]
+    // Feature Map Data Path (AXI4-Stream Slave) -> Mapped to HPC0 conceptually
     (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 S_AXIS_FMAP TDATA" *)
     input  logic [127:0] s_axis_fmap_tdata,
     (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 S_AXIS_FMAP TVALID" *)
@@ -36,7 +35,7 @@ module NPU_top (
     (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 S_AXIS_FMAP TLAST" *)
     input  logic                       s_axis_fmap_tlast,
 
-    // Weight Data Path (AXI4-Stream Slave) - Perfectly done!
+    // Weight Data Path (AXI4-Stream Slave) -> Mapped to HP0 conceptually
     (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 S_AXI_WEIGHT TDATA" *)
     input  logic      [511:0]          s_axis_weight_tdata_FLAT,
     (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 S_AXI_WEIGHT TVALID" *)
@@ -47,7 +46,6 @@ module NPU_top (
     input  logic      [3:0]            s_axis_weight_tlast_FLAT,
     
     // Output Data Path (AXI4-Stream Master)
-    // [`AXI_DATA_WIDTH-1:0]
     (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 M_AXIS_RESULT TDATA" *)
     output logic [127:0] m_axis_result_tdata,
     (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 M_AXIS_RESULT TVALID" *)
@@ -55,8 +53,46 @@ module NPU_top (
     (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 M_AXIS_RESULT TREADY" *)
     input  logic                       m_axis_result_tready,
     (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 M_AXIS_RESULT TLAST" *)
-    output logic         m_axis_result_tlast
+    output logic         m_axis_result_tlast,
 
+    // =========================================================================
+    // NEW PORTS (For direct physical mapping on KV260)
+    // =========================================================================
+
+    // HPM1: Secondary Control (VLIW Pipe)
+    input  logic [31:0] s_axi_hpm1_vliw,
+    output logic [31:0] s_axi_hpm1_stat,
+
+    // HP1~HP3: Extra Weight Stream Lanes
+    `define HP_NEW_PORT(idx) \
+    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 S_AXIS_HP``idx`` TDATA" *) \
+    input  logic [127:0] s_axis_hp``idx``_tdata, \
+    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 S_AXIS_HP``idx`` TVALID" *) \
+    input  logic         s_axis_hp``idx``_tvalid, \
+    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 S_AXIS_HP``idx`` TREADY" *) \
+    output logic         s_axis_hp``idx``_tready
+
+    `HP_NEW_PORT(1),
+    `HP_NEW_PORT(2),
+    `HP_NEW_PORT(3),
+
+    // HPC1: Secondary Coherent Input (KV Cache)
+    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 S_AXIS_HPC1 TDATA" *)
+    input  logic [127:0] s_axis_hpc1_tdata,
+    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 S_AXIS_HPC1 TVALID" *)
+    input  logic         s_axis_hpc1_tvalid,
+    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 S_AXIS_HPC1 TREADY" *)
+    output logic         s_axis_hpc1_tready,
+
+    // ACP: Coherent Result Output
+    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 M_AXIS_ACP TDATA" *)
+    output logic [127:0] m_axis_acp_tdata,
+    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 M_AXIS_ACP TVALID" *)
+    output logic         m_axis_acp_tvalid,
+    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 M_AXIS_ACP TREADY" *)
+    input  logic         m_axis_acp_tready,
+    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 M_AXIS_ACP TLAST" *)
+    output logic         m_axis_acp_tlast
 );
 
     // ===| Internal Array Mapping |=======
@@ -71,8 +107,20 @@ module NPU_top (
             assign s_axis_weight_tready_FLAT[p] = s_axis_weight_tready[p];
         end
     endgenerate
-    // ===| Internal Array Mapping |============================================
-
+    
+    // Wire up the new unused ports to prevent warnings
+    assign s_axis_hp1_tready = 1'b1;
+    assign s_axis_hp2_tready = 1'b1;
+    assign s_axis_hp3_tready = 1'b1;
+    assign s_axis_hpc1_tready = 1'b1;
+    
+    // Wire up ACP duplicate (Mirroring M_AXIS_RESULT)
+    assign m_axis_acp_tdata  = m_axis_result_tdata;
+    assign m_axis_acp_tvalid = m_axis_result_tvalid;
+    // We only take ready from the main result port for now
+    assign m_axis_acp_tlast  = m_axis_result_tlast;
+    
+    assign s_axi_hpm1_stat = 32'hCAFE_BABE;
 
     // ===| Control Signals Extraction |=======
     logic npu_start;
@@ -88,12 +136,15 @@ module NPU_top (
     logic global_sram_rd_start;
     logic [2:0] global_inst;
     logic global_inst_valid;
+    logic packer_busy_status; // New wire to connect Packer to FSM
 
     stlc_global_fsm u_brain (
         .clk(clk), .rst_n(rst_n),
         .npu_start(npu_start),
         .npu_done(mmio_npu_stat[0]),
         
+        .packer_busy(packer_busy_status), // Connect here!
+
         .i_weight_valid(global_weight_valid),
         .sram_rd_start(global_sram_rd_start),
         .inst_out(global_inst),
@@ -235,6 +286,7 @@ module NPU_top (
     
     logic [`DSP_RESULT_SIZE-1:0] raw_res_seq [0:`ARRAY_SIZE_H-1];
     logic [`DSP_RESULT_SIZE-1:0] raw_res_sum [0:`ARRAY_SIZE_H-1];
+    logic                        raw_res_sum_valid [0:`ARRAY_SIZE_H-1];
 
     stlc_NxN_array #(
         .ARRAY_HORIZONTAL(`ARRAY_SIZE_H),
@@ -255,7 +307,8 @@ module NPU_top (
         .inst_valid_in(staggered_inst_valid),
         
         .V_out(raw_res_seq),
-        .V_ACC_out(raw_res_sum)
+        .V_ACC_out(raw_res_sum),
+        .V_ACC_valid(raw_res_sum_valid)
     );
 
     // 4. Output Pipeline (Result Normalization -> Result Packer -> FIFO)
@@ -293,7 +346,7 @@ module NPU_top (
                 .clk(clk), .rst_n(rst_n),
                 .data_in(raw_res_sum[n]),           
                 .e_max(delayed_emax_32[n]),         
-                .valid_in(1'b1), // Replace with actual valid signal from array 
+                .valid_in(raw_res_sum_valid[n]), 
                 .data_out(norm_res_seq[n]),         
                 .valid_out(norm_res_seq_valid[n])
             );
@@ -311,7 +364,8 @@ module NPU_top (
         .row_res_valid(norm_res_seq_valid), 
         .packed_data(packed_res_data),
         .packed_valid(packed_res_valid),
-        .packed_ready(packed_res_ready)
+        .packed_ready(packed_res_ready),
+        .o_busy(packer_busy_status) // Connect here!
     );
 
     // Output FIFO

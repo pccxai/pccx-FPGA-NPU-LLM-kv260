@@ -31,7 +31,7 @@ c_lib.run_unpack_int4_inplace.argtypes = [
     np.ctypeslib.ndpointer(dtype=np.float32, ndim=1, flags='C_CONTIGUOUS'),
     ctypes.c_int                                                           
 ]
-c_lib.run_gelu_inplace.restype = None
+c_lib.run_unpack_int4_inplace.restype = None
 
 # ROPE function
 c_lib.run_rope_inplace.argtypes = [

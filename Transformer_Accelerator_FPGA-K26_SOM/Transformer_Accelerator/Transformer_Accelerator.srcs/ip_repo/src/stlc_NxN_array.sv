@@ -23,7 +23,8 @@ module stlc_NxN_array #(
 
     // =| Outputs |=
     output logic [`DSP_RESULT_SIZE-1:0] V_out [0:`ARRAY_SIZE_V-1],
-    output logic [`DSP_RESULT_SIZE-1:0] V_ACC_out [0:`ARRAY_SIZE_V-1]
+    output logic [`DSP_RESULT_SIZE-1:0] V_ACC_out [0:`ARRAY_SIZE_V-1],
+    output logic                        V_ACC_valid [0:`ARRAY_SIZE_V-1]
 ); 
 
     // ===| Systolic Array Internal Wires |==================================
@@ -47,6 +48,12 @@ module stlc_NxN_array #(
     // Result shift wires (Top to Bottom)
     logic [`DSP_RESULT_SIZE - 1 : 0] stlc_V_result_wire [0 : ARRAY_HORIZONTAL][0 : ARRAY_VERTICAL-1];
 
+    // Fabric break wires for row 15 -> 16
+    logic [47:0] stlc_P_fabric_wire [0 : ARRAY_HORIZONTAL-1][0 : ARRAY_VERTICAL-1];
+    
+    // V_in fabric delay line to replace A_fabric_wire
+    logic [29:0] stlc_in_V_fabric [0 : ARRAY_HORIZONTAL][0 : ARRAY_VERTICAL-1];
+
     // ======================================================================
 
     // ===| Input Assignments |==============================================
@@ -58,10 +65,27 @@ module stlc_NxN_array #(
             assign stlc_inst_valid_wire[0][i] = inst_valid_in[i];
             assign stlc_V_valid_wire[0][i] = in_valid[i];
             assign stlc_V_result_wire[0][i] = 48'd0; // Top row PCIN is 0
+            
+            // Initialize the fabric delay line with V_in padded to 30 bits
+            assign stlc_in_V_fabric[0][i] = {3'd0, V_in[i]};
         end
 
         for (i = 0; i < ARRAY_HORIZONTAL; i++) begin : assign_h_inputs
             assign stlc_H_wire[i][0] = H_in[i];
+        end
+    endgenerate
+
+    // Fabric delay line for V_in to reach row 16 correctly
+    genvar d_row, d_col;
+    generate
+        for (d_row = 0; d_row < ARRAY_HORIZONTAL; d_row++) begin : v_delay_row
+            for (d_col = 0; d_col < ARRAY_VERTICAL; d_col++) begin : v_delay_col
+                always_ff @(posedge clk) begin
+                    if (stlc_V_valid_wire[d_row][d_col]) begin
+                        stlc_in_V_fabric[d_row+1][d_col] <= stlc_in_V_fabric[d_row][d_col];
+                    end
+                end
+            end
         end
     endgenerate
 
@@ -99,9 +123,41 @@ module stlc_NxN_array #(
 
                         .stlc_unit_results(V_out[col])
                     );
+                end else if (row == 16) begin : break_row
+                    stlc_dsp_unit #(
+                        .IS_TOP_ROW(0),
+                        .BREAK_CASCADE(1)
+                    ) dsp_unit_break (
+                        .clk(clk),
+                        .rst_n(rst_n),  
+                        .i_clear(i_clear),
+                        
+                        .i_valid(stlc_V_valid_wire[row][col]),
+                        .inst_valid_in_V(stlc_inst_valid_wire[row][col]),
+                        .i_weight_valid(i_weight_valid),
+                        .o_valid(stlc_V_valid_wire[row+1][col]),
+
+                        .in_H(stlc_H_wire[row][col]),
+                        .out_H(stlc_H_wire[row][col+1]),
+
+                        // Take delayed input from fabric shift register instead of CASCADE
+                        .in_V(stlc_in_V_fabric[row][col]), 
+                        .ACIN_in(30'd0),
+                        .ACOUT_out(stlc_ACIN_wire[row+1][col]),
+
+                        .instruction_in_V(stlc_inst_wire[row][col]),
+                        .instruction_out_V(stlc_inst_wire[row+1][col]),
+                        .inst_valid_out_V(stlc_inst_valid_wire[row+1][col]),
+
+                        // Take result from previous row's P fabric out
+                        .V_result_in(stlc_P_fabric_wire[row-1][col]),
+                        .V_result_out(stlc_V_result_wire[row+1][col]),
+                        .P_fabric_out(stlc_P_fabric_wire[row][col])
+                    );
                 end else begin : normal_row
                     stlc_dsp_unit #(
-                        .IS_TOP_ROW(row == 0 ? 1 : 0)
+                        .IS_TOP_ROW(row == 0 ? 1 : 0),
+                        .BREAK_CASCADE(0)
                     ) dsp_unit (
                         .clk(clk),
                         .rst_n(rst_n),  
@@ -115,7 +171,7 @@ module stlc_NxN_array #(
                         .in_H(stlc_H_wire[row][col]),
                         .out_H(stlc_H_wire[row][col+1]),
 
-                        .in_V(row == 0 ? {3'd0, V_in[col]} : 30'd0), // Only used if IS_TOP_ROW=1
+                        .in_V(row == 0 ? {3'd0, V_in[col]} : 30'd0), 
                         .ACIN_in(stlc_ACIN_wire[row][col]),
                         .ACOUT_out(stlc_ACIN_wire[row+1][col]),
 
@@ -124,7 +180,8 @@ module stlc_NxN_array #(
                         .inst_valid_out_V(stlc_inst_valid_wire[row+1][col]),
 
                         .V_result_in(stlc_V_result_wire[row][col]),
-                        .V_result_out(stlc_V_result_wire[row+1][col])
+                        .V_result_out(stlc_V_result_wire[row+1][col]),
+                        .P_fabric_out(stlc_P_fabric_wire[row][col])
                     );
                 end
             end
@@ -132,13 +189,14 @@ module stlc_NxN_array #(
 
         // Accumulators for the final row
         for(col = 0; col < ARRAY_VERTICAL; col++) begin : stlc_ACC_col_loop
+            assign V_ACC_valid[col] = stlc_inst_valid_wire[ARRAY_HORIZONTAL][col];
             stlc_accumulator #() 
                 stlc_ACC (
                     .clk(clk),
                     .rst_n(rst_n),  
                     .i_clear(i_clear),
                     // Accumulator should trigger when the last row outputs a valid result
-                    .i_valid(stlc_inst_valid_wire[ARRAY_HORIZONTAL][col]), // Or trigger from instruction
+                    .i_valid(V_ACC_valid[col]), 
                     // PCIN connects to the V_result_out of the LAST_ROW (which is stored in [ARRAY_HORIZONTAL])
                     .PCIN(stlc_V_result_wire[ARRAY_HORIZONTAL][col]),
                     .stlc_ACC_result(V_ACC_out[col])

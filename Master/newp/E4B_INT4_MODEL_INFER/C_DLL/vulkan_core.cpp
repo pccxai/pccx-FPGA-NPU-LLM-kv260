@@ -6,7 +6,7 @@
 #include <future>
 
 // gemma's dictionary size = 256_000
-#define MAX_M 262144
+#define MAX_M 262400
 #define MAX_K 16384
 
 struct PushConstants

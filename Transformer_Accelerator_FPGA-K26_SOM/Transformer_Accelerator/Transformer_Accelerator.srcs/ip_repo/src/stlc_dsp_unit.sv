@@ -2,7 +2,8 @@
 `include "stlc_Array.svh"
 
 module stlc_dsp_unit #(
-    parameter IS_TOP_ROW = 0
+    parameter IS_TOP_ROW = 0,
+    parameter BREAK_CASCADE = 0 // If 1, break the vertical cascade chain here
 )(   
     input   logic clk,
     input   logic rst_n,
@@ -17,8 +18,8 @@ module stlc_dsp_unit #(
     output  logic [`STLC_MAC_UNIT_IN_H - 1:0] out_H,
 
     // [Vertical] 30-bit -> DSP A/ACIN port
-    input   logic [29:0] in_V, // Used only if IS_TOP_ROW == 1
-    input   logic [29:0] ACIN_in,
+    input   logic [29:0] in_V, // Used if IS_TOP_ROW == 1 or BREAK_CASCADE == 1
+    input   logic [29:0] ACIN_in, // Used if IS_TOP_ROW == 0 and BREAK_CASCADE == 0
     output  logic [29:0] ACOUT_out,
 
     // [3-Bit VLIW Instruction]
@@ -28,8 +29,9 @@ module stlc_dsp_unit #(
     output  logic       inst_valid_out_V,
 
     // vertical shift port
-    input   logic [47:0] V_result_in,   // PCIN from upper DSP's PCOUT
-    output  logic [47:0] V_result_out   // PCOUT to lower DSP's PCIN
+    input   logic [47:0] V_result_in,   // PCIN (or Fabric C) from upper DSP
+    output  logic [47:0] V_result_out,  // PCOUT to lower DSP's PCIN
+    output  logic [47:0] P_fabric_out   // P to lower DSP's Fabric C if broken
 );
 
     // ===| [Instruction Latch (Event-Driven)] |============================
@@ -75,15 +77,24 @@ module stlc_dsp_unit #(
     logic is_flushing;
     assign is_flushing = flush_sequence[1] | flush_sequence[2]; 
 
+    // OPMODE Selection
+    // W(2), Z(3), Y(2), X(2)
+    // If BREAK_CASCADE == 1, we must take the previous result from the C port instead of PCIN.
+    // Z-mux: 001 is PCIN, 011 is C.
+    localparam logic [2:0] Z_MUX = BREAK_CASCADE ? 3'b011 : 3'b001;
+
     always_comb begin
         if (is_flushing) begin
-            dynamic_opmode  = 9'b00_001_00_00; 
+            // Flush: P = 0 + 0 + 0 (Clear accumulator)
+            dynamic_opmode  = 9'b00_000_00_00; 
             dynamic_alumode = 4'b0000;
         end else if (current_inst[0] == 1'b1) begin
-            dynamic_opmode  = 9'b00_010_01_01;
+            // Calc: P = P_prev + A*B
+            dynamic_opmode  = {2'b00, Z_MUX, 2'b01, 2'b01}; 
             dynamic_alumode = 4'b0000;
         end else begin
-            dynamic_opmode  = 9'b00_010_00_00;
+            // Idle: P = P_prev (Pass through)
+            dynamic_opmode  = {2'b00, Z_MUX, 2'b00, 2'b00};
             dynamic_alumode = 4'b0000;
         end
     end
@@ -131,14 +142,24 @@ module stlc_dsp_unit #(
     logic [17:0] in_H_padded;
     assign in_H_padded = {{14{in_H[`STLC_MAC_UNIT_IN_H - 1]}}, in_H};
     
+    // If TOP_ROW or BREAK_CASCADE, we get A from Fabric (in_V). Otherwise from ACIN.
     logic [29:0] dsp_a_input;
-    assign dsp_a_input = IS_TOP_ROW ? in_V : 30'd0;
+    assign dsp_a_input = (IS_TOP_ROW || BREAK_CASCADE) ? in_V : 30'd0;
     
     logic [29:0] dsp_acin_input;
-    assign dsp_acin_input = IS_TOP_ROW ? 30'd0 : ACIN_in;
+    assign dsp_acin_input = (IS_TOP_ROW || BREAK_CASCADE) ? 30'd0 : ACIN_in;
+
+    // If BREAK_CASCADE, we receive the accumulated result from Fabric C (V_result_in)
+    logic [47:0] dsp_c_input;
+    assign dsp_c_input = BREAK_CASCADE ? V_result_in : 48'd0;
+    
+    logic [47:0] dsp_pcin_input;
+    assign dsp_pcin_input = BREAK_CASCADE ? 48'd0 : V_result_in;
+    
+    logic [47:0] p_internal;
 
     DSP48E2 #(
-        .A_INPUT(IS_TOP_ROW ? "DIRECT" : "CASCADE"), 
+        .A_INPUT((IS_TOP_ROW || BREAK_CASCADE) ? "DIRECT" : "CASCADE"), 
         .B_INPUT("DIRECT"),
         .AREG(1), .BREG(2), .CREG(0), .MREG(1), .PREG(1), 
         .OPMODEREG(1),    
@@ -155,19 +176,24 @@ module stlc_dsp_unit #(
         .CEP(dsp_ce_p),                
         .CECTRL(1'b1),               
         .CEALUMODE(1'b1),
+        .CEC(1'b1), // Enable C register if breaking cascade
 
         .A(dsp_a_input),
         .ACIN(dsp_acin_input),
         .ACOUT(ACOUT_out),
 
         .B(in_H_padded),    
-        .C(48'd0),          
+        .C(dsp_c_input),          
 
-        .PCIN(V_result_in),   
+        .PCIN(dsp_pcin_input),   
         .PCOUT(V_result_out), 
 
         .OPMODE(dynamic_opmode),
         .ALUMODE(dynamic_alumode),
-        .P()  
+        .P(p_internal)  
     );
+    
+    // We must expose the internal P so it can be routed via fabric to the next DSP
+    assign P_fabric_out = p_internal;
+    
 endmodule

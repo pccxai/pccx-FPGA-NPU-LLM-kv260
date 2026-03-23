@@ -129,9 +129,8 @@ def forward_one_token(token_id, pos, W, W_embed, W_ple_packed, W_ple_scale, norm
     y = unpacked_w_ple.reshape(35, 256) * math.sqrt(256.0)
     pli_all = (x_proj_normed + y) * (1.0 / math.sqrt(2.0))
 
-    # ====================================================================
+
     # Just before entering the dataflow pipeline, load the first weight (Q).
-    # ====================================================================
     ping_pong = 0
     hw_prefetch(W["W_q"][0], ping_pong)
 
