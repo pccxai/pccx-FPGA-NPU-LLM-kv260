@@ -48,7 +48,7 @@ g_scaleBuf allocation: 262144 × 4 = 1,048,576 bytes
 LM Head requirement: 262400 × 4 = 1,049,600 bytes
                               ─────────────────
                               Short by 1,024 bytes (256 floats)
-                              
+
 ---
 
 ### Function Reference
