@@ -10,10 +10,10 @@ def main():
     if not SIMULATION_MODE:
         from pynq import Overlay, allocate
         print("Loading Bitstream...")
-        # TODO: Change to the name of the actual synthesized bitstream file
+        # TODO: 실제 합성 완료된 bitstream 파일 이름으로 변경해야 함
         overlay = Overlay("NPU.bit") 
         
-        # 1. Hardware IP Mapping (Based on Vivado Block Design names)
+        # 1. Hardware IP Mapping (Vivado Block Design 이름 기준)
         print("Mapping Hardware IPs...")
         dma_fmap = overlay.DMA_FMAP
         dma_w0   = overlay.DMA_W_HP0
@@ -21,22 +21,22 @@ def main():
         dma_w2   = overlay.DMA_W_HP2
         dma_w3   = overlay.DMA_W_HP3
         
-        # GPIOs (Currently assumed to be axi_gpio_0/1 for CMD/STAT purposes in the BD)
-        # If one GPIO is split into channel1 and channel2, modify it to overlay.axi_gpio_0.channel1 / channel2
+        # GPIOs (현재 BD상 axi_gpio_0/1을 각각 CMD/STAT 용도로 추정)
+        # 만약 한 GPIO의 channel1, channel2로 나눴다면 overlay.axi_gpio_0.channel1 / channel2 로 수정
         gpio_cmd = overlay.axi_gpio_0.channel1
         gpio_stat = overlay.axi_gpio_1.channel1 
         
-        # 2. Allocate DMA Buffers (PYNQ memory allocation)
+        # 2. Allocate DMA Buffers (PYNQ 메모리 할당)
         print("Allocating DMA Buffers...")
-        # Arbitrary length (to be adjusted later according to the actual tile size of 32x32)
+        # 임의의 길이 (실제 타일 크기 32x32에 맞춰 추후 조절)
         fmap_len = 1024
         weight_len = 2048
         
-        # FMap: Uses uint16 to represent the BF16 format
+        # FMap: BF16 포맷을 나타내기 위해 uint16 사용
         fmap_in  = allocate(shape=(fmap_len,), dtype=np.uint16)
         fmap_out = allocate(shape=(fmap_len,), dtype=np.uint16)
         
-        # Weights: 2 INT4s are grouped to become 1 byte (uint8)
+        # Weights: INT4 가 2개씩 묶여 1바이트(uint8)가 됨
         w0_in = allocate(shape=(weight_len,), dtype=np.uint8)
         w1_in = allocate(shape=(weight_len,), dtype=np.uint8)
         w2_in = allocate(shape=(weight_len,), dtype=np.uint8)
@@ -50,7 +50,7 @@ def main():
         w2_in[:] = np.ones(weight_len, dtype=np.uint8) * 0xCC
         w3_in[:] = np.ones(weight_len, dtype=np.uint8) * 0xDD
         
-        # 4. Trigger DMA Transfers (Asynchronous parallel transmission)
+        # 4. Trigger DMA Transfers (비동기 병렬 전송)
         print("Starting 5-Channel DMA Transfers...")
         dma_fmap.sendchannel.transfer(fmap_in)
         dma_w0.sendchannel.transfer(w0_in)
@@ -71,7 +71,7 @@ def main():
         print("Pulsing NPU START via AXI GPIO...")
         gpio_cmd.write(0, 0) # Clear all bits
         gpio_cmd.write(1, 0) # Set Start bit (bit 0 = 1)
-        gpio_cmd.write(0, 0) # Pulse down (even without auto-clear HW, it goes down to 0 here)
+        gpio_cmd.write(0, 0) # Pulse down (auto-clear HW가 없더라도 여기서 0으로 내려줌)
         
         # 7. Poll for Completion
         print("Polling for NPU DONE...")

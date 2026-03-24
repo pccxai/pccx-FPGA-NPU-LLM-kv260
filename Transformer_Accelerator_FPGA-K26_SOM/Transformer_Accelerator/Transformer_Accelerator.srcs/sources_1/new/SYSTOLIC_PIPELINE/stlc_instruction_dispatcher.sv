@@ -14,8 +14,8 @@ module stlc_instruction_dispatcher(
     );
 
     
-    // TODO.. What if the input is? ?
-    // 1. Matrix x Matrix, Matrix x Vector
+    //TODO.. 만약에 입력이? ?
+    // 1. 행렬 x 행렬, 행렬 x 벡터
     always_ff @(posedge clk) begin
         if (!rst_n) begin
             instruction <= `DSP_IDLE_MOD;
