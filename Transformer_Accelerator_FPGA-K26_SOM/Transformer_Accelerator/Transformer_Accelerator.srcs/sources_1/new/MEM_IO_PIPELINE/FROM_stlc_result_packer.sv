@@ -32,6 +32,10 @@ module FROM_stlc_result_packer #(
     logic [`BF16_WIDTH-1:0] capture_reg [0:ARRAY_SIZE-1];
     logic [ARRAY_SIZE-1:0]  capture_valid;
     
+    // ===| State Machine for Packing (Round-Robin) |=======
+    typedef enum logic [1:0] {IDLE, CHECK_VALID, SEND_DATA} state_t;
+    state_t state;
+
     // Busy if any capture_valid bit is set or we are in a non-IDLE state
     assign o_busy = (|capture_valid) || (state != IDLE);
 
@@ -57,8 +61,8 @@ module FROM_stlc_result_packer #(
     end
 
     // ===| State Machine for Packing (Round-Robin) |=======
-    typedef enum logic [1:0] {IDLE, CHECK_VALID, SEND_DATA} state_t;
-    state_t state;
+    // typedef enum logic [1:0] {IDLE, CHECK_VALID, SEND_DATA} state_t;
+    // state_t state;
     
     logic [5:0] send_idx; // 0 to 31
 

@@ -162,7 +162,7 @@ def forward_one_token(token_id, pos, W, W_embed, W_ple_packed, W_ple_scale, norm
         ping_pong = next_buf
         # ----------------------------------------------------
 
-        Q, K = CPU_CORE.cpu_qk_norm(Q,   K, W["gamma_q"][i], W["gamma_k"][i])
+        Q, K = CPU_CORE.cpu_qk_norm(Q, K, W["gamma_q"][i], W["gamma_k"][i])
         theta = 1_000_000.0 if (i % 5 == 4) else 10_000.0
         Q     = CPU_CORE.cpu_rope(Q, pos=pos, theta_base=theta)
         K     = CPU_CORE.cpu_rope(K, pos=pos, theta_base=theta)

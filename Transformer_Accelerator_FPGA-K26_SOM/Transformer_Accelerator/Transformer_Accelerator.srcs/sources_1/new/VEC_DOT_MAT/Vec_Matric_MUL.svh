@@ -1,0 +1,8 @@
+//`define //
+`define WEIGHT_HP_PORT_SIZE 512
+`define FEATURE_MAP_HPC_PORT_SIZE 256
+//`define INPUT_weight
+`define IS_NEGATIVE_NUMBER 1
+`define WEIGHT_SIZE 4
+`define FEAUTRE_MAP_SIZE 16
+`define AXI_WEIGHT_PORT_CNT 4

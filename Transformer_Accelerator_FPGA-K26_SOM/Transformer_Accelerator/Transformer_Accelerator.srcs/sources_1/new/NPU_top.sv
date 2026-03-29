@@ -1,99 +1,87 @@
 `timescale 1ns / 1ps
 `include "stlc_Array.svh"
 `include "mem_IO.svh"
+`include "npu_interfaces.svh"
 
 /**
  * Module: NPU_top
  * Target: Kria KV260 @ 400MHz
  * 
- * Architecture V2 (Segregated Physical Ports):
- * - HPC/ACP: Dedicated to low-latency Feature Map caching.
+ * Architecture V2 (SystemVerilog Interface Version):
+ * - HPC0/HPC1: Combined to form 256-bit Feature Map caching bus.
  * - HP0~HP3: Dedicated to high-throughput Weight streaming.
  * - HPM (MMIO): Centralized control & VLIW Instruction issuing.
+ * - ACP: Coherent Result Output.
  */
 module NPU_top (
-    // Clock & Reset (Must be associated with AXI interfaces for Vivado BD)
-    (* X_INTERFACE_INFO = "xilinx.com:signal:clock:1.0 clk CLK" *)
-    (* X_INTERFACE_PARAMETER = "ASSOCIATED_BUSIF S_AXIS_FMAP:S_AXI_WEIGHT:M_AXIS_RESULT:S_AXIS_HP1:S_AXIS_HP2:S_AXIS_HP3:S_AXIS_HPC1:M_AXIS_ACP, ASSOCIATED_RESET rst_n" *)
+    // Clock & Reset
     input  logic clk,
-
-    (* X_INTERFACE_INFO = "xilinx.com:signal:reset:1.0 rst_n RST" *)
-    (* X_INTERFACE_PARAMETER = "POLARITY ACTIVE_LOW" *)
     input  logic rst_n,
 
-    // Control Plane (Connect to AXI GPIO in Vivado Block Design)
-    input  logic [31:0] mmio_npu_cmd,  // [0]=Start, [1]=Clear, [4:2]=Inst(VLIW)
-    output logic [31:0] mmio_npu_stat, // [0]=Done, [1]=FMap_Ready
+    // Control Plane (MMIO)
+    input  logic [31:0] mmio_npu_cmd,  
+    output logic [31:0] mmio_npu_stat, 
 
-    // Feature Map Data Path (AXI4-Stream Slave) -> Mapped to HPC0 conceptually
-    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 S_AXIS_FMAP TDATA" *)
-    input  logic [127:0] s_axis_fmap_tdata,
-    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 S_AXIS_FMAP TVALID" *)
-    input  logic                       s_axis_fmap_tvalid,
-    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 S_AXIS_FMAP TREADY" *)
-    output logic                       s_axis_fmap_tready,
-    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 S_AXIS_FMAP TLAST" *)
-    input  logic                       s_axis_fmap_tlast,
-
-    // Weight Data Path (AXI4-Stream Slave) -> Mapped to HP0 conceptually
-    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 S_AXI_WEIGHT TDATA" *)
-    input  logic      [511:0]          s_axis_weight_tdata_FLAT,
-    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 S_AXI_WEIGHT TVALID" *)
-    input  logic      [3:0]            s_axis_weight_tvalid_FLAT,
-    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 S_AXI_WEIGHT TREADY" *)
-    output logic      [3:0]            s_axis_weight_tready_FLAT,
-    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 S_AXI_WEIGHT TLAST" *)
-    input  logic      [3:0]            s_axis_weight_tlast_FLAT,
+    // AXI4-Stream Interfaces (Clean & Modern)
+    axis_if.slave  S_AXIS_FMAP,   // Feature Map Input 0 (128-bit, HPC0)
+    axis_if.slave  S_AXI_WEIGHT,  // Weight Matrix Input (512-bit)
+    axis_if.master M_AXIS_RESULT, // Final Result Output (128-bit)
     
-    // Output Data Path (AXI4-Stream Master)
-    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 M_AXIS_RESULT TDATA" *)
-    output logic [127:0] m_axis_result_tdata,
-    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 M_AXIS_RESULT TVALID" *)
-    output logic                       m_axis_result_tvalid,
-    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 M_AXIS_RESULT TREADY" *)
-    input  logic                       m_axis_result_tready,
-    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 M_AXIS_RESULT TLAST" *)
-    output logic         m_axis_result_tlast,
+    // Auxiliary Streaming Ports
+    axis_if.slave  S_AXIS_HP1,
+    axis_if.slave  S_AXIS_HP2,
+    axis_if.slave  S_AXIS_HP3,
+    axis_if.slave  S_AXIS_HPC1,   // Feature Map Input 1 (128-bit, HPC1)
+    axis_if.master M_AXIS_ACP,
 
-    // =========================================================================
-    // NEW PORTS (For direct physical mapping on KV260)
-    // =========================================================================
-
-    // HPM1: Secondary Control (VLIW Pipe)
+    // Secondary MMIO Interface
     input  logic [31:0] s_axi_hpm1_vliw,
-    output logic [31:0] s_axi_hpm1_stat,
-
-    // HP1~HP3: Extra Weight Stream Lanes
-    `define HP_NEW_PORT(idx) \
-    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 S_AXIS_HP``idx`` TDATA" *) \
-    input  logic [127:0] s_axis_hp``idx``_tdata, \
-    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 S_AXIS_HP``idx`` TVALID" *) \
-    input  logic         s_axis_hp``idx``_tvalid, \
-    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 S_AXIS_HP``idx`` TREADY" *) \
-    output logic         s_axis_hp``idx``_tready
-
-    `HP_NEW_PORT(1),
-    `HP_NEW_PORT(2),
-    `HP_NEW_PORT(3),
-
-    // HPC1: Secondary Coherent Input (KV Cache)
-    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 S_AXIS_HPC1 TDATA" *)
-    input  logic [127:0] s_axis_hpc1_tdata,
-    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 S_AXIS_HPC1 TVALID" *)
-    input  logic         s_axis_hpc1_tvalid,
-    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 S_AXIS_HPC1 TREADY" *)
-    output logic         s_axis_hpc1_tready,
-
-    // ACP: Coherent Result Output
-    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 M_AXIS_ACP TDATA" *)
-    output logic [127:0] m_axis_acp_tdata,
-    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 M_AXIS_ACP TVALID" *)
-    output logic         m_axis_acp_tvalid,
-    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 M_AXIS_ACP TREADY" *)
-    input  logic         m_axis_acp_tready,
-    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 M_AXIS_ACP TLAST" *)
-    output logic         m_axis_acp_tlast
+    output logic [31:0] s_axi_hpm1_stat
 );
+
+    // ===| Bridge & Alignment: 256-bit Feature Map |=======
+    // Combine HPC0 (S_AXIS_FMAP) and HPC1 (S_AXIS_HPC1) into a single 256-bit bus
+    logic [255:0] s_axis_fmap_combined_tdata;
+    logic         s_axis_fmap_combined_tvalid;
+    logic         s_axis_fmap_combined_tready;
+    
+    // Concatenating {HPC1, HPC0} so HPC0 is the lower 128-bits
+    assign s_axis_fmap_combined_tdata  = {S_AXIS_HPC1.tdata, S_AXIS_FMAP.tdata}; 
+    
+    // Valid when BOTH HPC ports have valid data (Lock-step assumption)
+    assign s_axis_fmap_combined_tvalid = S_AXIS_FMAP.tvalid & S_AXIS_HPC1.tvalid;
+    
+    // Assert ready to BOTH ports simultaneously when the 256-bit FIFO is ready
+    assign S_AXIS_FMAP.tready = s_axis_fmap_combined_tready & S_AXIS_HPC1.tvalid;
+    assign S_AXIS_HPC1.tready = s_axis_fmap_combined_tready & S_AXIS_FMAP.tvalid;
+
+    // S_AXI_WEIGHT Bridge (Mapping to 512-bit FLAT signals)
+    logic [511:0] s_axis_weight_tdata_FLAT  = S_AXI_WEIGHT.tdata;
+    logic [3:0]   s_axis_weight_tvalid_FLAT = {3'b0, S_AXI_WEIGHT.tvalid}; 
+    logic [3:0]   s_axis_weight_tlast_FLAT  = {3'b0, S_AXI_WEIGHT.tlast};
+    assign S_AXI_WEIGHT.tready = s_axis_weight_tready_FLAT[0];
+    logic [3:0]   s_axis_weight_tready_FLAT;
+
+    // M_AXIS_RESULT Bridge
+    assign M_AXIS_RESULT.tdata  = m_axis_result_tdata;
+    assign M_AXIS_RESULT.tvalid = m_axis_result_tvalid;
+    assign M_AXIS_RESULT.tlast  = m_axis_result_tlast;
+    logic [127:0] m_axis_result_tdata;
+    logic         m_axis_result_tvalid;
+    logic         m_axis_result_tlast;
+    logic         m_axis_result_tready = M_AXIS_RESULT.tready;
+
+    // Unused/Mirror Ports
+    assign S_AXIS_HP1.tready  = 1'b1;
+    assign S_AXIS_HP2.tready  = 1'b1;
+    assign S_AXIS_HP3.tready  = 1'b1;
+    
+    // Result duplication to ACP
+    assign M_AXIS_ACP.tdata  = m_axis_result_tdata;
+    assign M_AXIS_ACP.tvalid = m_axis_result_tvalid;
+    assign M_AXIS_ACP.tlast  = m_axis_result_tlast;
+    
+    assign s_axi_hpm1_stat = 32'hCAFE_BABE;
 
     // ===| Internal Array Mapping |=======
     logic [127:0] s_axis_weight_tdata  [0:3];
@@ -107,20 +95,6 @@ module NPU_top (
             assign s_axis_weight_tready_FLAT[p] = s_axis_weight_tready[p];
         end
     endgenerate
-    
-    // Wire up the new unused ports to prevent warnings
-    assign s_axis_hp1_tready = 1'b1;
-    assign s_axis_hp2_tready = 1'b1;
-    assign s_axis_hp3_tready = 1'b1;
-    assign s_axis_hpc1_tready = 1'b1;
-    
-    // Wire up ACP duplicate (Mirroring M_AXIS_RESULT)
-    assign m_axis_acp_tdata  = m_axis_result_tdata;
-    assign m_axis_acp_tvalid = m_axis_result_tvalid;
-    // We only take ready from the main result port for now
-    assign m_axis_acp_tlast  = m_axis_result_tlast;
-    
-    assign s_axi_hpm1_stat = 32'hCAFE_BABE;
 
     // ===| Control Signals Extraction |=======
     logic npu_start;
@@ -136,14 +110,14 @@ module NPU_top (
     logic global_sram_rd_start;
     logic [2:0] global_inst;
     logic global_inst_valid;
-    logic packer_busy_status; // New wire to connect Packer to FSM
+    logic packer_busy_status; // Connect to Packer
 
     stlc_global_fsm u_brain (
         .clk(clk), .rst_n(rst_n),
         .npu_start(npu_start),
         .npu_done(mmio_npu_stat[0]),
         
-        .packer_busy(packer_busy_status), // Connect here!
+        .packer_busy(packer_busy_status), 
 
         .i_weight_valid(global_weight_valid),
         .sram_rd_start(global_sram_rd_start),
@@ -151,55 +125,116 @@ module NPU_top (
         .inst_valid_out(global_inst_valid)
     );
 
-    // 1. Feature Map Pipeline (HPC/ACP -> SRAM Cache)
-    // FIFO for FMap
-    logic [`AXI_DATA_WIDTH-1:0] fmap_fifo_data;
-    logic                       fmap_fifo_valid;
-    logic                       fmap_fifo_ready;
+    // 1. Feature Map Pipeline (HPC0 & HPC1 -> SRAM Cache)
+    // 256-bit FIFO for FMap
+    logic [255:0] fmap_fifo_data;
+    logic         fmap_fifo_valid;
+    logic         fmap_fifo_ready;
 
-    xpm_fifo_axis #(
+    xpm_fifo_axis #(    
         .FIFO_DEPTH(`XPM_FIFO_DEPTH),
-        .TDATA_WIDTH(`AXI_DATA_WIDTH),
+        .TDATA_WIDTH(256), // Increased from 128 to 256
         .FIFO_MEMORY_TYPE("block"),
         .CLOCKING_MODE("common_clock")
     ) u_fmap_fifo (
         .s_aclk(clk), .m_aclk(clk),
         .s_aresetn(rst_n),
-        .s_axis_tdata(s_axis_fmap_tdata),
-        .s_axis_tvalid(s_axis_fmap_tvalid),
-        .s_axis_tready(s_axis_fmap_tready),
+        .s_axis_tdata(s_axis_fmap_combined_tdata),
+        .s_axis_tvalid(s_axis_fmap_combined_tvalid),
+        .s_axis_tready(s_axis_fmap_combined_tready),
         .m_axis_tdata(fmap_fifo_data),
         .m_axis_tvalid(fmap_fifo_valid),
         .m_axis_tready(fmap_fifo_ready)
     );
 
-    // Dynamic e_max extraction (32 columns) directly from the incoming 128-bit chunk
-    // Note: Assuming 128-bit contains 8 words, you might need a mechanism to gather 
-    // all 32 exponents over 4 cycles, or adapt if your data packing is different.
-    // For simplicity, we define the wire here. Implementation will follow in a sub-module or FSM.
+    // ===| e_max parsing & cache logic               |=======
+    // ===| 256-bit에서 16개씩 2사이클에 걸쳐 32개 추출     |=======
     logic [`BF16_EXP_WIDTH-1:0] active_emax [0:`ARRAY_SIZE_H-1];
+    logic fmap_word_toggle;
+    logic emax_group_valid; // 32개가 다 모였을 때 1이 됨
 
-    // Shifter
-    logic [`FIXED_MANT_WIDTH-1:0] fixed_fmap;
-    logic        fixed_fmap_valid;
+    always_ff @(posedge clk) begin
+        if (!rst_n || npu_clear) begin
+            fmap_word_toggle <= 1'b0;
+            emax_group_valid <= 1'b0;
+        end else if (fmap_fifo_valid && fmap_fifo_ready) begin
+            fmap_word_toggle <= ~fmap_word_toggle;
+            
+            // 256-bit 버스에서 16개의 BF16 지수(Exponent) 동시 추출
+            for (int k = 0; k < 16; k++) begin
+                if (fmap_word_toggle == 1'b0) begin
+                    // 첫 번째 클럭: [0~15] 채우기 (하위 16개)
+                    active_emax[k] <= fmap_fifo_data[(k*16) + 7 +: 8]; 
+                end else begin
+                    // 두 번째 클럭: [16~31] 채우기 (상위 16개)
+                    active_emax[k+16] <= fmap_fifo_data[(k*16) + 7 +: 8];
+                end
+            end
+            
+            // 토글이 1에서 0으로 넘어갈 때 (두 번째 클럭 처리가 끝날 때) 32개 완성
+            emax_group_valid <= (fmap_word_toggle == 1'b1);
+        end else begin
+            emax_group_valid <= 1'b0;
+        end
+    end
+
+    // e_max 전용 캐시 (SRAM/LUTRAM)
+    // FMap 2048개 들어갈 때, 32개 묶음이므로 주소는 더 작게 됨. (여기선 단순 매핑)
+    logic [`BF16_EXP_WIDTH-1:0] emax_cache_mem [0:1023][0:`ARRAY_SIZE_H-1]; 
+    logic [9:0] emax_wr_addr;
+    logic [9:0] emax_rd_addr;
+
+    always_ff @(posedge clk) begin
+        if (!rst_n || npu_clear) begin
+            emax_wr_addr <= 0;
+        end else if (emax_group_valid) begin
+            for (int i = 0; i < `ARRAY_SIZE_H; i++) begin
+                emax_cache_mem[emax_wr_addr][i] <= active_emax[i];
+            end
+            emax_wr_addr <= emax_wr_addr + 1;
+        end
+    end
+
+    // 읽기 로직: global_sram_rd_start 신호에 맞춰서 e_max도 읽어냄
+    logic [`BF16_EXP_WIDTH-1:0] cached_emax_out [0:`ARRAY_SIZE_H-1];
     
-    // Using Lane 0 (first 16 bits) for Shifter for now. Needs expansion for full 128-bit.
+    always_ff @(posedge clk) begin
+        if (!rst_n || npu_clear) begin
+            emax_rd_addr <= 0;
+        end else if (global_sram_rd_start) begin // SRAM 읽기 시작할 때 주소 리셋
+            emax_rd_addr <= 0;
+        end else if (fmap_broadcast_valid) begin // FMap이 브로드캐스트 될 때마다 다음 e_max 읽기
+            // 필요에 따라 주소 증가 로직 수정 가능 (현재는 1씩 증가)
+            // emax_rd_addr <= emax_rd_addr + 1;
+        end
+        
+        // 캐시에서 읽은 e_max 출력
+        for (int i = 0; i < `ARRAY_SIZE_H; i++) begin
+            cached_emax_out[i] <= emax_cache_mem[emax_rd_addr][i];
+        end
+    end
+
+    // Shifter (16-Lane Parallel, 256-bit in -> 432-bit out)
+    logic [431:0] fixed_fmap;
+    logic         fixed_fmap_valid;
+    logic         fmap_shifter_ready;
+    
     stlc_bf16_fixed_pipeline u_fmap_shifter (
         .clk(clk), .rst_n(rst_n),
-        .s_axis_tdata(fmap_fifo_data[`BF16_WIDTH-1:0]), 
+        .s_axis_tdata(fmap_fifo_data), // Full 256-bit
         .s_axis_tvalid(fmap_fifo_valid),
-        .m_axis_tdata(fixed_fmap),
+        .s_axis_tready(fmap_shifter_ready),
+        .m_axis_tdata(fixed_fmap),     // Full 432-bit (16 x 27-bit)
         .m_axis_tvalid(fixed_fmap_valid),
         .m_axis_tready(1'b1) 
     );
-    assign fmap_fifo_ready = 1'b1;
+    assign fmap_fifo_ready = fmap_shifter_ready;
 
     // SRAM Cache
     logic [`FIXED_MANT_WIDTH-1:0] fmap_broadcast [0:`ARRAY_SIZE_H-1];
     logic        fmap_broadcast_valid;
-    logic [`FMAP_ADDR_WIDTH-1:0] sram_wr_addr;
+    logic [6:0]  sram_wr_addr; // log2(2048/16) = 7 bits
 
-    // Temporary basic write logic
     always_ff @(posedge clk) begin
         if (!rst_n || npu_clear) sram_wr_addr <= 0;
         else if (fixed_fmap_valid) sram_wr_addr <= sram_wr_addr + 1;
@@ -207,6 +242,7 @@ module NPU_top (
 
     stlc_fmap_cache #(
         .DATA_WIDTH(`FIXED_MANT_WIDTH),
+        .WRITE_LANES(16),
         .CACHE_DEPTH(`FMAP_CACHE_DEPTH),
         .LANES(`ARRAY_SIZE_H)
     ) u_fmap_sram (
@@ -242,7 +278,6 @@ module NPU_top (
     );
 
     // 2. Weight Pipeline (HP0~3 -> Systolic Array H_in)
-    
     logic [`AXI_DATA_WIDTH-1:0] weight_fifo_data  [0:`AXI_WEIGHT_PORT_CNT-1];
     logic                       weight_fifo_valid [0:`AXI_WEIGHT_PORT_CNT-1];
     logic                       weight_fifo_ready [0:`AXI_WEIGHT_PORT_CNT-1];
@@ -271,7 +306,6 @@ module NPU_top (
     logic [`INT4_WIDTH-1:0] unpacked_weights [0:`ARRAY_SIZE_H-1];
     logic       weights_ready_for_array;
 
-    // Using Port 0 for now. Needs mapping logic for all ports depending on layout.
     TO_stlc_weight_dispatcher u_weight_unpacker (
         .clk(clk), .rst_n(rst_n),
         .fifo_data(weight_fifo_data[0]),
@@ -281,9 +315,7 @@ module NPU_top (
         .weight_valid(weights_ready_for_array)
     );
 
-
     // 3. Systolic Array Core (The Engine)
-    
     logic [`DSP_RESULT_SIZE-1:0] raw_res_seq [0:`ARRAY_SIZE_H-1];
     logic [`DSP_RESULT_SIZE-1:0] raw_res_sum [0:`ARRAY_SIZE_H-1];
     logic                        raw_res_sum_valid [0:`ARRAY_SIZE_H-1];
@@ -312,8 +344,6 @@ module NPU_top (
     );
 
     // 4. Output Pipeline (Result Normalization -> Result Packer -> FIFO)
-
-    // e_max Delay Line (Matches Array Latency)
     localparam TOTAL_LATENCY = `SYSTOLIC_TOTAL_LATENCY;
     logic [`BF16_EXP_WIDTH-1:0] emax_pipe [0:`ARRAY_SIZE_H-1][0:TOTAL_LATENCY-1];
     logic [`BF16_EXP_WIDTH-1:0] delayed_emax_32 [0:`ARRAY_SIZE_H-1];
@@ -321,7 +351,9 @@ module NPU_top (
     always_ff @(posedge clk) begin
         if (rst_n) begin
             for (int c = 0; c < `ARRAY_SIZE_H; c++) begin
-                emax_pipe[c][0] <= active_emax[c]; // From FMap extraction logic
+                // FMap 데이터가 캐시에서 나와서 시스톨릭에 들어갈 때, 
+                // e_max도 캐시에서 꺼내어 딜레이 라인에 태운다!
+                emax_pipe[c][0] <= cached_emax_out[c]; 
                 for (int d = 1; d < TOTAL_LATENCY; d++) begin
                     emax_pipe[c][d] <= emax_pipe[c][d-1];
                 end
@@ -365,7 +397,7 @@ module NPU_top (
         .packed_data(packed_res_data),
         .packed_valid(packed_res_valid),
         .packed_ready(packed_res_ready),
-        .o_busy(packer_busy_status) // Connect here!
+        .o_busy(packer_busy_status) 
     );
 
     // Output FIFO
@@ -386,8 +418,7 @@ module NPU_top (
     );
 
     // Status Assignment
-    //assign mmio_npu_stat[0] = 1'b0; // Done flag (TODO)
-    assign mmio_npu_stat[1] = 1'b0; // FMap Ready flag (TODO)
+    assign mmio_npu_stat[1] = 1'b0; 
     assign mmio_npu_stat[31:2] = 30'd0;
 
 endmodule

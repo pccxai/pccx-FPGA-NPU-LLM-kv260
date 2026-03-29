@@ -6,12 +6,12 @@
  * Description: 
  *   SRAM-based Feature Map Cache for Gemma 3N Decode Phase (GEMV).
  *   - Stores a 1x2048 Feature Map (BF16, converted to 27-bit Mantissas).
- *   - Provides extreme bandwidth by broadcasting the cached data 
- *     to the 32 Vertical lanes of the Systolic Array repeatedly.
- *   - Uses Ping-Pong buffering or Circular addressing to hide load times.
+ *   - Write Interface: 432-bit (16 x 27-bit) to support high-bandwidth.
+ *   - Read Interface: 27-bit (1 word) broadcast to 32 Vertical lanes.
  */
 module stlc_fmap_cache #(
     parameter DATA_WIDTH = 27, // Fixed-point Mantissa width
+    parameter WRITE_LANES = 16, // 16 words per write
     parameter CACHE_DEPTH = 2048, // Accommodates 1x2048 vector
     parameter LANES = 32       // Number of vertical lanes to feed
 )(
@@ -19,9 +19,9 @@ module stlc_fmap_cache #(
     input  logic rst_n,
 
     // ===| Write Interface (From BF16-to-Fixed Shifter) |=======
-    input  logic [DATA_WIDTH-1:0] wr_data,
+    input  logic [(DATA_WIDTH*WRITE_LANES)-1:0] wr_data,
     input  logic                  wr_valid,
-    input  logic [10:0]           wr_addr, // log2(2048) = 11 bits
+    input  logic [6:0]            wr_addr, // log2(2048/16) = 7 bits
     input  logic                  wr_en,
 
     // ===| Read Interface (To Staggered Delay Line) |=======
@@ -30,40 +30,29 @@ module stlc_fmap_cache #(
     output logic                  rd_valid
 );
 
-    // ===| SRAM Instantiation (XPM Memory) |=======
-    // Using Xilinx Parameterized Macro for True Dual-Port RAM.
-    // Port A: Write from Shifter, Port B: Read to Systolic Array.
-    
-    // We need to fetch 32 words at once? Or broadcast 1 word to 32 lanes?
-    // In GEMV (1x2048 dot 2048x2048):
-    // A single element of the Feature Map (e.g., FMap[0]) is broadcasted 
-    // across all 32 columns, multiplying with Row 0 of the Weights.
-    // Next clock, FMap[1] is broadcasted, multiplying with Row 1 of the Weights.
-    // Therefore, we read ONE word per clock and fan it out to 32 lanes.
-
     logic [DATA_WIDTH-1:0] sram_rd_data;
     logic [10:0]           rd_addr;
     logic                  is_reading;
 
-    // True Dual Port RAM inference / XPM macro
+    // True Dual Port RAM inference / XPM macro with Asymmetric Ports
     xpm_memory_sdpram #(
-        .ADDR_WIDTH_A(11),               
-        .ADDR_WIDTH_B(11),               
+        .ADDR_WIDTH_A(7),                // Write: 128 depth
+        .ADDR_WIDTH_B(11),               // Read: 2048 depth
         .AUTO_SLEEP_TIME(0),            
-        .BYTE_WRITE_WIDTH_A(DATA_WIDTH), 
+        .BYTE_WRITE_WIDTH_A(DATA_WIDTH*WRITE_LANES), // Full word write
         .CLOCKING_MODE("common_clock"), 
         .MEMORY_INIT_FILE("none"),      
         .MEMORY_INIT_PARAM("0"),        
         .MEMORY_OPTIMIZATION("true"),   
         .MEMORY_PRIMITIVE("block"),      // Force BRAM usage
-        .MEMORY_SIZE(DATA_WIDTH * CACHE_DEPTH), 
+        .MEMORY_SIZE(DATA_WIDTH * CACHE_DEPTH), // 27 * 2048 = 55296 bits
         .MESSAGE_CONTROL(0),            
-        .READ_DATA_WIDTH_B(DATA_WIDTH),  
+        .READ_DATA_WIDTH_B(DATA_WIDTH),  // Read: 27-bit
         .READ_LATENCY_B(2),              // 2-cycle latency for 400MHz
         .USE_EMBEDDED_CONSTRAINT(0),    
         .USE_MEM_INIT(1),               
         .WAKEUP_TIME("disable_sleep"),  
-        .WRITE_DATA_WIDTH_A(DATA_WIDTH), 
+        .WRITE_DATA_WIDTH_A(DATA_WIDTH*WRITE_LANES), // Write: 432-bit
         .WRITE_MODE_B("read_first")      
     ) u_fmap_bram (
         .clka(clk),
@@ -87,8 +76,6 @@ module stlc_fmap_cache #(
 
     // ===| FSM / Read Controller |=======
     // Controls the rd_addr to sweep through the cached 2048 elements
-    
-    // We need to manage the 2-cycle read latency of the BRAM
     logic rd_valid_pipe_1, rd_valid_pipe_2;
 
     always_ff @(posedge clk) begin
@@ -113,10 +100,10 @@ module stlc_fmap_cache #(
                 end
             end
 
-            // Pipeline the valid signal to match BRAM latency (READ_LATENCY_B = 2)
+            // Pipeline the valid signal to match BRAM latency
             rd_valid_pipe_1 <= is_reading;
             rd_valid_pipe_2 <= rd_valid_pipe_1;
-            rd_valid        <= rd_valid_pipe_2; // Synchronized with sram_rd_data
+            rd_valid        <= rd_valid_pipe_2;
 
             // Broadcast the read data to all 32 lanes
             if (rd_valid_pipe_2) begin

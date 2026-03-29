@@ -1,180 +1,158 @@
 `timescale 1ns / 1ps
-
 `include "stlc_Array.svh"
-/*
+
+/**
  * Module: stlc_bf16_fixed_pipeline
  * Description: 
- *   Pipelined architecture for BF16 to Fixed-point conversion.
- *   1. Receives 32-word tiles from AXI-DMA.
- *   2. Finds the maximum exponent (emax) within the tile in real-time.
- *   3. Uses a 3-stage pipelined barrel shifter to align all values to emax.
- *   4. Implements Dual-Bank (Ping-Pong) buffering to hide latency.
-*/
-
-module stlc_bf16_fixed_pipeline #(
-    parameter TILE_SIZE = 32
-)(
+ *   High-Throughput 16-Lane Pipelined BF16 to Fixed-point Converter.
+ *   - Input: 256-bit (16 x BF16 elements) per clock.
+ *   - Block Size: 32 elements (Takes 2 clocks to receive one block).
+ *   - Operation:
+ *       1. Finds the Global e_max among the 32 elements.
+ *       2. Shifts the Mantissas (27-bit) to align with Global e_max.
+ *   - Output: 432-bit (16 x 27-bit Mantissas) per clock.
+ */
+module stlc_bf16_fixed_pipeline (
     input  logic clk,
     input  logic rst_n,
     
-    // AXI-Stream Slave Interface (Input from DMA)
-    input  logic [15:0] s_axis_tdata,
-    input  logic        s_axis_tvalid,
-    output logic        s_axis_tready,
+    // AXI-Stream Slave (Input from 256-bit FIFO)
+    input  logic [255:0] s_axis_tdata,
+    input  logic         s_axis_tvalid,
+    output logic         s_axis_tready,
     
-    // AXI-Stream Master Interface (Output to BRAM/NPU)
-    output logic [26:0] m_axis_tdata,
-    output logic        m_axis_tvalid,
-    input  logic        m_axis_tready
+    // AXI-Stream Master (Output to SRAM Cache - 16 x 27-bit = 432-bit)
+    output logic [431:0] m_axis_tdata,
+    output logic         m_axis_tvalid,
+    input  logic         m_axis_tready
 );
 
-    // --- Internal Signals ---
-    logic [15:0] buffer_0 [0:TILE_SIZE-1];
-    logic [15:0] buffer_1 [0:TILE_SIZE-1];
-    logic [7:0]  emax_0, emax_1;
+    // ===| Stage 1: Input Buffering & Local Max Exponent |===
+    // We need to buffer the first 16 words while waiting for the next 16.
+    logic [255:0] buffer_low;
+    logic [7:0]   local_max_low;
+    logic         first_half_valid;
     
-    logic        wr_bank;   // 0: Writing to buffer_0, 1: Writing to buffer_1
-    logic [4:0]  wr_ptr;
-    logic        rd_bank;   // Reading bank (swapped with wr_bank)
-    logic [4:0]  rd_ptr;
+    logic phase; // 0: Expecting Low 16, 1: Expecting High 16
     
-    logic        tile_full;     // Current bank is ready for shifting
-    logic        busy_shifting; // Shifter is pulling data from buffer
-
-    // Flow control: Ready when not waiting for shifter to clear a bank
-    assign s_axis_tready = !tile_full;
-    // --- 1. Write Logic: AXI-DMA to Buffer + E-max Tracking ---
-    logic clear_emax_0, clear_emax_1; // Signals from Read Logic to clear emax
-
-    always_ff @(posedge clk) begin
-        if (!rst_n) begin
-            wr_ptr    <= 0;
-            wr_bank   <= 0;
-            emax_0    <= 0;
-            emax_1    <= 0;
-            tile_full <= 0;
-        end else begin
-            // Handle emax clearing from Read Logic
-            if (clear_emax_0) emax_0 <= 0;
-            if (clear_emax_1) emax_1 <= 0;
-
-            if (s_axis_tvalid && s_axis_tready) begin
-                // Write to selected bank and update local emax
-                if (wr_bank == 0) begin
-                    buffer_0[wr_ptr] <= s_axis_tdata;
-                    if (s_axis_tdata[14:7] > emax_0) emax_0 <= s_axis_tdata[14:7];
-                end else begin
-                    buffer_1[wr_ptr] <= s_axis_tdata;
-                    if (s_axis_tdata[14:7] > emax_1) emax_1 <= s_axis_tdata[14:7];
-                end
-                
-                // Bank boundary check
-                if (wr_ptr == TILE_SIZE - 1) begin
-                    wr_ptr    <= 0;
-                    wr_bank   <= ~wr_bank;
-                    tile_full <= 1; // Bank ready for processing
-                end else begin
-                    wr_ptr    <= wr_ptr + 1;
-                end
-            end else if (busy_shifting && rd_ptr == TILE_SIZE - 1) begin
-                // Reset tile_full when the current read cycle is completing
-                tile_full <= 0; 
+    // Combinational Logic to find the maximum exponent among 16 BF16 elements
+    function automatic logic [7:0] find_max_e_16(input logic [255:0] data);
+        logic [7:0] max_val = 8'd0;
+        for (int i = 0; i < 16; i++) begin
+            if (data[(i*16)+7 +: 8] > max_val) begin
+                max_val = data[(i*16)+7 +: 8];
             end
         end
-    end
+        return max_val;
+    endfunction
 
+    assign s_axis_tready = 1'b1; // Always ready to sink data in this pipeline design
 
-    // --- 2. Read Control: Buffer to Shifter Stage ---
-    logic [15:0] shifter_in;
-    logic [7:0]  shifter_emax;
-    logic        shifter_in_valid;
-    
+    // Buffer registers for 32 elements
+    logic [255:0] block_data_low;
+    logic [255:0] block_data_high;
+    logic [7:0]   global_emax;
+    logic         block_valid;
+
     always_ff @(posedge clk) begin
         if (!rst_n) begin
-            rd_ptr           <= 0;
-            rd_bank          <= 0;
-            busy_shifting    <= 0;
-            shifter_in_valid <= 0;
-            clear_emax_0     <= 0;
-            clear_emax_1     <= 0;
-        end else begin
-            // Default to not clearing
-            clear_emax_0 <= 0;
-            clear_emax_1 <= 0;
-
-            if (tile_full && !busy_shifting) begin
-                // Start shifting process from the completed bank
-                busy_shifting <= 1;
-                rd_ptr        <= 0;
-                rd_bank       <= ~wr_bank; 
-            end else if (busy_shifting) begin
-                shifter_in_valid <= 1;
-                // Fetch data and current bank's emax
-                if (rd_bank == 0) begin
-                    shifter_in   <= buffer_0[rd_ptr];
-                    shifter_emax <= emax_0;
-                end else begin
-                    shifter_in   <= buffer_1[rd_ptr];
-                    shifter_emax <= emax_1;
-                end
-
-                // Reset ptr after reading the last element
-                if (rd_ptr == TILE_SIZE - 1) begin
-                    rd_ptr        <= 0;
-                    busy_shifting <= 0;
-                    // Trigger clear signals for the Write Logic to handle
-                    if (rd_bank == 0) clear_emax_0 <= 1;
-                    else              clear_emax_1 <= 1;
-                end else begin
-                    rd_ptr        <= rd_ptr + 1;
-                end
+            phase <= 1'b0;
+            first_half_valid <= 1'b0;
+            block_valid <= 1'b0;
+        end else if (s_axis_tvalid) begin
+            if (phase == 1'b0) begin
+                // Store first 16 words and their max exponent
+                buffer_low    <= s_axis_tdata;
+                local_max_low <= find_max_e_16(s_axis_tdata);
+                first_half_valid <= 1'b1;
+                block_valid   <= 1'b0;
+                phase         <= 1'b1;
             end else begin
-                shifter_in_valid <= 0;
+                // Second 16 words arrived! Combine to form 32-word block.
+                block_data_low  <= buffer_low;
+                block_data_high <= s_axis_tdata;
+                
+                // Compare max of low 16 and high 16 to get GLOBAL e_max
+                automatic logic [7:0] local_max_high = find_max_e_16(s_axis_tdata);
+                global_emax <= (local_max_low > local_max_high) ? local_max_low : local_max_high;
+                
+                block_valid <= 1'b1;
+                phase       <= 1'b0; // Reset for next block
             end
-        end
-    end
-    
-    // --- 3. Pipelined Barrel Shifter (3-Stage Logic) ---
-    
-    // Stage 1: Mantissa Extraction & Exponent Difference
-    logic [7:0]  s1_delta_e;
-    logic [26:0] s1_base_vec;
-    logic        s1_valid;
-    
-    always_ff @(posedge clk) begin
-        if (!rst_n) s1_valid <= 0;
-        else begin
-            s1_valid    <= shifter_in_valid;
-            s1_delta_e  <= shifter_emax - shifter_in[14:7];
-            // Handle hidden bit (BF16: 1.mantissa or 0.mantissa)
-            s1_base_vec <= (shifter_in[14:7] == 0) ? 
-                           {8'h0, shifter_in[6:0], 12'b0} : 
-                           {8'h1, shifter_in[6:0], 12'b0};
+        end else begin
+            block_valid <= 1'b0;
         end
     end
 
-    // Stage 2: Coarse Shift (Shift by multiples of 4: 0, 4, 8, ..., 24)
-    logic [26:0] s2_mid_vec;
-    logic [1:0]  s2_fine_shift;
-    logic        s2_valid;
-    always_ff @(posedge clk) begin
-        if (!rst_n) s2_valid <= 0;
-        else begin
-            s2_valid      <= s1_valid;
-            s2_fine_shift <= s1_delta_e[1:0]; // Pass lower bits to fine shift
-            if (s1_delta_e >= 27) 
-                s2_mid_vec <= 27'd0; // Underflow case
-            else                  
-                s2_mid_vec <= s1_base_vec >> (s1_delta_e[4:2] << 2);
-        end
-    end
+    // ===| Stage 2: Parallel Shifting (16 Lanes at a time) |===
+    // To save resources, we will shift the 32 elements over 2 clock cycles.
+    // Cycle 1: Shift block_data_low
+    // Cycle 2: Shift block_data_high
     
-    // Stage 3: Fine Shift (Shift by 0, 1, 2, 3) & Final Output Mapping
+    logic shift_phase; // 0: shifting low, 1: shifting high
+    logic [255:0] shift_target_data;
+    logic [7:0]   shift_target_emax;
+    logic         shift_trigger;
+
     always_ff @(posedge clk) begin
-        if (!rst_n) m_axis_tvalid <= 0;
-        else begin
-            m_axis_tvalid <= s2_valid;
-            m_axis_tdata  <= s2_mid_vec >> s2_fine_shift;
+        if (!rst_n) begin
+            shift_phase <= 1'b0;
+            shift_trigger <= 1'b0;
+        end else begin
+            if (block_valid) begin
+                // Start shifting process
+                shift_phase <= 1'b0;
+                shift_target_data <= block_data_low;
+                shift_target_emax <= global_emax;
+                shift_trigger <= 1'b1;
+            end else if (shift_trigger && shift_phase == 1'b0) begin
+                // Next cycle, shift the high part
+                shift_phase <= 1'b1;
+                shift_target_data <= block_data_high;
+                // keep shift_target_emax same
+                shift_trigger <= 1'b1;
+            end else begin
+                shift_trigger <= 1'b0;
+            end
         end
     end
+
+    // The 16 Parallel Shifters
+    logic [431:0] shifted_mantissas; // 16 * 27-bit
+
+    genvar i;
+    generate
+        for (i = 0; i < 16; i++) begin : gen_shifters
+            logic [15:0] word;
+            logic [7:0]  e_val;
+            logic [6:0]  m_val;
+            logic [26:0] base_vec;
+            logic [7:0]  delta_e;
+            
+            assign word = shift_target_data[(i*16) +: 16];
+            assign e_val = word[14:7];
+            assign m_val = word[6:0];
+            
+            // Add hidden bit: if exponent is 0, hidden bit is 0 (denormal), else 1
+            assign base_vec = (e_val == 0) ? {8'h0, m_val, 12'b0} : {8'h1, m_val, 12'b0};
+            assign delta_e  = shift_target_emax - e_val;
+            
+            // The actual shift
+            assign shifted_mantissas[(i*27) +: 27] = (delta_e >= 27) ? 27'd0 : (base_vec >> delta_e);
+        end
+    endgenerate
+
+    // ===| Stage 3: Output Register |===
+    always_ff @(posedge clk) begin
+        if (!rst_n) begin
+            m_axis_tvalid <= 1'b0;
+            m_axis_tdata  <= 0;
+        end else begin
+            m_axis_tvalid <= shift_trigger;
+            if (shift_trigger) begin
+                m_axis_tdata <= shifted_mantissas;
+            end
+        end
+    end
+
 endmodule

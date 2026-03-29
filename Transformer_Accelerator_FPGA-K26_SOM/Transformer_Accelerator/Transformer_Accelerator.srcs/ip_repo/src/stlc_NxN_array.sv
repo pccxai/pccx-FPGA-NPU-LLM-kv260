@@ -57,6 +57,7 @@ module stlc_NxN_array #(
     // ======================================================================
 
     // ===| Input Assignments |==============================================
+    // >>>| TOP INPUT LANE |<<<
     genvar i;
     generate
         for (i = 0; i < ARRAY_VERTICAL; i++) begin : assign_v_inputs
@@ -75,6 +76,7 @@ module stlc_NxN_array #(
         end
     endgenerate
 
+    // >>>| Normal Lane |<<<
     // Fabric delay line for V_in to reach row 16 correctly
     genvar d_row, d_col;
     generate

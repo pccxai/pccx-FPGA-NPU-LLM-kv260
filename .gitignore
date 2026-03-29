@@ -1,12 +1,12 @@
 # ========================================
-# 🧠 LLM Weights & Data (Absolute Must Ignore!)
+# LLM Weights & Data (Absolute Must Ignore!)
 # ========================================
 *.safetensors
 local_gemma_3n/
 *.npy
 
 # ========================================
-# 🐍 Python & PYNQ Environment
+# Python & PYNQ Environment
 # ========================================
 __pycache__/
 *.pyc
@@ -17,7 +17,7 @@ env/
 .env
 
 # ========================================
-# 🛠️ Vivado Junk & Build Files (Heavy!)
+# Vivado Junk & Build Files (Heavy!)
 # ========================================
 *.jou
 *.log
@@ -47,7 +47,7 @@ hs_err_pid*.log
 *.backup.log
 
 # ========================================
-# 📦 Hardware Output Files (Optional)
+# Hardware Output Files (Optional)
 # 배포용이 아니라면 로컬에만 둠
 # ========================================
 *.bit
@@ -58,7 +58,7 @@ hs_err_pid*.log
 *.hdf
 
 # ========================================
-# 💻 Simulator & OS Setup
+# Simulator & OS Setup
 # ========================================
 obj_dir/
 *.vcd
@@ -68,6 +68,8 @@ obj_dir/
 *.lpr
 *.bat
 *.ini
+*.pdf
+*.dcp
 
 .vscode/
 .DS_Store

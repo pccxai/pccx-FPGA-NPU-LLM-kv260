@@ -1,14 +1,13 @@
 {
   "design": {
     "design_info": {
-      "boundary_crc": "0xC122362E",
+      "boundary_crc": "0x156C008860D54B66",
       "device": "xck26-sfvc784-2LV-c",
       "gen_directory": "../../../../Transformer_Accelerator.gen/blockdesign/bd/NPU",
       "name": "NPU",
       "rev_ctrl_bd_flag": "RevCtrlBdOff",
       "synth_flow_mode": "None",
-      "tool_version": "2025.2",
-      "validated": "true"
+      "tool_version": "2025.2"
     },
     "design_tree": {
       "zynq_ultra_ps_e_0": "",
@@ -39,6 +38,12 @@
             "value": "FALSE",
             "value_src": "default"
           }
+        },
+        "port_maps": {
+          "TRI_O": {
+            "physical_name": "gpio_rtl_tri_o",
+            "direction": "O"
+          }
         }
       },
       "gpio_rtl_0": {
@@ -49,6 +54,12 @@
           "LOCKED": {
             "value": "FALSE",
             "value_src": "default"
+          }
+        },
+        "port_maps": {
+          "TRI_I": {
+            "physical_name": "gpio_rtl_0_tri_i",
+            "direction": "I"
           }
         }
       }

@@ -5,3 +5,11 @@
 1. `stlc_dsp_unit.sv`에서 `A_fabric_out`을 제거하고 `CREG=0`으로 수정하여 타이밍 불일치 방지.
 2. `stlc_NxN_array.sv` 내부에 `V_in`을 수직으로 전달하는 Fabric Shift Register 파이프라인(`stlc_in_V_fabric`)을 구성. 
 3. Row 16에서 이 Shift Register의 값을 `in_V`로 받아들여 A 포트 체인을 안전하게 끊음.
+
+[시도한 내용] - NPU_top의 포트 선언부가 너무 길고 복잡하여 가독성이 떨어지는 문제 해결 및 HPC 포트 256-bit 병합.
+[발생한 문제/에러 로그] - X_INTERFACE_INFO 등 Vivado 전용 속성과 매크로가 혼재되어 코드 파악이 어려움. 또한 Feature Map 입력 대역폭 확장을 위해 HPC0, HPC1 포트를 병합할 필요성 대두.
+[해결 방법 및 결과] - 
+1. `npu_interfaces.svh`를 생성하여 AXI-Stream 규격을 `axis_if` 인터페이스로 묶어 깔끔하게 정리.
+2. `NPU_top.sv`의 포트 선언을 인터페이스 기반으로 교체하고 내부에서 Bridge(assign) 연결. (`sources_1`과 `ip_repo/src` 양쪽 동기화 완료)
+3. HPC0와 HPC1을 묶어 256-bit Feature Map 버스(`s_axis_fmap_combined_tdata`) 생성 및 256-bit FIFO 파라미터 적용.
+4. BFP(Block Floating Point) 정확도 유지를 위해 256-bit에서 16개씩 토글(Ping-Pong)하여 `e_max` 32개를 파싱하고 전용 SRAM(`emax_cache_mem`)에 캐싱하는 로직 추가.

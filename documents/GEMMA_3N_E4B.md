@@ -387,7 +387,7 @@ Python (main.py / CPU_CORE.py)
 
 | Item | `gemv_int4_vector4.comp` | `gemv_int4.comp` |
 | ------------------------ | --------------------------- | ------------------------ |
-| **Status** | ✅ Currently in use (Production) | 🗃️ Old version (Legacy) |
+| **Status** |  Currently in use (Production) |  Old version (Legacy) |
 | **Memory Access Unit** | `uvec4` (128-bit, 16 bytes) | `uint` (32-bit, 4 bytes) |
 | **INT4 processed per loop** | 32 | 8 |
 | **Push Constant Field Name** | `K_in_vector4s` | `K_in_uints` |
@@ -697,6 +697,16 @@ Extracts one row of a token from the INT4 embedding table and converts it to flo
 **Memory Optimization**: Since `W_packed` and `W_scale` are arrays opened via mmap, actual disk reading occurs only for that specific row (`token_id`), which is about ~5.5 KB.
 
 ---
+> **Optimization Note:**
+> *   **Constant Folding:** The original algorithm's $\times \sqrt{2048.0}$ operation is not performed at runtime. We use $W_{embed\_precal}$ where the multiplication is pre-applied offline. (DSP cost: 0)
+> *   **Vocab Pruning & Memory Tiering:** Loading 256K tokens into RAM takes ~1GB. We tier the memory:
+>     *   **Frequent Tokens (~50K):** Kept in KV260's DDR4 RAM for zero-latency access.
+>     *   **Rare Tokens:** Kept on USB/SSD via `mmap` to be read with zero-copy only when needed.
+> *   **Formula:**
+>     $$ x_{0} = Embedding(token\_id, W_{embed\_precal}) $$
+
+---
+
 
 #### `gelu(x)`
 
@@ -716,6 +726,16 @@ Handles inputs of arbitrary shapes via `flatten()` + `reshape()`.
 Works transparently for both 1D and 2D.
 
 ---
+> **Optimization Note:**
+> *   **Formula:**
+
+>     $$ Output = 0.5 \times x \times \left(1 + \tanh\left(\sqrt{\frac{2}{\pi}} \times (x + 0.044715 \times x^{3})\right)\right) $$
+> *   **Matrix Dimensions:**
+>     *   `x` (Input): Target Vector (e.g., `[1, 8960]`)
+>     *   `Output`: Same as Input
+
+---
+
 
 #### `cpu_qk_norm(Q, K, gamma_q, gamma_k)`
 
@@ -771,6 +791,18 @@ theta = 1_000_000.0 if (i % 5 == 4) else 10_000.0   # Global / Local
 ```
 
 ---
+> **Optimization Note:**
+> *   **Formula:**
+>     $$ Output_{2i} = x_{2i} \times \cos(\theta) - x_{2i+1} \times \sin(\theta) $$
+
+>     $$ Output_{2i+1} = x_{2i} \times \sin(\theta) + x_{2i+1} \times \cos(\theta) $$
+> *   **Matrix Dimensions:**
+>     *   `x` (Input): Single Head `[1, 256]`
+>     *   $\theta$ (Theta): Pre-computed angles `[256]`
+>     *   `Output`: `[1, 256]`
+
+---
+
 
 #### `cpu_gqa(Q_rope, K_cache_layer, V_cache_layer)`
 
@@ -1229,6 +1261,19 @@ return x_f32
 > Since it creates an independent copy via `np.ascontiguousarray`, the original `x` remains unmodified.
 
 ---
+> **Optimization Note:**
+> *   **Hardware Division Cancellation:** The division by $\sqrt{2048.0}$ when computing $x_{proj}$ (for PLE setup) is mathematically canceled out because the next operation is RMSNorm. We completely omit the heavy hardware divider.
+> *   **Formula:**
+>     $$ RMS = \sqrt{\frac{1}{N}\sum_{i=1}^{N}x_{i}^{2} + 10^{-6}} $$
+
+>     $$ Output = \left(\frac{x}{RMS}\right) \times \gamma $$
+> *   **Matrix Dimensions:**
+>     *   `x` (Input): `[1, 2048]` (or `[1, 256]`)
+>     *   `gamma` ($\gamma$): `[2048]` (or `[256]`)
+>     *   `Output`: Same as Input `[1, 2048]` (or `[1, 256]`)
+
+---
+
 
 #### `get_router_modalities(x, w_norm, w_router)`
 
@@ -1291,6 +1336,18 @@ Performs **Embedding → PLE calculation → 35 layer iterations** for a single 
 
 #### Phase A: Embedding and AltUp Initialization
 
+
+> **Optimization Note:**
+> *   **AltUp Initial Projections Formula:**
+>     $$ xs_{1} = x_{0} \cdot altup\_projs[0] $$
+>     $$ xs_{2} = x_{0} \cdot altup\_projs[1] $$
+
+>     $$ xs_{3} = x_{0} \cdot altup\_projs[2] $$
+> *   **Matrix Dimensions:**
+>     *   `x_0`: `[1, 2048]`
+>     *   `altup_projs[k]`: `[2048, 2048]`
+>     *   `xs_k` (Output): `[1, 2048]` (Total `xs` collection: 4 streams of `[1, 2048]`)
+
 ```python
 # 1. Look up INT4 embedding + Gemma 3N scaling
 x0 = CPU_CORE.embedding(token_id, W_embed[0], W_embed[1])
@@ -1302,6 +1359,23 @@ xs[1..3] = dot(x0, altup_projs[0..2]) # Shadow Streams
 ```
 
 #### Phase B: Calculate PLE (Per-Layer Embedding)
+
+
+> **Optimization Note:**
+> *   **Pre-computation Merging:** Instead of performing $\times \frac{1}{\sqrt{2.0}}$ (for $pli\_all$) and $\times \sqrt{256.0}$ (for $y$) at runtime, these constants are merged offline into $norm_{ple\_precal}$ and $W_{ple\_packed\_precal}$.
+> *   **Hardware Optimization:** Operations are reduced to a single simple addition.
+> *   **Formulas:**
+>     $$ x_{proj} = x_{0} \cdot W_{ple\_proj} $$
+>     $$ x_{proj\_normed} = RMSNorm(x_{proj}) \times norm_{ple\_precal} $$
+>     $$ y = Embedding(token\_id, W_{ple\_packed\_precal}) $$
+
+>     $$ pli\_all = x_{proj\_normed} + y $$
+> *   **Matrix Dimensions:**
+>     *   `x_0`: `[1, 2048]`
+>     *   `W_ple_proj`: `[2048, 35 * 256]`
+>     *   `x_proj`: Reshaped to `[35, 256]`
+>     *   `y`: `[35, 256]` (from `W_ple_packed_precal` `[262144, 35 * 256]`)
+>     *   `pli_all` (Output): `[35, 256]`
 
 ```python
 # W_ple_proj: [2048] → [35×256] projection (IGPU)
@@ -1403,6 +1477,25 @@ xs = xs_new
 ---
 
 ### Core Function: `decode_logits(xs, altup_unprojs, W_final_norm, W_lm_head)`
+
+
+> **Optimization Note:**
+> *   **Logits Decoding Formulas:**
+>     $$ target\_mag = \sqrt{Mean(xs[0]^{2})} $$
+>     $$ proj\_x_{k} = xs[k+1] \cdot altup\_unprojs[k] \quad (k=0,1,2) $$
+>     $$ new\_mag_{k} = \sqrt{Mean(proj\_x_{k}^{2})} $$
+>     $$ proj\_x_{k} = proj\_x_{k} \times \frac{target\_mag}{\max(new\_mag_{k}, 10^{-12})} $$
+>     $$ x_{final} = Mean([xs[0], proj\_x_{0}, proj\_x_{1}, proj\_x_{2}]) $$
+>     $$ x_{final\_norm} = RMSNorm(x_{final}, W_{final\_norm}) $$
+>     $$ Logits\_Raw = x_{final\_norm} \cdot W_{lm\_head} $$
+
+>     $$ Logits = 30.0 \times \tanh\left(\frac{Logits\_Raw}{30.0}\right) $$
+> *   **Matrix Dimensions:**
+>     *   `xs[k]`: `[1, 2048]`
+>     *   `altup_unprojs[k]`: `[2048, 2048]`
+>     *   `x_final`: `[1, 2048]`
+>     *   `W_lm_head`: `[2048, 262400]` (Note: Typically transposed in code as `[262400, 2048]`)
+>     *   `Logits` (Output): `[1, 262400]`
 
 ```python
 def decode_logits(...) -> np.ndarray  # [vocab_size=262400] float32
@@ -1559,7 +1652,7 @@ There are two versions of the implementation within the file:
 | Version | Location | Status | Source |
 | ------------- | ---------------------------- | ---------- | --------------------------------------------- |
 | Old Version | Top of the file (Inside the long `'''` comment) | ❌ Inactive | Parses `local_gemma_3n_int4/*.safetensors` directly |
-| **Current Version**| Bottom of the file (After `'''`) | ✅ **Active** | mmap loads `mmap_weights/*.npy` |
+| **Current Version**| Bottom of the file (After `'''`) |  **Active** | mmap loads `mmap_weights/*.npy` |
 
 The old version directly read files with `safetensors.torch.load_file` and converted torch tensors to numpy, but required the entire model to be loaded into RAM during loading. The current version solves this problem.
 
@@ -2366,7 +2459,7 @@ for i in range(0, len(logits), 32):   # Transferred in chunks of 32
 | Tile Unit | 32×32 fixed | Workgroup 32 | AVX2 register unit |
 | RMSNorm Location | Built-in NPU IP (pass mean_sq) | CPU (Separate call) | CPU (Separate call) |
 | GeLU Location | Built-in NPU IP (1-Cycle) | CPU (`CPU_CORE.gelu`) | C++ SIMD inline |
-| Current Usage | ❌ (FPGA target, unconnected) | ✅ Default mode | ✅ CPU mode |
+| Current Usage | ❌ (FPGA target, unconnected) |  Default mode |  CPU mode |
 
 ---
 
@@ -2697,9 +2790,9 @@ Converts the HuggingFace standard role name `"assistant"` into Gemma 3N's intern
 
 ```jinja
 {%- if message['content'] is string -%}
-    {{ message['content'] | trim }}          ← Standard text
+    {{ message['content'] | trim }}          {# Standard text #}
 
-{%- elif message['content'] is iterable -%}  ← Multimodal list
+{%- elif message['content'] is iterable -%}  {# Multimodal list #}
     {%- for item in message['content'] -%}
         {%- if item['type'] == 'audio' -%}   {{ '<audio_soft_token>' }}
         {%- elif item['type'] == 'image' -%} {{ '<image_soft_token>' }}
@@ -2935,3 +3028,62 @@ python Optim_tensor_load.py > optim_tensor_size.md
 | 6/8 | `quantize.py` + `Memory_Manager.py` | INT4 symmetric quantization, KV cache pre-allocation |
 | 7/8 | `NPU_CORE.py` + `gemma3N_E4B_architecture.md` | FPGA Systolic Array, overall architecture design |
 | 8/8 | `chat_template.jinja` + `optim_tensor_size.md` | Conversation serialization format, baseline memory usage table |
+
+
+---
+
+# Appendix: FPGA Hardware Equivalent & Future Architecture
+
+> **Note**: This section describes how the C++/Python functions detailed above are mapped to the custom FPGA hardware (TinyNPU-RTL), and outlines the future direction of the architecture.
+
+## 1. Mapping C++/Python Functions to FPGA Modules
+
+While the CPU/iGPU relies on memory-bound SIMD instructions and Vulkan pipelines, the FPGA accelerates these via a pipelined Systolic Array and dedicated hardware logic:
+
+* **`run_vulkan_gemv_pingpong()` & `igpu_matmul()`**
+  * **FPGA Implementation**: Mapped to `stlc_NxN_array.sv` (32x32 Systolic Array) and `TO_stlc_weight_dispatcher.sv`. Instead of Vulkan's ping-pong buffers, the FPGA uses true hardware double-buffering via 4 AXI-Stream Weight lanes (`HP0~HP3`) and Zero-Bubble pipelined weight loading.
+* **`run_RMSNorm_inplace()` / `rms_norm()`**
+  * **FPGA Implementation**: Executed via the FPGA's post-processing pipeline (`stlc_result_normalizer.sv`), which performs Block Floating Point (BFP) conversion and normalizes the 48-bit accumulated results back to BF16 format using LOD (Leading One Detection) and Barrel Shifters.
+* **`run_unpack_int4_inplace()`**
+  * **FPGA Implementation**: Handled purely in hardware wires without latency. `TO_stlc_weight_dispatcher.sv` directly slices 128-bit AXI streams into 4-bit INT4 chunks and feeds them into the MAC units.
+* **`cpu_rope_inplace()` & `cpu_gqa()`**
+  * **FPGA Implementation**: Currently managed by the CPU (Master), but targeted for future offloading using the repurposed DSP blocks (see below).
+
+## 2. Future Architecture: LUT-Based INT4 Multiplication & DSP Repurposing
+
+### The Bottleneck of Pure DSP MACs
+In the current architecture, Xilinx DSP48E2 blocks are exclusively used for multiplying FMap (BF16 Mantissa) and Weights (INT4). However, using a powerful 27x18 DSP purely for an INT4 (actually a very limited set of numbers) multiplication is an underutilization of silicon, and routing congestion bounds the clock frequency.
+
+### The Paradigm Shift: Shift-and-Add via LUTs
+To maximize throughput, we are migrating to a **LUT-based Shift-and-Add architecture** for INT4 * BF16 operations. Since INT4 weights only span a narrow range, we can replace the heavy multiplication with simple left-shifts (`<<`) and additions (`+`) in general logic (Fabric LUTs).
+
+**INT4 * BF16(A) Multiplication Rules:**
+Since the sign of the INT4 weight is applied at the very end of the calculation, we only deal with the absolute magnitude (0 to 8) using the mantissa of A:
+* **0** $
+ightarrow$ `0`
+* **1** $
+ightarrow$ `A`
+* **-1** $
+ightarrow$ `-A`
+* **2** $
+ightarrow$ `A << 1`
+* **3** $
+ightarrow$ `(A << 1) + A`
+* **4** $
+ightarrow$ `A << 2`
+* **5** $
+ightarrow$ `(A << 2) + A`
+* **6** $
+ightarrow$ `(A << 2) + (A << 1)`
+* **7** $
+ightarrow$ `(A << 3) - A`
+* **8** $
+ightarrow$ `A << 3`
+
+*(Note: The negative sign is handled trivially by flipping the sign bit or 2's complement inversion at the final addition stage.)*
+
+### LUT + DSP Parallel Execution (Scale-Out)
+By shifting the core GEMV matrix multiplications to the LUTs (Shift-and-Add), the DSP48E2 blocks are **liberated**. 
+1. **Repurposed DSPs**: Freed DSPs will be transformed into flexible, high-precision adders or general matrix multipliers.
+2. **Parallel Execution**: LUTs will handle the massive, low-precision INT4 Weight * BF16 Activation dot products (GEMV), while the DSPs will concurrently compute Attention Scores, RoPE, or Vector additions (Residuals, LAuReL).
+3. **Result**: This dual-engine strategy maximizes the Kria KV260's throughput, allowing us to push the limits of local LLM decoding without being bottlenecked by DSP count.
