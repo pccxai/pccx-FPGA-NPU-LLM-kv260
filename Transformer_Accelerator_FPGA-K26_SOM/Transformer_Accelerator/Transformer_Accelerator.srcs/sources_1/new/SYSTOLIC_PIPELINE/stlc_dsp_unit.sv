@@ -4,7 +4,7 @@
 module stlc_dsp_unit #(
     parameter IS_TOP_ROW = 0,
     parameter BREAK_CASCADE = 0 // If 1, break the vertical cascade chain here
-)(   
+)(
     input   logic clk,
     input   logic rst_n,
 
@@ -39,7 +39,7 @@ module stlc_dsp_unit #(
 
     always_ff @(posedge clk) begin
         if (!rst_n || i_clear) begin
-            current_inst <= 3'b000; 
+            current_inst <= 3'b000;
         end else if (inst_valid_in_V) begin
             current_inst <= instruction_in_V;
         end
@@ -65,7 +65,7 @@ module stlc_dsp_unit #(
         end else begin
             flush_sequence <= {flush_sequence[2:0], 1'b0};
             if (inst_valid_in_V && instruction_in_V[2] == 1'b1) begin
-                flush_sequence[0] <= 1'b1; 
+                flush_sequence[0] <= 1'b1;
             end
         end
     end
@@ -75,7 +75,7 @@ module stlc_dsp_unit #(
     logic [3:0] dynamic_alumode;
 
     logic is_flushing;
-    assign is_flushing = flush_sequence[1] | flush_sequence[2]; 
+    assign is_flushing = flush_sequence[1] | flush_sequence[2];
 
     // OPMODE Selection
     // W(2), Z(3), Y(2), X(2)
@@ -86,11 +86,11 @@ module stlc_dsp_unit #(
     always_comb begin
         if (is_flushing) begin
             // Flush: P = 0 + 0 + 0 (Clear accumulator)
-            dynamic_opmode  = 9'b00_000_00_00; 
+            dynamic_opmode  = 9'b00_000_00_00;
             dynamic_alumode = 4'b0000;
         end else if (current_inst[0] == 1'b1) begin
             // Calc: P = P_prev + A*B
-            dynamic_opmode  = {2'b00, Z_MUX, 2'b01, 2'b01}; 
+            dynamic_opmode  = {2'b00, Z_MUX, 2'b01, 2'b01};
             dynamic_alumode = 4'b0000;
         end else begin
             // Idle: P = P_prev (Pass through)
@@ -100,15 +100,15 @@ module stlc_dsp_unit #(
     end
 
     logic dsp_ce_p;
-    assign dsp_ce_p = current_inst[0] | is_flushing; 
+    assign dsp_ce_p = current_inst[0] | is_flushing;
 
     // ===| [Fabric FF & Weight Pipeline] |=================================
-    always_ff @(posedge clk) begin 
+    always_ff @(posedge clk) begin
         if(!rst_n || i_clear) begin
             out_H <= 0;
-        end else begin    
+        end else begin
             if (i_weight_valid) begin
-                out_H <= in_H; 
+                out_H <= in_H;
             end
         end
     end
@@ -118,15 +118,15 @@ module stlc_dsp_unit #(
     logic dsp_ce_b2;
     logic load_trigger;
 
-    assign load_trigger = flush_sequence[3]; 
+    assign load_trigger = flush_sequence[3];
 
     always_comb begin
         if (current_inst[1] == 1'b1) begin
             dsp_ce_b1 = i_valid;
             dsp_ce_b2 = i_valid;
         end else begin
-            dsp_ce_b1 = load_trigger | i_weight_valid; 
-            dsp_ce_b2 = load_trigger; 
+            dsp_ce_b1 = load_trigger | i_weight_valid;
+            dsp_ce_b2 = load_trigger;
         end
     end
 
@@ -141,28 +141,28 @@ module stlc_dsp_unit #(
     // [DSP48E2 primitive instantiation] <><><><><><><><><><><><><><><><><>
     logic [17:0] in_H_padded;
     assign in_H_padded = {{14{in_H[`STLC_MAC_UNIT_IN_H - 1]}}, in_H};
-    
+
     // If TOP_ROW or BREAK_CASCADE, we get A from Fabric (in_V). Otherwise from ACIN.
     logic [29:0] dsp_a_input;
     assign dsp_a_input = (IS_TOP_ROW || BREAK_CASCADE) ? in_V : 30'd0;
-    
+
     logic [29:0] dsp_acin_input;
     assign dsp_acin_input = (IS_TOP_ROW || BREAK_CASCADE) ? 30'd0 : ACIN_in;
 
     // If BREAK_CASCADE, we receive the accumulated result from Fabric C (V_result_in)
     logic [47:0] dsp_c_input;
     assign dsp_c_input = BREAK_CASCADE ? V_result_in : 48'd0;
-    
+
     logic [47:0] dsp_pcin_input;
     assign dsp_pcin_input = BREAK_CASCADE ? 48'd0 : V_result_in;
-    
+
     logic [47:0] p_internal;
 
     DSP48E2 #(
-        .A_INPUT((IS_TOP_ROW || BREAK_CASCADE) ? "DIRECT" : "CASCADE"), 
+        .A_INPUT((IS_TOP_ROW || BREAK_CASCADE) ? "DIRECT" : "CASCADE"),
         .B_INPUT("DIRECT"),
-        .AREG(1), .BREG(2), .CREG(0), .MREG(1), .PREG(1), 
-        .OPMODEREG(1),    
+        .AREG(1), .BREG(2), .CREG(0), .MREG(1), .PREG(1),
+        .OPMODEREG(1),
         .ALUMODEREG(1),
         .USE_MULT("MULTIPLY")
     ) DSP_HARD_BLOCK (
@@ -170,11 +170,11 @@ module stlc_dsp_unit #(
         .RSTA(i_clear), .RSTB(i_clear), .RSTM(i_clear), .RSTP(i_clear),
         .RSTCTRL(i_clear), .RSTALLCARRYIN(i_clear), .RSTALUMODE(i_clear), .RSTC(i_clear),
 
-        .CEA1(i_valid), .CEA2(i_valid),   
-        .CEB1(dsp_ce_b1), .CEB2(dsp_ce_b2), 
-        .CEM(i_valid),                    
-        .CEP(dsp_ce_p),                
-        .CECTRL(1'b1),               
+        .CEA1(i_valid), .CEA2(i_valid),
+        .CEB1(dsp_ce_b1), .CEB2(dsp_ce_b2),
+        .CEM(i_valid),
+        .CEP(dsp_ce_p),
+        .CECTRL(1'b1),
         .CEALUMODE(1'b1),
         .CEC(1'b1), // Enable C register if breaking cascade
 
@@ -182,18 +182,18 @@ module stlc_dsp_unit #(
         .ACIN(dsp_acin_input),
         .ACOUT(ACOUT_out),
 
-        .B(in_H_padded),    
-        .C(dsp_c_input),          
+        .B(in_H_padded),
+        .C(dsp_c_input),
 
-        .PCIN(dsp_pcin_input),   
-        .PCOUT(V_result_out), 
+        .PCIN(dsp_pcin_input),
+        .PCOUT(V_result_out),
 
         .OPMODE(dynamic_opmode),
         .ALUMODE(dynamic_alumode),
-        .P(p_internal)  
+        .P(p_internal)
     );
-    
+
     // We must expose the internal P so it can be routed via fabric to the next DSP
     assign P_fabric_out = p_internal;
-    
+
 endmodule
