@@ -93,3 +93,7 @@ Transformer_Accelerator_FPGA-K26_SOM/Transformer_Accelerator/Transformer_Acceler
 # markdown and extention for personal use
 GEMINI.md
 .VSCodeCounter/
+.github/
+.settings/
+github/
+settings/
