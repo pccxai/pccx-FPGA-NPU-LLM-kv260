@@ -14,18 +14,21 @@ module stlc_weight_dispatcher #(
     parameter weight_lane_cnt       = `HP_PORT_CNT,
     parameter weight_width_per_lane = `HP_PORT_SINGLE_WIDTH,
     parameter weight_size           = `INT4,
-    parameter weight_cnt            = `HP_WEIGHT_CNT(`HP_PORT_SINGLE_WIDTH, `INT4)
+    parameter weight_cnt            = `HP_WEIGHT_CNT(`HP_PORT_SINGLE_WIDTH, `INT4),
+    parameter array_horizontal      = `ARRAY_SIZE_H,
+    parameter array_vertical        = `ARRAY_SIZE_V
 ) (
     input logic clk,
     input logic rst_n,
 
     // ===| 128-bit * 4 Input from FIFO |===
-    input  logic [weight_size-1:0] fifo_data [0:weight_lane_cnt-1][0:weight_cnt-1],
-    input  logic                   fifo_valid[0:weight_lane_cnt-1][0:weight_cnt-1],
-    output logic                   fifo_ready[0:weight_lane_cnt-1][0:weight_cnt-1],
+    input logic [weight_size-1:0] fifo_data [0:weight_cnt-1],
+    input logic                   fifo_valid[0:weight_cnt-1],
+
+    output logic fifo_ready[0:weight_cnt-1],
 
     // ===| 32 x 4-bit Outputs to Systolic Array (V_in) |========
-    output logic [weight_size-1:0] weight_out  [0:weight_lane_cnt-1][0:weight_cnt-1],
+    output logic [weight_size-1:0] weight_out  [0:weight_cnt-1],
     output logic                   weight_valid
 );
 
@@ -37,19 +40,15 @@ module stlc_weight_dispatcher #(
   always_ff @(posedge clk) begin
     if (!rst_n) begin
       weight_valid <= 1'b0;
-      for (int w_lane_cnt = 0; w_lane_cnt < weight_lane_cnt; w_lane_cnt++) begin
-        for (int i = 0; i < weight_cnt; i++) begin
-          weight_out[w_lane_cnt][i] <= '0;
-        end
+      for (int i = 0; i < weight_cnt; i++) begin
+        weight_out[w_lane_cnt][i] <= '0;
       end
     end else begin
       weight_valid <= fifo_valid;
 
-      // ===| Unpack 128-bit into 32 x 4-bit x  |==============================================
-      for (int w_lane_cnt = 0; w_lane_cnt < weight_lane_cnt; w_lane_cnt++) begin
-        for (int i = 0; i < weight_cnt; i++) begin
-          weight_out[w_lane_cnt][i] <= fifo_data[w_lane_cnt][i];
-        end
+      // ===| Unpack 128-bit into 32 x 4-bit  |==============================================
+      for (int i = 0; i < weight_cnt; i++) begin
+        weight_out[i] <= fifo_data[i];
       end
     end
   end

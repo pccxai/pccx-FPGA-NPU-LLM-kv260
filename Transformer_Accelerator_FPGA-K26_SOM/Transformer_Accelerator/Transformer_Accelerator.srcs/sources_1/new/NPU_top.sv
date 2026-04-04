@@ -21,25 +21,54 @@ module NPU_top (
     input logic rst_n,
 
     // Control Plane (MMIO)
-    input  logic [31:0] mmio_npu_cmd,
+    input  logic [31:0] mmio_npu_vliw,
     output logic [31:0] mmio_npu_stat,
 
+    axil_if.slave S_AXIL_CTRL,
+
     // AXI4-Stream Interfaces (Clean & Modern)
-    axis_if.slave  S_AXIS_FMAP,   // Feature Map Input 0 (128-bit, HPC0)
-    axis_if.slave  S_AXI_WEIGHT,  // Weight Matrix Input (512-bit)
-    axis_if.master M_AXIS_RESULT, // Final Result Output (128-bit)
+    // |================================|
+    // | Weight M dot M Input (256-bit) |
+    // | Systolic 128bit                |
+    // | (V dot M)'s support 128bit     |
+    // |================================|
+    axis_if.slave S_AXI_HP0_WEIGHT,
+    axis_if.slave S_AXI_HP1_WEIGHT,
 
-    // Auxiliary Streaming Ports
-    axis_if.slave  S_AXIS_HP1,
-    axis_if.slave  S_AXIS_HP2,
-    axis_if.slave  S_AXIS_HP3,
-    axis_if.slave  S_AXIS_HPC1,  // Feature Map Input 1 (128-bit, HPC1)
-    axis_if.master M_AXIS_ACP,
+    // | Weight V dot M Input (256-bit) |
+    axis_if.slave S_AXI_HP2_WEIGHT,
+    axis_if.slave S_AXI_HP3_WEIGHT,
 
-    // Secondary MMIO Interface
-    input  logic [31:0] s_axi_hpm1_vliw,
-    output logic [31:0] s_axi_hpm1_stat
+
+    // ACP      = featureMAP in, out (Full-Duplex), read & write at same time
+    axis_if.slave  S_AXIS_ACP_FMAP,   // Feature Map Input 0 (128-bit, HPC0)
+    axis_if.master M_AXIS_ACP_RESULT  // Final Result Output (128-bit)
+
 );
+
+  logic activated_lane[0:lane_cnt-1];
+  npu_controller_top #() u_npu_controller_top (
+      .clk(clk),
+      .rst_n(rst_n),
+      .i_clear(i_clear),
+      .S_AXIL_CTRL(S_AXIL_CTRL),
+      .S_AXIS_ACP_FMAP(S_AXIS_ACP_FMAP),
+      .M_AXIS_ACP_RESULT(M_AXIS_ACP_RESULT),
+      .OUT_fmap_broadcast(),
+      .OUT_fmap_valid(),
+      .OUT_VDOTM_emax(),
+
+      .OUT_cached_emax(),
+      .OUT_activate_top(),
+      .OUT_activate_lane(activated_lane),
+      .OUT_emax_align(),
+
+      .OUT_accm(),
+      .OUT_scale(),
+      .OUT_matrix_shape(),
+      .OUT_destination_queue()
+  );
+
 
   // ===| FMap Preprocessing Pipeline (The Common Path) |=======
   logic [`FIXED_MANT_WIDTH-1:0] fmap_broadcast       [0:`ARRAY_SIZE_H-1];
@@ -52,7 +81,7 @@ module NPU_top (
       .i_clear(npu_clear),
 
       // HPC Streaming Inputs
-      .S_AXIS_FMAP0(S_AXIS_FMAP),
+      .S_AXIS_FMAP0(S_AXIS_ACP_FMAP),
       .S_AXIS_FMAP1(S_AXIS_HPC1),
 
       // Control
@@ -65,33 +94,32 @@ module NPU_top (
   );
 
 
-  // 2. Weight Pipeline (HP0~3 -> Systolic Array)
+  // [MOD-1]Weight Pipeline: M dot M
+  // (HP0 -> Systolic Array)
+  // (HP1 -> V dot M = support Systolic Array)
+
+  // [MOD-2] Weight Pipeline: V dot M
+  // (HP2 & HP3 -> V dot M)
   logic [`AXI_DATA_WIDTH-1:0] weight_fifo_data [0:`AXI_WEIGHT_PORT_CNT-1];
   logic                       weight_fifo_valid[0:`AXI_WEIGHT_PORT_CNT-1];
   logic                       weight_fifo_ready[0:`AXI_WEIGHT_PORT_CNT-1];
 
-  genvar i;
-  generate
-    for (i = 0; i < `AXI_WEIGHT_PORT_CNT; i++) begin : weight_fifos
-      xpm_fifo_axis #(
-          .FIFO_DEPTH(`XPM_FIFO_DEPTH),
-          .TDATA_WIDTH(`AXI_DATA_WIDTH),
-          .FIFO_MEMORY_TYPE("block"),
-          .CLOCKING_MODE("common_clock")
-      ) u_w_fifo (
-          .s_aclk(clk),
-          .s_aresetn(rst_n),
-          .s_axis_tdata(s_axis_weight_tdata[i]),
-          .s_axis_tvalid(s_axis_weight_tvalid[i]),
-          .s_axis_tready(s_axis_weight_tready[i]),
-          .m_axis_tdata(weight_fifo_data[i]),
-          .m_axis_tvalid(weight_fifo_valid[i]),
-          .m_axis_tready(weight_fifo_ready[i])
-      );
-    end
-  endgenerate
+  weight_in_HP_port_fifo #(
+      .DATA_WIDTH(`HP_PORT_SINGLE_WIDTH)
+  ) u_weight_in_HP_port (
+      .IN_HP0(S_AXI_HP0_WEIGHT),
+      .IN_HP1(S_AXI_HP1_WEIGHT),
+      .IN_HP2(S_AXI_HP2_WEIGHT),
+      .IN_HP3(S_AXI_HP3_WEIGHT),
 
-  vdotm_top#(
+      .weight_fifo_data (weight_fifo_data),
+      .weight_fifo_valid(weight_fifo_valid),
+      .weight_fifo_ready(weight_fifo_ready)
+  );
+
+
+
+  vdotm_top #(
       .line_lengt(32),
       .line_cnt(128),
       .fmap_line_cnt(32),
@@ -100,16 +128,13 @@ module NPU_top (
       .in_fmap_size(`BF16),
       .in_fmap_e_size(`BF16_EXP),
       .in_fmap_m_size(`BF16_MANTISSA)
-  ) (
-      .clk(clk),
+  ) u_vdotm_top (
+      .clk  (clk),
       .rst_n(rst_n),
 
       // weight
-      .i_valid(),
-      .IN_weight(),
-
-      .IN_fMAP_valid(),
-      .IN_feature_map(),
+      .i_valid  (weight_fifo_data[]),
+      .IN_weight(weight_fifo_data[]),
 
       .IN_fmap_broadcast(fmap_broadcast),
       .IN_fmap_broadcast_valid(fmap_broadcast_valid),
@@ -117,10 +142,12 @@ module NPU_top (
       // e_max (from Cache for Normalization alignment)
       .IN_cached_emax_out(cached_emax_out),
 
-      .OUT_featureMAP_BF16(),
-      .OUT_final_fp32(),
+      .activated_lane(activated_lane),
+
+      .OUT_final_fp32 (),
       .OUT_final_valid()
   );
+
 
 
   // 3. Systolic Array Engine (Modularized)

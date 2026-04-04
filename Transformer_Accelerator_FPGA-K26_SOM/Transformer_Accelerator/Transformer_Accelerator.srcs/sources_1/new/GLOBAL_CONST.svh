@@ -1,6 +1,22 @@
 `define TRUE 1'b1
 `define FALSE 1'b0
 
+
+// NPU Architecture
+`define ISA_WIDTH 32
+
+// activate_top
+`define TOP_STLC 0
+`define TOP_VDOTM 1
+
+// ===| instruction MOD |========================
+`define MOD_M_DOT_M 10
+`define MOD_V_DOT_M 11
+
+`define PIPELINE_CNT 2
+`define PIPELINE_M_DOT_M 0
+`define PIPELINE_V_DOT_M 1
+
 // ===| KV260's DSP48E2 |========================
 
 `define DSP48E2_MAXIN_H 18
@@ -76,3 +92,29 @@
 `define DSP48E2_POUT_SIZE 48
 `define DSP48E2_AB_WIDTH 48
 `define DSP48E2_C_WIDTH 48
+`define DSP48E2_A_WIDTH 30
+`define DSP48E2_B_WIDTH 18
+
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+// DSP INSTRUCTION
+`define DSP_INSTRUCTION_CNT 4
+
+`define DSP_IDLE_MOD 2'b00
+`define DSP_SYSTOLIC_MOD_P 2'b01
+`define DSP_GEMV_STATIONARY_MOD 2'b10 // Used for Weight-Stationary GEMV
+`define DSP_SHIFT_RESULT_MOD 2'b11
+
+/*
+`define DSP_SUB_MOD = 2'b11
+`define DSP_INV_DIV_MOD
+*/
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+
+
+// INT4 - DSP48E2_MAXIN_H
+`define STLC_MAC_UNIT_IN_H 4
+
+// BFLOAT16 - DSP48E2_MAXIN_V
+// aligned Mantissa size 27
+`define STLC_MAC_UNIT_IN_V 27

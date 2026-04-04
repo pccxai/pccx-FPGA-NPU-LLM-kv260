@@ -1,0 +1,58 @@
+// fifo_if.sv
+// Encapsulates all FIFO signals — acts like a FIFO "object"
+// DATA_WIDTH, DEPTH are the "constructor parameters"
+
+
+interface IF_queue #(
+    parameter DATA_WIDTH = 32,
+    parameter DEPTH      = 8
+) (
+    input logic clk,
+    input logic rst_n
+);
+
+  localparam PTR_W = $clog2(DEPTH);
+
+  // ── Storage ───────────────────────────────────
+  logic [DATA_WIDTH-1:0] mem[0:DEPTH-1];
+  logic [PTR_W:0] wr_ptr, rd_ptr;
+
+  // ── Status flags ──────────────────────────────
+  logic empty, full;
+  assign empty = (wr_ptr == rd_ptr);
+  assign full  = (wr_ptr[PTR_W] != rd_ptr[PTR_W]) && (wr_ptr[PTR_W-1:0] == rd_ptr[PTR_W-1:0]);
+
+  // ── Push/Pop handshake signals ─────────────────
+  logic [DATA_WIDTH-1:0] push_data;
+  logic                  push_en;  // "push()" call
+  logic [DATA_WIDTH-1:0] pop_data;
+  logic                  pop_en;  // "pop()" call
+
+  assign pop_data = mem[rd_ptr[PTR_W-1:0]];
+
+  // ── "Methods" (tasks) ──────────────────────────
+  task automatic push(input logic [DATA_WIDTH-1:0] wdata);
+    push_data <= wdata;
+    push_en   <= 1'b1;
+  endtask
+
+  task automatic pop();
+    pop_en <= 1'b1;
+  endtask
+
+  task automatic clear();
+    push_en <= 1'b0;
+    pop_en  <= 1'b0;
+  endtask
+
+  // ── Modports ───── Access Control ──────────────
+  // producer : only pushes
+  modport producer(import push, input empty, full, clk, rst_n, output push_data, push_en);
+
+  // consumer : only pops
+  modport consumer(import pop, input empty, full, pop_data, clk, rst_n, output pop_en);
+
+  // owner : the FIFO module itself, full access
+  modport owner(input push_data, push_en, pop_en, output wr_ptr, rd_ptr, inout mem);
+
+endinterface

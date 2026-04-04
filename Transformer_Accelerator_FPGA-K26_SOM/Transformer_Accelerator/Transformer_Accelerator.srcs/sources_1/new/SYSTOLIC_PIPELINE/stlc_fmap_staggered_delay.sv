@@ -2,16 +2,17 @@
 `timescale 1ns / 1ps
 `include "stlc_Array.svh"
 
-module stlc_fmap_staggered_delay #(
+module stlc_fmap_staggered_dispatch #(
     // Fixed-point width after shifter
-    parameter DATA_WIDTH = 27,
-    parameter ARRAY_SIZE = 32
+    parameter fmap_width = 27,
+    parameter array_size = 32,
+    parameter fmap_out_width = `ACIN
 ) (
     input logic clk,
     input logic rst_n,
 
     // =| Input from FMap Cache Broadcast |=
-    input logic [DATA_WIDTH-1:0] fmap_in   [0:ARRAY_SIZE-1],
+    input logic [fmap_width-1:0] fmap_in   [0:array_size-1],
     input logic                  fmap_valid,
 
     // =| Global Instruction from FSM |=
@@ -19,10 +20,10 @@ module stlc_fmap_staggered_delay #(
     input logic       global_inst_valid,
 
     // =| 32 Staggered Outputs to Systolic Array Vertical Lanes |=
-    output logic [DATA_WIDTH-1:0] row_data      [0:ARRAY_SIZE-1],
-    output logic                  row_valid     [0:ARRAY_SIZE-1],
-    output logic [           2:0] row_inst      [0:ARRAY_SIZE-1],
-    output logic                  row_inst_valid[0:ARRAY_SIZE-1]
+    output logic [fmap_out_width-1:0] row_data      [0:array_size-1],
+    output logic                      row_valid     [0:array_size-1],
+    output logic [               2:0] row_inst      [0:array_size-1],
+    output logic                      row_inst_valid[0:array_size-1]
 );
 
   // ===| Delay Line Implementation |=======
@@ -31,7 +32,7 @@ module stlc_fmap_staggered_delay #(
 
   genvar c;
   generate
-    for (c = 0; c < ARRAY_SIZE; c++) begin : col_gen
+    for (c = 0; c < array_size; c++) begin : col_gen
 
       // =| Delay Logic for each Column |=
       if (c == 0) begin : no_delay
@@ -43,7 +44,7 @@ module stlc_fmap_staggered_delay #(
             row_data[c]       <= '0;
             row_inst[c]       <= 3'b000;
           end else begin
-            row_data[c]       <= fmap_in[c];
+            row_data[c]       <= {fmap_in[c]};
             row_valid[c]      <= fmap_valid;
             row_inst[c]       <= global_inst;
             row_inst_valid[c] <= global_inst_valid;
@@ -51,7 +52,7 @@ module stlc_fmap_staggered_delay #(
         end
       end else begin : shift_delay
         // Col[c] uses a shift register of length 'c'
-        logic [DATA_WIDTH-1:0] shift_data      [0:c];
+        logic [fmap_width-1:0] shift_data      [0:c];
         logic                  shift_valid     [0:c];
         logic [           2:0] shift_inst      [0:c];
         logic                  shift_inst_valid[0:c];

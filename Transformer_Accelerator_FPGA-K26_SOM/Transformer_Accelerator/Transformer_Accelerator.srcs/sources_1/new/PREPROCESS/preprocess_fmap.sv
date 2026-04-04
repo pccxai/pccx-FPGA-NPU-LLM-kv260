@@ -17,7 +17,7 @@ module preprocess_fmap (
     input logic rst_n,
     input logic i_clear,
 
-    // AXI4-Stream Interfaces from HPC
+    // AXI4-Stream Interfaces from ACP
     axis_if.slave S_AXIS_FMAP0,  // HPC0 (128-bit)
     axis_if.slave S_AXIS_FMAP1,  // HPC1 (128-bit)
 
@@ -25,9 +25,11 @@ module preprocess_fmap (
     input logic i_rd_start,
 
     // Output to Branch Engines (Systolic / LUT / etc.)
-    output logic [`FIXED_MANT_WIDTH-1:0] o_fmap_broadcast[0:`ARRAY_SIZE_H-1],
-    output logic                         o_fmap_valid,
-    output logic [  `BF16_EXP_WIDTH-1:0] o_cached_emax   [0:`ARRAY_SIZE_H-1]
+    output logic [`FIXED_MANT_WIDTH-1:0] o_fmap_broadcast[0:`ARRAY_SIZE_H-1][0:PIPELINE_CNT-1],
+    output logic                         o_fmap_valid    [ 0:PIPELINE_CNT-1],
+
+    output logic                       o_VDOTM_emax [ 0:PIPELINE_CNT-1],
+    output logic [`BF16_EXP_WIDTH-1:0] o_cached_emax[0:`ARRAY_SIZE_H-1]
 );
 
   // ===| Bridge & Alignment: 256-bit Feature Map |=======
@@ -45,6 +47,7 @@ module preprocess_fmap (
   logic [255:0] fmap_fifo_data;
   logic         fmap_fifo_valid;
   logic         fmap_fifo_ready;
+
 
   xpm_fifo_axis #(
       .FIFO_DEPTH(`XPM_FIFO_DEPTH),

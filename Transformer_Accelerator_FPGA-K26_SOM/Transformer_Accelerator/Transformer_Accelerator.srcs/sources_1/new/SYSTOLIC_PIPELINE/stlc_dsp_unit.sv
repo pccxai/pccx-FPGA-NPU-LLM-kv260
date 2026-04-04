@@ -6,7 +6,10 @@
 
 module stlc_dsp_unit #(
     parameter IS_TOP_ROW = 0,
-    parameter BREAK_CASCADE = 0  // If 1, break the vertical cascade chain here
+    parameter BREAK_CASCADE = 0,  // If 1, break the vertical cascade chain here
+    parameter ACIN_size = `DSP48E2_A_WIDTH,
+    parameter ACOUT_size = `DSP48E2_A_WIDTH,
+    parameter POUT_size = `DSP48E2_POUT_SIZE
 ) (
     input logic clk,
     input logic rst_n,
@@ -21,9 +24,9 @@ module stlc_dsp_unit #(
     output logic [`STLC_MAC_UNIT_IN_H - 1:0] out_H,
 
     // [Vertical] 30-bit -> DSP A/ACIN port
-    input logic [29:0] in_V,  // Used if IS_TOP_ROW == 1 or BREAK_CASCADE == 1
-    input logic [29:0] ACIN_in,  // Used if IS_TOP_ROW == 0 and BREAK_CASCADE == 0
-    output logic [29:0] ACOUT_out,
+    input logic [ACIN_size:0] in_V,  // Used if IS_TOP_ROW == 1 or BREAK_CASCADE == 1
+    input logic [ACIN_size:0] ACIN_in,  // Used if IS_TOP_ROW == 0 and BREAK_CASCADE == 0
+    output logic [ACOUT_size:0] ACOUT_out,
 
     // [3-Bit VLIW Instruction]
     input  logic [2:0] instruction_in_V,
@@ -32,9 +35,9 @@ module stlc_dsp_unit #(
     output logic       inst_valid_out_V,
 
     // vertical shift port
-    input  logic [47:0] V_result_in,   // PCIN (or Fabric C) from upper DSP
-    output logic [47:0] V_result_out,  // PCOUT to lower DSP's PCIN
-    output logic [47:0] P_fabric_out   // P to lower DSP's Fabric C if broken
+    input  logic [POUT_size:0] V_result_in,   // PCIN (or Fabric C) from upper DSP
+    output logic [POUT_size:0] V_result_out,  // PCOUT to lower DSP's PCIN
+    output logic [POUT_size:0] P_fabric_out   // P to lower DSP's Fabric C if broken
 );
 
   // ===| [Instruction Latch (Event-Driven)] |============================

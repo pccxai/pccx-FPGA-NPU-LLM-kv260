@@ -6,3 +6,7 @@
 `define WEIGHT_SIZE 4
 `define FEAUTRE_MAP_SIZE 16
 `define AXI_WEIGHT_PORT_CNT 4
+
+
+`define VDOTM_LOW 0
+`define VDOTM_HIGH 1
