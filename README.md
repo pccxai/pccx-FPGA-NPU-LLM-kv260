@@ -21,6 +21,16 @@ This project encompasses a full-stack hardware-software co-design approach, inte
 
 ### 1. Custom ISA and Decoupled Dataflow Execution Pipeline
 
+[![ISA Instruction Set Architecture](./images/ISA_screen_shot_0409.png)](https://docs.google.com/spreadsheets/d/e/2PACX-1vQOZ4tMXcdIpcdOCvneAx0r8wmRfmprogqkhbCTK2ythlzxp2GBromIiCi9J9yEz9G_ZO4o7BreDOoq/pubhtml?gid=584280668&single=true)
+
+> **[Click Here to Explore the Full Custom ISA Specification (Google Sheets)]**(https://docs.google.com/spreadsheets/d/e/2PACX-1vQOZ4tMXcdIpcdOCvneAx0r8wmRfmprogqkhbCTK2ythlzxp2GBromIiCi9J9yEz9G_ZO4o7BreDOoq/pubhtml?gid=584280668&single=true)
+>
+> *Click the image or the link above to interactively view the detailed bit-level instruction formats and flag configurations.*
+> 
+> *The detailed bit-level instruction formats, flags, and memory addresses can be viewed interactively in the link above.*
+
+The accelerator operates on a **Custom Instruction Set Architecture (ISA)** meticulously designed for LLM workload acceleration. To ensure versatile integration and compatibility with host systems, the NPU supports both **x86 and x64 modes**.
+
 The accelerator operates on a **Custom Instruction Set Architecture (ISA)** meticulously designed for LLM workload acceleration. To ensure versatile integration and compatibility with host systems, the NPU supports both **x86 and x64 modes**. 
 
 To maximize parallel execution and eliminate pipeline stalls, the architecture employs a strictly **Decoupled Dataflow** system, divided into two asynchronous stages:

@@ -3,7 +3,8 @@
 
 
 // NPU Architecture
-`define ISA_WIDTH 32
+`define ISA_WIDTH 64
+
 
 // activate_top
 `define TOP_STLC 0

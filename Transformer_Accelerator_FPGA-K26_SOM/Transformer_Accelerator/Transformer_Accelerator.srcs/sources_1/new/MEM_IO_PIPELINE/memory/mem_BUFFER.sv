@@ -2,7 +2,7 @@
 `include "stlc_Array.svh"
 `include "GLOBAL_CONST.svh"
 
-module MEM_IO_BUFFER (
+module mem_BUFFER (
     // ===| Clock & Reset |======================================
     input logic clk_core,  // 400MHz
     input logic rst_n_core,

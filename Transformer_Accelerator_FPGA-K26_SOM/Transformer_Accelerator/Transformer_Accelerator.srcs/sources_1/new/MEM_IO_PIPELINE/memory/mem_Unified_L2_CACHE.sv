@@ -3,20 +3,20 @@
 `include "GLOBAL_CONST.svh"
 
 /**
- * Module: MEM_IO_Unified_L2_CACHE
+ * Module: mem_Unified_L2_CACHE
  * Description:
  * Massive L2 Scratchpad utilizing 4 Independent Banks of Xilinx UltraRAM (URAM).
  * Absorbs 128-bit streams from FIFOs (HP0~HP3) and provides high-bandwidth
  * parallel read access to downstream Dispatchers / L1 Caches.
  */
-module MEM_IO_Unified_L2_CACHE #(
+module mem_Unified_L2_CACHE #(
     parameter int URAM_DEPTH = 4096,  // Example: 4096 * 128bit = 64KB per bank (Total 256KB)
     parameter int ADDR_WIDTH = $clog2(URAM_DEPTH)
 ) (
     input logic clk_core,
     input logic rst_n_core,
 
-    // ===| Inputs from MEM_IO_BUFFER (Write Side - AXI Streams) |===
+    // ===| Inputs from mem_BUFFER (Write Side - AXI Streams) |===
     axis_if.slave S_CORE_HP0_WEIGHT,
     axis_if.slave S_CORE_HP1_WEIGHT,
     axis_if.slave S_CORE_HP2_WEIGHT,

@@ -129,7 +129,7 @@
           <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
       </File>
-      <File Path="$PSRCDIR/sources_1/new/MEM_IO_PIPELINE/fmap_cache.sv">
+      <File Path="$PSRCDIR/sources_1/new/mem_PIPELINE/fmap_cache.sv">
         <FileInfo>
           <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="UsedIn" Val="synthesis"/>
@@ -177,7 +177,7 @@
           <Attr Name="IsVisible" Val="1"/>
         </FileInfo>
       </File>
-      <File Path="$PSRCDIR/sources_1/new/MEM_IO_PIPELINE/FROM_stlc_result_packer.sv">
+      <File Path="$PSRCDIR/sources_1/new/mem_PIPELINE/FROM_stlc_result_packer.sv">
         <FileInfo>
           <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="UsedIn" Val="synthesis"/>
@@ -185,7 +185,7 @@
           <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
       </File>
-      <File Path="$PSRCDIR/sources_1/new/MEM_IO_PIPELINE/TO_stlc_fmap_staggered_delay.sv">
+      <File Path="$PSRCDIR/sources_1/new/mem_PIPELINE/TO_stlc_fmap_staggered_delay.sv">
         <FileInfo>
           <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="UsedIn" Val="synthesis"/>
@@ -193,7 +193,7 @@
           <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
       </File>
-      <File Path="$PSRCDIR/sources_1/new/MEM_IO_PIPELINE/TO_stlc_weight_dispatcher.sv">
+      <File Path="$PSRCDIR/sources_1/new/mem_PIPELINE/TO_stlc_weight_dispatcher.sv">
         <FileInfo>
           <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="UsedIn" Val="synthesis"/>
@@ -265,7 +265,7 @@
           <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
       </File>
-      <File Path="$PSRCDIR/sources_1/new/MEM_IO_PIPELINE/mem_IO.svh">
+      <File Path="$PSRCDIR/sources_1/new/mem_PIPELINE/mem_IO.svh">
         <FileInfo>
           <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="UsedIn" Val="synthesis"/>

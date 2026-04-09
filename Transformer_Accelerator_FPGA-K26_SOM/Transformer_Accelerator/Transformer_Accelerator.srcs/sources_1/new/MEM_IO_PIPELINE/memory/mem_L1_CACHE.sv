@@ -3,7 +3,7 @@
 `include "GLOBAL_CONST.svh"
 
 
-module MEM_IO_L1_CACHE #(
+module mem_L1_CACHE #(
     parameter DATA_WIDTH = `HP_PORT_SINGLE_WIDTH
 ) (
     input logic clk,
