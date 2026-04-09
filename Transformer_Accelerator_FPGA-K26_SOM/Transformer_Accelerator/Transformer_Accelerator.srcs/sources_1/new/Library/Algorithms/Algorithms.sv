@@ -13,7 +13,7 @@ package algorithms_pkg;
   } queue_stat_t;
 
   /*─────────────────────────────────────────────
-  STACK  (나중에)
+  STACK
   ─────────────────────────────────────────────*/
   // typedef struct packed { ... } stack_stat_t;
 

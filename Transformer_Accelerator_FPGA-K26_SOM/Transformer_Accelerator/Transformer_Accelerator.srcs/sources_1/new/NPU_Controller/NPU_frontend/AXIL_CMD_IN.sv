@@ -1,6 +1,7 @@
 `timescale 1ns / 1ps
 
 `include "Algorithms.svh"
+`include "GLOBAL_CONST.svh"
 
 // AXIL_CMD_IN
 // AXI4-Lite Write path : CPU → NPU
@@ -16,17 +17,19 @@ module AXIL_CMD_IN #(
 
     // AXI4-Lite Write channels (slave)
     // AW
-    input  logic [          11:0] s_awaddr,
-    input  logic                  s_awvalid,
-    output logic                  s_awready,
+    input logic [11:0] s_awaddr,
+    input logic [2:0] s_awprot,
+    input logic s_awvalid,
+    output logic s_awready,
     // W
-    input  logic [`ISA_WIDTH-1:0] s_wdata,
-    input  logic                  s_wvalid,
-    output logic                  s_wready,
+    input logic [`ISA_WIDTH-1:0] s_wdata,
+    input logic [(`ISA_WIDTH/8)-1:0] s_wstrb,
+    input logic s_wvalid,
+    output logic s_wready,
     // B
-    output logic [           1:0] s_bresp,
-    output logic                  s_bvalid,
-    input  logic                  s_bready,
+    output logic [1:0] s_bresp,
+    output logic s_bvalid,
+    input logic s_bready,
 
     // To upper module (NPU_interface)
     output logic [`ISA_WIDTH-1:0] OUT_data,         // command word
@@ -37,8 +40,8 @@ module AXIL_CMD_IN #(
   /*─────────────────────────────────────────────
   Register Address Map
   ───────────────────────────────────────────────*/
-  localparam ADDR_INST = 12'h000;  // W : instruction word
-  localparam ADDR_KICK = 12'h004;  // W : fire trigger (data ignored)
+  localparam ADDR_INST = 12'h000;
+  localparam ADDR_KICK = 12'h008;
 
   /*─────────────────────────────────────────────
   AXI4-Lite Write Path
@@ -85,9 +88,9 @@ module AXIL_CMD_IN #(
             fifo_wdata <= s_wdata;
             fifo_wen   <= 1'b1;
           end
-          // KICK : push a special marker (bit31 = 1 as kick flag)
+          // KICK : push a special marker (bit63 = 1 as kick flag)
           ADDR_KICK: begin
-            fifo_wdata <= 32'h8000_0000;
+            fifo_wdata <= 64'h8000_0000_0000_0000;
             fifo_wen   <= 1'b1;
           end
           default: ;
@@ -119,12 +122,11 @@ module AXIL_CMD_IN #(
       cmd_q.clear();
     end else begin
       if (fifo_wen) cmd_q.push(fifo_wdata);  // push when AXI write done
-      if (o_valid && IN_decoder_ready) cmd_q.pop();  // pop when upper is ready
+      if (OUT_valid && IN_decoder_ready) cmd_q.pop();  // IXED: o_valid -> OUT_valid
     end
   end
 
   assign OUT_valid = ~cmd_q.empty;
   assign OUT_data  = cmd_q.pop_data;
-
 
 endmodule

@@ -17,17 +17,16 @@ module npu_controller_top #(
     // AXI4-Lite Slave : PS ↔ NPU control plane
     axil_if.slave S_AXIL_CTRL,
 
-    // VdotM / MdotM controls
-    output logic [3:0] OUT_activate_top,
-    output logic [3:0] OUT_activate_lane,
-    output logic       OUT_result_emax_align,
-    output logic       OUT_result_accm,
-    output logic       OUT_result_scale,
+    //output instruction_t OUT_inst,
 
-    // memcpy
-    output memory_uop_x64_t memcpy_uop_x64;
-    output vdotm_uop_x64_t vdotm_uop_x64;
-    output mdotm_uop_x64_t mdotm_uop_x64;
+    output logic OUT_memcpy_uop_x64_valid;
+    output memory_uop_x64_t OUT_memcpy_uop_x64;
+
+    output logic OUT_vdotm_uop_x64_valid;
+    output vdotm_uop_x64_t  OUT_vdotm_uop_x64;
+
+    output logic OUT_mdotm_uop_x64_valid;
+    output mdotm_uop_x64_t  OUT_mdotm_uop_x64;
 );
 
     logic [`ISA_WIDTH-1:0] instruction_valid;
@@ -44,7 +43,7 @@ module npu_controller_top #(
         .axil_if.slave(S_AXIL_CTRL),
 
         // Control from Brain
-        .IN_rd_start(),
+        //.IN_rd_start(),
 
         // Decoded command out → Dispatcher / FSM
         .OUT_RAW_instruction(raw_instruction),
@@ -65,12 +64,8 @@ module npu_controller_top #(
     logic valid_inst;
 
     memory_uop_x64_t memcpy_uop_x64;
-
     vdotm_uop_x64_t vdotm_uop_x64;
-
     mdotm_uop_x64_t mdotm_uop_x64;
-
-
 
     cu_npu_decoder u_decoder(
         .clk(clk),
@@ -79,30 +74,15 @@ module npu_controller_top #(
         .raw_instruction_pop_valid(raw_instruction_pop_valid),
         .OUT_fetch_PC_ready(fetch_PC_ready),
 
-        .OUT_memcpy_valid(memcpy_valid),
-        .OUT_memcpy_cmd_x64(memcpy_uop_x64),
+        .OUT_memcpy_uop_x64_valid(memcpy_uop_x64_valid),
+        .OUT_memcpy_uop_x64(memcpy_uop_x64),
 
-        .OUT_vdotm_valid(vdotm_valid),
-        .OUT_vdotm_cmd_x64(vdotm_uop_x64),
+        .OUT_vdotm_uop_x64_valid(vdotm_uop_x64_valid),
+        .OUT_vdotm_uop_x64(vdotm_uop_x64),
 
-        .OUT_mdotm_valid(mdotm_valid),
-        .OUT_mdotm_cmd_x64(mdotm_uop_x64)
+        .OUT_mdotm_uop_x64_valid(mdotm_uop_x64_valid),
+        .OUT_mdotm_uop_x64(mdotm_uop_x64)
     );
-/*
-    cu_npu_dispatcher u_dispatcher(
-        .clk(clk),
-        .rst_n(rst_n),
-        .IN_inst(inst),
-        .IN_valid(valid_inst),
-        .OUT_activate_top(OUT_activate_top),
-        .OUT_activate_lane(OUT_activate_lane),
-        .OUT_result_emax_align(OUT_result_emax_align),
-        .OUT_result_accm(OUT_result_accm),
-        .OUT_result_scale(OUT_result_scale),
-
-        .OUT_memcpy_cmd(OUT_memcpy_cmd)
-    );
-*/
 
 endmodule
 

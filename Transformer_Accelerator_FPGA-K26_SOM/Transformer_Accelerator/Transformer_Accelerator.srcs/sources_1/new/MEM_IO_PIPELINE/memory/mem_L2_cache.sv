@@ -3,7 +3,7 @@
 `include "GLOBAL_CONST.svh"
 
 /**
- * Module: MEM_IO_FMAP_KV_CACHE
+ * Module: mem_FMAP_KV_CACHE
  * Description:
  * Massive Unified L2 Scratchpad for Feature Maps, KV Cache, and any intermediate data.
  * Extracted maximum physical limit of KV260 URAMs (56 blocks reserved for this module).
@@ -12,7 +12,7 @@
  * - e.g., 0x00000 ~ 0x07FFF : Feature Map (Dynamic)
  * - e.g., 0x08000 ~ 0x1BFFF : KV Cache (TurboQuant compressed) & Others
  */
-module MEM_IO_L2_cache #(
+module mem_L2_cache #(
     // MUM DEPTH FOR KV260 (using 56 URAM blocks)
     parameter int URAM_DEPTH = 114688,
     parameter int ADDR_WIDTH = $clog2(URAM_DEPTH)  // 17 bits

@@ -1,6 +1,6 @@
-`include "GLOBAL_CONST.svh"
 `timescale 1ns / 1ps
 `include "stlc_Array.svh"
+`include "GLOBAL_CONST.svh"
 
 /**
  * Module: stlc_fmap_cache

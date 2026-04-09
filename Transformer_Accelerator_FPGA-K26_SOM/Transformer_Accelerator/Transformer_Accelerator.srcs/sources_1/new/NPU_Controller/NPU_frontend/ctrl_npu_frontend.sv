@@ -12,7 +12,7 @@ module ctrl_npu_frontend (
     axil_if.slave S_AXIL_CTRL,
 
     // Control from Brain
-    input logic IN_rd_start,
+    //input logic IN_rd_start,
 
     // Decoded command -> Dispatcher / FSM
     output logic [`ISA_WIDTH-1:0] OUT_RAW_instruction,

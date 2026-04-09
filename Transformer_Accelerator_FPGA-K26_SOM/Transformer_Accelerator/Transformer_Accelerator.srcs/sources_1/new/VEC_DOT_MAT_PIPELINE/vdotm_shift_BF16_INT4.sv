@@ -100,7 +100,6 @@ module vdotm_shift_BF16_INT4(
 
                 //check if weight is -1,0,1
                 if (IN_weight inside {-1, 0, 1}) begin
-                    //4클럭뒤에 내보내기만 하면 ok
                     goto_default_lane <= i_valid;
                     default_lane_weight <= IN_weight[1:0];
                 end else begin

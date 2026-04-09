@@ -283,7 +283,7 @@ module vdotm_BF16_FP32_Reduction(
                 // [A:B]{gaurd Mantissa guard Mantissa} + [C]{gaurd Mantissa guard Mantissa}
                 // DSP_res = {gaurd Mantissa guard Mantissa}
                 for(int i = 0; i < first_reduction_cnt; i++) begin
-                    // Non-blocking (<=) 할당으로 DSP 입력 레지스터에 패킹!
+                    // Non-blocking (<=) packing into DSP input REG!
                     DSP_IN_AB[i] <= {comb_stage1_res[i].aligned_val0, comb_stage1_res[i].aligned_val1};
                     DSP_IN_C[i]  <= {comb_stage1_res[i].aligned_val2, comb_stage1_res[i].aligned_val3};
                 end

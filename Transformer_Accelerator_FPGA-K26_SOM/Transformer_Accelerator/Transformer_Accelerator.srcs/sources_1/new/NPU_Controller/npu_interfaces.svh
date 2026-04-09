@@ -1,6 +1,4 @@
-// ===| AXI-Stream Interface Definition      |=====
-// ===| Author: Gemini CLI (for NPU Project) |=====
-// <><><><><><><> 400MHz Optimized <><><><><><><><>
+`include "GLOBAL_CONST.svh"
 
 `ifndef NPU_INTERFACES_SVH
 `define NPU_INTERFACES_SVH
@@ -23,32 +21,45 @@ endinterface
 
 // axil_if.sv
 interface axil_if #(
-    parameter ADDR_W = 12
+    parameter int ADDR_W = 12,
+    parameter int DATA_W = 64
 ) (
     input logic clk,
-    rst_n
+    input logic rst_n
 );
+  // AW Channel
   logic [ADDR_W-1:0] awaddr;
+  logic [       2:0] awprot;
   logic awvalid, awready;
-  logic [31:0] wdata;
-  logic [ 3:0] wstrb;
+
+  // W Channel
+  logic [    DATA_W-1:0] wdata;
+  logic [(DATA_W/8)-1:0] wstrb;
   logic wvalid, wready;
+
+  // B Channel
   logic [1:0] bresp;
   logic bvalid, bready;
+
+  // AR Channel
   logic [ADDR_W-1:0] araddr;
+  logic [       2:0] arprot;
   logic arvalid, arready;
-  logic [31:0] rdata;
-  logic [ 1:0] rresp;
+
+  // R Channel
+  logic [DATA_W-1:0] rdata;
+  logic [       1:0] rresp;
   logic rvalid, rready;
 
   modport slave(
-      input awaddr, awvalid, wdata, wstrb, wvalid, bready,
-      input araddr, arvalid, rready,
+      input awaddr, awprot, awvalid, wdata, wstrb, wvalid, bready,
+      input araddr, arprot, arvalid, rready,
       output awready, wready, bresp, bvalid, arready, rdata, rresp, rvalid
   );
+
   modport master(
-      output awaddr, awvalid, wdata, wstrb, wvalid, bready,
-      output araddr, arvalid, rready,
+      output awaddr, awprot, awvalid, wdata, wstrb, wvalid, bready,
+      output araddr, arprot, arvalid, rready,
       input awready, wready, bresp, bvalid, arready, rdata, rresp, rvalid
   );
 endinterface
