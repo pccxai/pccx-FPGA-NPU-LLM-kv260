@@ -4,35 +4,39 @@
 
 import isa_pkg::*;
 
+// ===| Memory Operation Queue |==================================================
+// Decouples the scheduler from the L2 cache controller.
+// Two independent FIFO channels: ACP (host DMA) and NPU (internal compute).
+//
+// acp_uop_t / npu_uop_t are both 35-bit packed structs:
+//   {write_en[0], base_addr[16:0], end_addr[16:0]} = 1+17+17 = 35 bits
+// ===============================================================================
 
-module mem_u_operation_queue #(
-) (
+module mem_u_operation_queue #() (
     input logic clk_core,
     input logic rst_n_core,
 
-    input logic IN_acp_rdy,
-    input acp_uop_t IN_acp_cmd,
-
+    // ===| ACP channel |=========================================================
+    input  logic     IN_acp_rdy,
+    input  acp_uop_t IN_acp_cmd,
     output acp_uop_t OUT_acp_cmd,
-    output logic OUT_acp_cmd_valid,
-    output logic OUT_acp_cmd_fifo_full,
+    output logic     OUT_acp_cmd_valid,
+    output logic     OUT_acp_cmd_fifo_full,
+    input  logic     IN_acp_is_busy,
 
-    input logic IN_acp_is_busy,
-
-
-    input logic IN_npu_rdy,
-    input npu_uop_t IN_npu_cmd,
-
+    // ===| NPU internal channel |================================================
+    input  logic     IN_npu_rdy,
+    input  npu_uop_t IN_npu_cmd,
     output npu_uop_t OUT_npu_cmd,
-    output logic OUT_npu_cmd_valid,
-    output logic OUT_npu_cmd_fifo_full,
-
-    input logic IN_npu_is_busy
+    output logic     OUT_npu_cmd_valid,
+    output logic     OUT_npu_cmd_fifo_full,
+    input  logic     IN_npu_is_busy
 );
+
+  localparam int UopWidth = 35;  // 1 + 17 + 17 = write_en + base_addr + end_addr
 
   logic acp_fifo_empty;
   logic acp_fifo_full;
-
   logic npu_fifo_empty;
   logic npu_fifo_full;
 
@@ -44,59 +48,48 @@ module mem_u_operation_queue #(
     OUT_npu_cmd_valid = ~IN_npu_is_busy & ~npu_fifo_empty;
   end
 
-  // ACP port instruction
+  // ===| ACP FIFO |==============================================================
   xpm_fifo_sync #(
-      .FIFO_DEPTH(128),
-      .WRITE_DATA_WIDTH(33),
-      .READ_DATA_WIDTH(33),
-      .FIFO_MEMORY_TYPE("block"),
-      .READ_MODE("std"),
-
-      .FULL_RESET_VALUE(0),
-      .PROG_FULL_THRESH(100)
-  ) acp_port_uops_mem_x64_t (
-      .sleep(1'b0),
-      .rst(~rst_n_core),
-      .wr_clk(clk_core),
-
-      //write port
-      .wr_en(IN_acp_rdy & ~acp_fifo_full),
-      .din(IN_acp_cmd),
+      .FIFO_DEPTH        (128),
+      .WRITE_DATA_WIDTH  (UopWidth),
+      .READ_DATA_WIDTH   (UopWidth),
+      .FIFO_MEMORY_TYPE  ("block"),
+      .READ_MODE         ("std"),
+      .FULL_RESET_VALUE  (0),
+      .PROG_FULL_THRESH  (100)
+  ) u_acp_uop_fifo (
+      .sleep    (1'b0),
+      .rst      (~rst_n_core),
+      .wr_clk   (clk_core),
+      .wr_en    (IN_acp_rdy & ~acp_fifo_full),
+      .din      (IN_acp_cmd),
       .prog_full(acp_fifo_full),
-
-      //read port
-      .rd_en(~IN_acp_is_busy & ~acp_fifo_empty),
-      .dout (OUT_acp_cmd),
-      .empty(acp_fifo_empty)
+      .rd_en    (~IN_acp_is_busy & ~acp_fifo_empty),
+      .dout     (OUT_acp_cmd),
+      .empty    (acp_fifo_empty),
+      .rd_clk   (clk_core)
   );
 
-
-  // internal port instruction
+  // ===| NPU FIFO |==============================================================
   xpm_fifo_sync #(
-      .FIFO_DEPTH(128),
-      .WRITE_DATA_WIDTH(33),
-      .READ_DATA_WIDTH(33),
-      .FIFO_MEMORY_TYPE("block"),
-      .READ_MODE("std"),
-
-      .FULL_RESET_VALUE(0),
-      .PROG_FULL_THRESH(100)
-  ) internal_port_uops_mem_x64_t (
-      .sleep(1'b0),
-      .rst  (rst_n_core),
-      .clk  (clk_core),
-
-      //write port
-      .wr_en(IN_npu_rdy & ~npu_fifo_full),
-      .din(IN_npu_cmd),
+      .FIFO_DEPTH        (128),
+      .WRITE_DATA_WIDTH  (UopWidth),
+      .READ_DATA_WIDTH   (UopWidth),
+      .FIFO_MEMORY_TYPE  ("block"),
+      .READ_MODE         ("std"),
+      .FULL_RESET_VALUE  (0),
+      .PROG_FULL_THRESH  (100)
+  ) u_npu_uop_fifo (
+      .sleep    (1'b0),
+      .rst      (~rst_n_core),
+      .wr_clk   (clk_core),
+      .wr_en    (IN_npu_rdy & ~npu_fifo_full),
+      .din      (IN_npu_cmd),
       .prog_full(npu_fifo_full),
-
-      //read port
-      .rd_en(~IN_npu_is_busy & ~npu_fifo_empty),
-      .dout (OUT_npu_cmd),
-      .empty(npu_fifo_empty)
+      .rd_en    (~IN_npu_is_busy & ~npu_fifo_empty),
+      .dout     (OUT_npu_cmd),
+      .empty    (npu_fifo_empty),
+      .rd_clk   (clk_core)
   );
-
-
 
 endmodule

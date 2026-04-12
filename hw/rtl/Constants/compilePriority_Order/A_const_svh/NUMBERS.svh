@@ -1,24 +1,13 @@
 `ifndef NUMBERS_SVH
 `define NUMBERS_SVH
-// ===| sizeof |==========================
 
-//    [ Integer ]
-`define N_SIZEOF_INT4 4
+// ===| Primitive Type Widths |===================================================
+// Used by device_pkg.sv for algorithm-level type selection.
+// All values are plain integers — no units, no semantics.
+// ===============================================================================
 
+`define N_SIZEOF_INT4   4   // INT4 weight width (bits)
+`define N_BF16_SIZE    16   // BF16 activation width (bits)
+`define N_FP32_SIZE    32   // FP32 accumulation width (bits)
 
-
-//    [ Integer ]
-
-//    [  Float  ]
-`define N_FP32_WIDTH 32
-`define N_FP32_SIZE 32
-
-`define N_BF16_WIDTH 16
-`define N_BF16_SIZE 16
-
-//    [  Float  ]
-
-
-
-// ===| sizeof |==========================
-`endif
+`endif // NUMBERS_SVH

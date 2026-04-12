@@ -20,14 +20,14 @@ import bf16_math_pkg::*;
 // ===============================================================================
 
 module CVO_sfu_unit (
-    input  logic        clk,
-    input  logic        rst_n,
-    input  logic        i_clear,
+    input logic clk,
+    input logic rst_n,
+    input logic i_clear,
 
     // ===| Operation Select |====================================================
-    input  cvo_func_e   IN_func,
-    input  logic [15:0] IN_length,
-    input  cvo_flags_t  IN_flags,
+    input cvo_func_e IN_func,
+    input logic [15:0] IN_length,
+    input cvo_flags_t IN_flags,
 
     // ===| Streaming Input |=====================================================
     input  logic [15:0] IN_data,
@@ -40,10 +40,10 @@ module CVO_sfu_unit (
 );
 
   // ===| BF16 Constants |========================================================
-  localparam logic [15:0] Bf16One       = 16'h3F80;  // 1.0
-  localparam logic [15:0] Bf16Two       = 16'h4000;  // 2.0
+  localparam logic [15:0] Bf16One = 16'h3F80;  // 1.0
+  localparam logic [15:0] Bf16Two = 16'h4000;  // 2.0
   localparam logic [15:0] Bf16Scale1702 = 16'h3FD9;  // 1.702 (GELU sigmoid scale)
-  localparam logic [7:0]  Log2EQ17      = 8'hB8;     // log2(e) ≈ 1.4427 in Q1.7
+  localparam logic [7:0] Log2EQ17 = 8'hB8;  // log2(e) ≈ 1.4427 in Q1.7
 
   // ===| BF16 Arithmetic (combinational) |=======================================
 
@@ -70,34 +70,49 @@ module CVO_sfu_unit (
 
   // ===| BF16 Add |===
   function automatic logic [15:0] bf16_add(input logic [15:0] a, input logic [15:0] b);
-    logic [ 7:0] ea, eb, elarge;
-    logic [ 7:0] diff;
-    logic [ 8:0] ma, mb;
-    logic [ 9:0] sum;
-    logic [ 7:0] eout;
-    logic [ 6:0] mout;
-    logic        sout;
+    logic [7:0] ea, eb, elarge;
+    logic [7:0] diff;
+    logic [8:0] ma, mb;
+    logic [9:0] sum;
+    logic [7:0] eout;
+    logic [6:0] mout;
+    logic       sout;
     if (a[14:0] == 0) return b;
     if (b[14:0] == 0) return a;
-    ea = a[14:7]; eb = b[14:7];
+    ea = a[14:7];
+    eb = b[14:7];
     ma = {1'b0, 1'b1, a[6:0]};
     mb = {1'b0, 1'b1, b[6:0]};
     if (ea >= eb) begin
-      elarge = ea; diff = ea - eb; mb = 9'(mb >> diff);
+      elarge = ea;
+      diff = ea - eb;
+      mb = 9'(mb >> diff);
     end else begin
-      elarge = eb; diff = eb - ea; ma = 9'(ma >> diff);
+      elarge = eb;
+      diff = eb - ea;
+      ma = 9'(ma >> diff);
     end
     if (a[15] == b[15]) begin
-      sout = a[15]; sum = {1'b0, ma} + {1'b0, mb};
+      sout = a[15];
+      sum  = {1'b0, ma} + {1'b0, mb};
     end else if (ma >= mb) begin
-      sout = a[15]; sum = {1'b0, ma} - {1'b0, mb};
+      sout = a[15];
+      sum  = {1'b0, ma} - {1'b0, mb};
     end else begin
-      sout = b[15]; sum = {1'b0, mb} - {1'b0, ma};
+      sout = b[15];
+      sum  = {1'b0, mb} - {1'b0, ma};
     end
     if (sum == 0) return 16'd0;
-    if      (sum[9]) begin eout = elarge + 8'd1; mout = sum[9:3]; end
-    else if (sum[8]) begin eout = elarge;         mout = sum[8:2]; end
-    else             begin eout = elarge - 8'd1;  mout = sum[7:1]; end
+    if (sum[9]) begin
+      eout = elarge + 8'd1;
+      mout = sum[9:3];
+    end else if (sum[8]) begin
+      eout = elarge;
+      mout = sum[8:2];
+    end else begin
+      eout = elarge - 8'd1;
+      mout = sum[7:1];
+    end
     return {sout, eout, mout};
   endfunction
 
@@ -127,10 +142,10 @@ module CVO_sfu_unit (
   // ===| EXP Pipeline (4 stages) |===============================================
 
   // Stage 1 — unpack BF16
-  logic        exp_s1_valid;
-  logic        exp_s1_sign;
-  logic [ 7:0] exp_s1_exp;
-  logic [ 6:0] exp_s1_mant;
+  logic       exp_s1_valid;
+  logic       exp_s1_sign;
+  logic [7:0] exp_s1_exp;
+  logic [6:0] exp_s1_mant;
 
   always_ff @(posedge clk) begin
     if (!rst_n || i_clear) begin
@@ -144,22 +159,22 @@ module CVO_sfu_unit (
   end
 
   // Stage 2 — BF16 → Q8.7 fixed-point, then multiply by log2(e)
-  logic        exp_s2_valid;
-  logic [ 8:0] exp_s2_n;       // integer part of x*log2e
-  logic [ 6:0] exp_s2_frac;    // fractional 7-bit index for LUT
+  logic               exp_s2_valid;
+  logic        [ 8:0] exp_s2_n;  // integer part of x*log2e
+  logic        [ 6:0] exp_s2_frac;  // fractional 7-bit index for LUT
 
   logic signed [15:0] exp_s1_xfixed_wire;  // Q8.7 signed
-  logic signed [23:0] exp_s1_y_wire;       // Q9.14: x*log2e
+  logic signed [23:0] exp_s1_y_wire;  // Q9.14: x*log2e
 
   always_comb begin : comb_exp_convert
     logic [15:0] mag;
     int          sh;
     sh  = int'(exp_s1_exp) - 127;
     mag = 16'd0;
-    if      (exp_s1_exp == 8'd0)  mag = 16'd0;
-    else if (sh >= 8)             mag = 16'h7FFF;
-    else if (sh >= -7)            mag = 16'({1'b1, exp_s1_mant, 7'b0} <<  (sh + 7));
-    else                          mag = 16'({1'b1, exp_s1_mant, 7'b0} >> -(sh + 7));
+    if (exp_s1_exp == 8'd0) mag = 16'd0;
+    else if (sh >= 8) mag = 16'h7FFF;
+    else if (sh >= -7) mag = 16'({1'b1, exp_s1_mant, 7'b0} << (sh + 7));
+    else mag = 16'({1'b1, exp_s1_mant, 7'b0} >> -(sh + 7));
     exp_s1_xfixed_wire = exp_s1_sign ? -$signed({1'b0, mag}) : $signed({1'b0, mag});
     exp_s1_y_wire      = $signed(exp_s1_xfixed_wire) * $signed({1'b0, Log2EQ17});
   end
@@ -191,16 +206,15 @@ module CVO_sfu_unit (
       exp_s3_valid <= exp_s2_valid;
       if (exp_s2_out_exp_wire[8] || exp_s2_out_exp_wire == 0)
         exp_s3_result <= (exp_s2_n[8] == 0) ? 16'h7F80 : 16'd0;  // +inf or 0
-      else
-        exp_s3_result <= {1'b0, exp_s2_out_exp_wire[7:0], exp_mant_lut(exp_s2_frac)};
+      else exp_s3_result <= {1'b0, exp_s2_out_exp_wire[7:0], exp_mant_lut(exp_s2_frac)};
     end
   end
 
   // ===| SQRT Pipeline (3 stages) |===============================================
 
-  logic        sqrt_s1_valid;
-  logic [ 7:0] sqrt_s1_exp;
-  logic [ 6:0] sqrt_s1_mant;
+  logic       sqrt_s1_valid;
+  logic [7:0] sqrt_s1_exp;
+  logic [6:0] sqrt_s1_mant;
 
   always_ff @(posedge clk) begin
     if (!rst_n || i_clear) begin
@@ -215,16 +229,15 @@ module CVO_sfu_unit (
   logic        sqrt_s2_valid;
   logic [15:0] sqrt_s2_result;
 
-  logic [7:0] sqrt_s1_unbiased_wire;
-  logic [7:0] sqrt_s1_out_exp_wire;
-  logic [6:0] sqrt_s1_out_mant_wire;
+  logic [ 7:0] sqrt_s1_unbiased_wire;
+  logic [ 7:0] sqrt_s1_out_exp_wire;
+  logic [ 6:0] sqrt_s1_out_mant_wire;
 
   always_comb begin
     sqrt_s1_unbiased_wire = sqrt_s1_exp - 8'd127;
-    sqrt_s1_out_exp_wire  = 8'd127 + {1'b0, sqrt_s1_unbiased_wire[7:1]};
-    sqrt_s1_out_mant_wire = sqrt_s1_unbiased_wire[0]
-                          ? sqrt_mant_odd(sqrt_s1_mant)
-                          : sqrt_mant_even(sqrt_s1_mant);
+    sqrt_s1_out_exp_wire = 8'd127 + {1'b0, sqrt_s1_unbiased_wire[7:1]};
+    sqrt_s1_out_mant_wire = sqrt_s1_unbiased_wire[0] ? sqrt_mant_odd(sqrt_s1_mant) :
+        sqrt_mant_even(sqrt_s1_mant);
   end
 
   always_ff @(posedge clk) begin
@@ -257,8 +270,8 @@ module CVO_sfu_unit (
   logic [15:0] recip_s1_r0;
   logic [15:0] recip_s1_x;
 
-  logic [7:0] recip_in_inv_exp_wire;
-  logic [6:0] recip_in_inv_mant_wire;
+  logic [ 7:0] recip_in_inv_exp_wire;
+  logic [ 6:0] recip_in_inv_mant_wire;
 
   always_comb begin
     recip_in_inv_exp_wire  = 8'd254 - IN_data[14:7];
@@ -359,7 +372,7 @@ module CVO_sfu_unit (
           scale_scalar_loaded <= 1'b1;
           scale_s1_valid      <= 1'b0;
         end else begin
-          scale_s1_valid  <= 1'b1;
+          scale_s1_valid   <= 1'b1;
           scale_s1_product <= bf16_mul(IN_data, scale_scalar);
         end
       end else begin
@@ -410,7 +423,7 @@ module CVO_sfu_unit (
 
   localparam int GeluDelay = 10;
 
-  logic [15:0] gelu_x_pipe [GeluDelay];
+  logic [15:0] gelu_x_pipe   [GeluDelay];
 
   // Stage g1: 1.702 * x
   logic        gelu_g1_valid;
@@ -423,8 +436,8 @@ module CVO_sfu_unit (
     end else begin
       gelu_x_pipe[0] <= IN_data;
       for (int d = 1; d < GeluDelay; d++) gelu_x_pipe[d] <= gelu_x_pipe[d-1];
-      gelu_g1_valid  <= IN_valid && (IN_func == CVO_GELU);
-      gelu_g1_y      <= bf16_mul(IN_data, Bf16Scale1702);
+      gelu_g1_valid <= IN_valid && (IN_func == CVO_GELU);
+      gelu_g1_y     <= bf16_mul(IN_data, Bf16Scale1702);
     end
   end
 
@@ -436,15 +449,15 @@ module CVO_sfu_unit (
     if (!rst_n || i_clear) begin
       gelu_g2_valid <= 1'b0;
     end else begin
-      gelu_g2_valid  <= gelu_g1_valid;
-      gelu_g2_neg_y  <= {~gelu_g1_y[15], gelu_g1_y[14:0]};
+      gelu_g2_valid <= gelu_g1_valid;
+      gelu_g2_neg_y <= {~gelu_g1_y[15], gelu_g1_y[14:0]};
     end
   end
 
   // Stages g3-g5: EXP(-y) — re-use combinational helpers, pipeline 3 stages
-  logic        gelu_e1_valid;
-  logic [ 8:0] gelu_e1_n;
-  logic [ 6:0] gelu_e1_frac;
+  logic               gelu_e1_valid;
+  logic        [ 8:0] gelu_e1_n;
+  logic        [ 6:0] gelu_e1_frac;
 
   logic signed [15:0] gelu_g2_xf_wire;
   logic signed [23:0] gelu_g2_y_wire;
@@ -454,10 +467,10 @@ module CVO_sfu_unit (
     int          sh;
     sh  = int'(gelu_g2_neg_y[14:7]) - 127;
     mag = 16'd0;
-    if      (gelu_g2_neg_y[14:7] == 8'd0) mag = 16'd0;
-    else if (sh >= 8)                      mag = 16'h7FFF;
-    else if (sh >= -7)  mag = 16'({1'b1, gelu_g2_neg_y[6:0], 7'b0} <<  (sh + 7));
-    else                mag = 16'({1'b1, gelu_g2_neg_y[6:0], 7'b0} >> -(sh + 7));
+    if (gelu_g2_neg_y[14:7] == 8'd0) mag = 16'd0;
+    else if (sh >= 8) mag = 16'h7FFF;
+    else if (sh >= -7) mag = 16'({1'b1, gelu_g2_neg_y[6:0], 7'b0} << (sh + 7));
+    else mag = 16'({1'b1, gelu_g2_neg_y[6:0], 7'b0} >> -(sh + 7));
     gelu_g2_xf_wire = gelu_g2_neg_y[15] ? -$signed({1'b0, mag}) : $signed({1'b0, mag});
     gelu_g2_y_wire  = $signed(gelu_g2_xf_wire) * $signed({1'b0, Log2EQ17});
   end
@@ -475,7 +488,7 @@ module CVO_sfu_unit (
   logic        gelu_e2_valid;
   logic [15:0] gelu_e2_expval;
 
-  logic [8:0] gelu_e1_out_exp_wire;
+  logic [ 8:0] gelu_e1_out_exp_wire;
   always_comb begin
     gelu_e1_out_exp_wire = 9'd127 + gelu_e1_n;
   end
@@ -487,8 +500,7 @@ module CVO_sfu_unit (
       gelu_e2_valid <= gelu_e1_valid;
       if (gelu_e1_out_exp_wire[8] || gelu_e1_out_exp_wire == 0)
         gelu_e2_expval <= (gelu_e1_n[8] == 0) ? 16'h7F80 : 16'd0;
-      else
-        gelu_e2_expval <= {1'b0, gelu_e1_out_exp_wire[7:0], exp_mant_lut(gelu_e1_frac)};
+      else gelu_e2_expval <= {1'b0, gelu_e1_out_exp_wire[7:0], exp_mant_lut(gelu_e1_frac)};
     end
   end
 
@@ -500,8 +512,8 @@ module CVO_sfu_unit (
     if (!rst_n || i_clear) begin
       gelu_g6_valid <= 1'b0;
     end else begin
-      gelu_g6_valid  <= gelu_e2_valid;
-      gelu_g6_denom  <= bf16_add(Bf16One, gelu_e2_expval);
+      gelu_g6_valid <= gelu_e2_valid;
+      gelu_g6_denom <= bf16_add(Bf16One, gelu_e2_expval);
     end
   end
 
@@ -510,8 +522,8 @@ module CVO_sfu_unit (
   logic [15:0] gelu_r1_r0;
   logic [15:0] gelu_r1_x;
 
-  logic [7:0] gelu_recip_inv_exp_wire;
-  logic [6:0] gelu_recip_inv_mant_wire;
+  logic [ 7:0] gelu_recip_inv_exp_wire;
+  logic [ 6:0] gelu_recip_inv_mant_wire;
   always_comb begin
     gelu_recip_inv_exp_wire  = 8'd254 - gelu_g6_denom[14:7];
     gelu_recip_inv_mant_wire = 7'd127 - {1'b0, gelu_g6_denom[6:1]};
@@ -549,8 +561,7 @@ module CVO_sfu_unit (
       gelu_r3_valid <= 1'b0;
     end else begin
       gelu_r3_valid   <= gelu_r2_valid;
-      gelu_r3_sigmoid <= bf16_mul(gelu_r2_r0,
-                           bf16_add(Bf16Two, {1'b1, gelu_r2_xr0[14:0]}));
+      gelu_r3_sigmoid <= bf16_mul(gelu_r2_r0, bf16_add(Bf16Two, {1'b1, gelu_r2_xr0[14:0]}));
     end
   end
 
@@ -573,13 +584,31 @@ module CVO_sfu_unit (
     OUT_result       = 16'd0;
     OUT_result_valid = 1'b0;
     case (IN_func)
-      CVO_EXP:        begin OUT_result = exp_s3_result;   OUT_result_valid = exp_s3_valid;   end
-      CVO_SQRT:       begin OUT_result = sqrt_s3_result;  OUT_result_valid = sqrt_s3_valid;  end
-      CVO_GELU:       begin OUT_result = gelu_out;        OUT_result_valid = gelu_out_valid; end
-      CVO_RECIP:      begin OUT_result = recip_s4_result; OUT_result_valid = recip_s4_valid; end
-      CVO_SCALE:      begin OUT_result = scale_s2_result; OUT_result_valid = scale_s2_valid; end
-      CVO_REDUCE_SUM: begin OUT_result = rsum_out;        OUT_result_valid = rsum_out_valid; end
-      default:        ;
+      CVO_EXP: begin
+        OUT_result = exp_s3_result;
+        OUT_result_valid = exp_s3_valid;
+      end
+      CVO_SQRT: begin
+        OUT_result = sqrt_s3_result;
+        OUT_result_valid = sqrt_s3_valid;
+      end
+      CVO_GELU: begin
+        OUT_result = gelu_out;
+        OUT_result_valid = gelu_out_valid;
+      end
+      CVO_RECIP: begin
+        OUT_result = recip_s4_result;
+        OUT_result_valid = recip_s4_valid;
+      end
+      CVO_SCALE: begin
+        OUT_result = scale_s2_result;
+        OUT_result_valid = scale_s2_valid;
+      end
+      CVO_REDUCE_SUM: begin
+        OUT_result = rsum_out;
+        OUT_result_valid = rsum_out_valid;
+      end
+      default: ;
     endcase
   end
 

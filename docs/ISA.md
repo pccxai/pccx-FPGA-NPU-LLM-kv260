@@ -141,15 +141,16 @@ RMSNorm, and activation functions.
 
 Defined in `isa_memctrl.svh` as `data_route_e`.
 
-| Route Enum               | from_device                   | to_device                       |
-|--------------------------|-------------------------------|---------------------------------|
-| `from_host_to_L2`        | `data_from_host`              | `data_to_GLOBAL_cache`          |
-| `from_L2_to_host`        | `data_from_GLOBAL_cache`      | `data_to_host`                  |
-| `from_L2_to_L1_GEMM`     | `data_from_GLOBAL_cache`      | `data_to_L1_cache_gemm_in`      |
-| `from_L2_to_L1_GEMV`     | `data_from_GLOBAL_cache`      | `data_to_L1_cache_GEMV_in`      |
-| `from_GEMV_res_to_L2`    | `data_from_L1_cache_GEMV_res` | `data_to_GLOBAL_cache`          |
-| `from_GEMM_res_to_L2`    | `data_from_L1_cache_GEMM_res` | `data_to_GLOBAL_cache`          |
-| `from_CVO_res_to_L2`     | `data_from_CVO_res`           | `data_to_GLOBAL_cache`          |
+| Route Enum               | Encoding (`src[3:0]\|dst[3:0]`) | Description                                  |
+|--------------------------|--------------------------------|----------------------------------------------|
+| `from_host_to_L2`        | `8'h01`                        | Host DDR4 → L2 cache (fmap DMA in via ACP)   |
+| `from_L2_to_host`        | `8'h10`                        | L2 cache → Host DDR4 (result DMA out via ACP)|
+| `from_L2_to_L1_GEMM`     | `8'h12`                        | L2 → Matrix Core fmap broadcast              |
+| `from_L2_to_L1_GEMV`     | `8'h13`                        | L2 → Vector Core fmap broadcast              |
+| `from_L2_to_CVO`         | `8'h14`                        | L2 → CVO Core input stream                   |
+| `from_GEMV_res_to_L2`    | `8'h31`                        | Vector Core result → L2 cache                |
+| `from_GEMM_res_to_L2`    | `8'h21`                        | Matrix Core result → L2 cache                |
+| `from_CVO_res_to_L2`     | `8'h41`                        | CVO Core result → L2 cache                   |
 
 ---
 

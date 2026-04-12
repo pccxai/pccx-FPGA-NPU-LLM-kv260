@@ -112,7 +112,7 @@ module CVO_cordic_unit (
   logic               cv [0:14];  // valid pipeline
 
   // Initialize iteration 0 from stage-0 output
-  assign cx[0] = CORDIC_K_Q412;
+  assign cx[0] = CordicKQ412;
   assign cy[0] = 16'sh0;
   assign cz[0] = s0_angle_ff;
   assign cv[0] = s0_valid;
@@ -132,12 +132,12 @@ module CVO_cordic_unit (
             // d_i = +1: rotate counter-clockwise
             cx[gi+1] <= cx[gi] - (cy[gi] >>> gi);
             cy[gi+1] <= cy[gi] + (cx[gi] >>> gi);
-            cz[gi+1] <= cz[gi] - ATAN_LUT[gi];
+            cz[gi+1] <= cz[gi] - AtanLut[gi];
           end else begin
             // d_i = -1: rotate clockwise
             cx[gi+1] <= cx[gi] + (cy[gi] >>> gi);
             cy[gi+1] <= cy[gi] - (cx[gi] >>> gi);
-            cz[gi+1] <= cz[gi] + ATAN_LUT[gi];
+            cz[gi+1] <= cz[gi] + AtanLut[gi];
           end
         end
       end

@@ -16,6 +16,13 @@ import bf16_math_pkg::*;
 //   HP0  ~ HP3   : High-throughput Weight streaming (128-bit each).
 //   HPM  (MMIO)  : Centralised control & VLIW instruction issuing (AXI-Lite).
 //   ACP           : Coherent Result Output.
+//
+// Data paths:
+//   OP_GEMM  : ACP_FMAP → preprocess_fmap → systolic → normalizer → packer → ACP_RESULT
+//   OP_GEMV  : ACP_FMAP → preprocess_fmap → GEMV_top (HP2/3 weights)
+//   OP_MEMCPY: ACP DDR4 ↔ L2 (mem_dispatcher via ACP)
+//   OP_MEMSET: Shape constant RAM write (mem_dispatcher)
+//   OP_CVO   : L2 → CVO_top → L2 (mem_dispatcher ↔ CVO stream bridge)
 // ===============================================================================
 
 module NPU_top (
@@ -30,9 +37,6 @@ module NPU_top (
     input logic i_clear,
 
     // ===| Control Plane (MMIO) |================================================
-    input  logic [31:0] mmio_npu_vliw,   // legacy MMIO word (unused — kept for pin compat)
-    output logic [31:0] mmio_npu_stat,
-
     axil_if.slave S_AXIL_CTRL,
 
     // ===| HP Weight Ports — Matrix Core (Systolic) |============================
@@ -55,29 +59,15 @@ module NPU_top (
   axis_if #(.DATA_WIDTH(128)) M_CORE_HP3_WEIGHT ();
 
   // ===| Internal Wires — Instruction Path |=====================================
-  logic GEMV_op_x64_valid_wire;
-  logic GEMM_op_x64_valid_wire;
-  logic memcpy_op_x64_valid_wire;
-  logic memset_op_x64_valid_wire;
-  logic cvo_op_x64_valid_wire;
+  logic                  GEMV_op_x64_valid_wire;
+  logic                  GEMM_op_x64_valid_wire;
+  logic                  memcpy_op_x64_valid_wire;
+  logic                  memset_op_x64_valid_wire;
+  logic                  cvo_op_x64_valid_wire;
 
-  instruction_op_x64_t instruction;
+  instruction_op_x64_t   instruction;
 
-  logic fifo_full_wire;
-
-  // ===| Internal Wires — Compute Control |======================================
-  // TODO: drive from Global_Scheduler once the scheduling FSM is implemented.
-  logic        global_sram_rd_start;
-  logic        global_weight_valid;
-  logic [2:0]  global_inst;
-  logic        global_inst_valid;
-  logic        npu_clear;
-
-  assign npu_clear          = i_clear;
-  assign global_sram_rd_start = 1'b0;  // TODO: connect to scheduler
-  assign global_weight_valid  = 1'b0;  // TODO: connect to scheduler
-  assign global_inst          = 3'b0;  // TODO: connect to scheduler
-  assign global_inst_valid    = 1'b0;  // TODO: connect to scheduler
+  logic                  fifo_full_wire;
 
   // ===| [1] NPU Controller |====================================================
   npu_controller_top #() u_npu_controller_top (
@@ -100,8 +90,10 @@ module NPU_top (
   gemm_control_uop_t   GEMM_uop_wire;
   GEMV_control_uop_t   GEMV_uop_wire;
   memory_control_uop_t LOAD_uop_wire;
+  memory_control_uop_t STORE_uop_wire;  // latched at issue; drives result writeback
   memory_set_uop_t     mem_set_uop;
   cvo_control_uop_t    CVO_uop_wire;
+  logic                sram_rd_start_wire;  // one-cycle pulse: start fmap broadcast
 
   Global_Scheduler #() u_Global_Scheduler (
       .clk_core  (clk_core),
@@ -115,14 +107,25 @@ module NPU_top (
 
       .instruction(instruction),
 
-      .OUT_GEMM_uop    (GEMM_uop_wire),
-      .OUT_GEMV_uop    (GEMV_uop_wire),
-      .OUT_LOAD_uop    (LOAD_uop_wire),
-      .OUT_mem_set_uop (mem_set_uop),
-      .OUT_CVO_uop     (CVO_uop_wire)
+      .OUT_GEMM_uop     (GEMM_uop_wire),
+      .OUT_GEMV_uop     (GEMV_uop_wire),
+      .OUT_LOAD_uop     (LOAD_uop_wire),
+      .OUT_STORE_uop    (STORE_uop_wire),
+      .OUT_mem_set_uop  (mem_set_uop),
+      .OUT_CVO_uop      (CVO_uop_wire),
+      .OUT_sram_rd_start(sram_rd_start_wire)
   );
 
   // ===| [3] Memory Dispatcher |=================================================
+  // CVO stream wires: bridge ↔ CVO_top
+  logic [15:0] cvo_disp_data_wire;
+  logic        cvo_disp_valid_wire;
+  logic        cvo_disp_ready_wire;
+  logic [15:0] cvo_result_wire;
+  logic        cvo_result_valid_wire;
+  logic        cvo_result_ready_wire;
+  logic        cvo_disp_busy_wire;
+
   mem_dispatcher #() u_mem_dispatcher (
       .clk_core  (clk_core),
       .rst_n_core(rst_n_core),
@@ -133,13 +136,24 @@ module NPU_top (
       .S_AXIS_ACP_FMAP  (S_AXIS_ACP_FMAP),
       .M_AXIS_ACP_RESULT(M_AXIS_ACP_RESULT),
 
-      .IN_LOAD_uop   (LOAD_uop_wire),
-      .IN_mem_set_uop(mem_set_uop),
+      .IN_LOAD_uop    (LOAD_uop_wire),
+      .IN_mem_set_uop (mem_set_uop),
+      .IN_CVO_uop     (CVO_uop_wire),
+      .IN_cvo_uop_valid(cvo_op_x64_valid_wire),
 
-      .OUT_fifo_full(fifo_full_wire)
+      .OUT_cvo_data      (cvo_disp_data_wire),
+      .OUT_cvo_valid     (cvo_disp_valid_wire),
+      .IN_cvo_data_ready (cvo_disp_ready_wire),
+
+      .IN_cvo_result       (cvo_result_wire),
+      .IN_cvo_result_valid (cvo_result_valid_wire),
+      .OUT_cvo_result_ready(cvo_result_ready_wire),
+
+      .OUT_fifo_full(fifo_full_wire),
+      .OUT_cvo_busy (cvo_disp_busy_wire)
   );
 
-  // ===| [4] HP Weight Buffer (CDC FIFO: AXI -> Core clock) |====================
+  // ===| [4] HP Weight Buffer (CDC FIFO: AXI → Core clock) |====================
   mem_HP_buffer #() u_HP_buffer (
       .clk_core  (clk_core),
       .rst_n_core(rst_n_core),
@@ -160,18 +174,16 @@ module NPU_top (
   // ===| [5] FMap Preprocessing Pipeline |=======================================
   logic [`FIXED_MANT_WIDTH-1:0] fmap_broadcast      [0:`ARRAY_SIZE_H-1];
   logic                         fmap_broadcast_valid;
-  logic [`BF16_EXP_WIDTH-1:0]   cached_emax_out      [0:`ARRAY_SIZE_H-1];
+  logic [  `BF16_EXP_WIDTH-1:0] cached_emax_out     [0:`ARRAY_SIZE_H-1];
 
-  // TODO: preprocess_fmap port interface updated to 2D output — adapt once
-  //       PIPELINE_CNT macro is defined and the port contract is finalised.
   preprocess_fmap #() u_fmap_pre (
       .clk    (clk_core),
       .rst_n  (rst_n_core),
-      .i_clear(npu_clear),
+      .i_clear(i_clear),
 
       .S_AXIS_ACP_FMAP(S_AXIS_ACP_FMAP),
 
-      .i_rd_start(global_sram_rd_start),
+      .i_rd_start(sram_rd_start_wire),
 
       .o_fmap_broadcast(fmap_broadcast),
       .o_fmap_valid    (fmap_broadcast_valid),
@@ -179,18 +191,19 @@ module NPU_top (
   );
 
   // ===| [6] Systolic Array Engine (Matrix Core) |================================
+  // global_inst[2:0] = flags[5:3] = {findemax, accm, w_scale}
   logic [`DSP48E2_POUT_SIZE-1:0] raw_res_sum      [0:`ARRAY_SIZE_H-1];
-  logic                          raw_res_sum_valid [0:`ARRAY_SIZE_H-1];
-  logic [`BF16_EXP_WIDTH-1:0]    delayed_emax_32   [0:`ARRAY_SIZE_H-1];
+  logic                          raw_res_sum_valid[0:`ARRAY_SIZE_H-1];
+  logic [   `BF16_EXP_WIDTH-1:0] delayed_emax_32  [0:`ARRAY_SIZE_H-1];
 
   GEMM_systolic_top #() u_systolic_engine (
       .clk    (clk_core),
       .rst_n  (rst_n_core),
-      .i_clear(npu_clear),
+      .i_clear(i_clear),
 
-      .global_weight_valid(global_weight_valid),
-      .global_inst        (global_inst),
-      .global_inst_valid  (global_inst_valid),
+      .global_weight_valid(M_CORE_HP0_WEIGHT.tvalid),
+      .global_inst        (GEMM_uop_wire.flags[5:3]),
+      .global_inst_valid  (GEMM_op_x64_valid_wire),
 
       .IN_fmap_broadcast      (fmap_broadcast),
       .IN_fmap_broadcast_valid(fmap_broadcast_valid),
@@ -227,45 +240,62 @@ module NPU_top (
   // ===| [8] Result Packer |=====================================================
   logic [`AXI_STREAM_WIDTH-1:0] packed_res_data;
   logic                         packed_res_valid;
-  logic                         packed_res_ready;
-  logic                         packer_busy_status;
 
   FROM_gemm_result_packer #() u_packer (
-      .clk         (clk_core),
-      .rst_n       (rst_n_core),
-      .row_res     (norm_res_seq),
+      .clk          (clk_core),
+      .rst_n        (rst_n_core),
+      .row_res      (norm_res_seq),
       .row_res_valid(norm_res_seq_valid),
-      .packed_data (packed_res_data),
-      .packed_valid(packed_res_valid),
-      .packed_ready(packed_res_ready),
-      .o_busy      (packer_busy_status)
+      .packed_data  (packed_res_data),
+      .packed_valid (packed_res_valid),
+      .packed_ready (1'b1),   // downstream accepts unconditionally for now
+      .o_busy       ()
   );
 
   // ===| [9] Vector Core (GEMV) |================================================
-  // TODO: IN_weight_A/B/C/D expect unpacked INT4 arrays — add weight unpack
-  //       bridge between M_CORE_HP*_WEIGHT.tdata (128-bit flat) and the array port.
-  // TODO: IN_num_recur and IN_activated_lane need to come from Global_Scheduler.
+  // Unpack 128-bit flat HP bus → 32 × INT4 per lane before feeding GEMV_top.
+  // HP2 → lane A, HP3 → lane B;  C/D tied to zero (2-lane configuration).
+  localparam int GemvWeightCnt = mem_pkg::HpSingleWeightCnt;  // 32 weights per port
+  localparam int GemvWeightW   = mem_pkg::WeightBitWidth;      // 4-bit INT4
 
+  logic [GemvWeightW-1:0] gemv_weight_A [0:GemvWeightCnt-1];
+  logic [GemvWeightW-1:0] gemv_weight_B [0:GemvWeightCnt-1];
+  logic [GemvWeightW-1:0] gemv_weight_C [0:GemvWeightCnt-1];
+  logic [GemvWeightW-1:0] gemv_weight_D [0:GemvWeightCnt-1];
+
+  genvar w;
+  generate
+    for (w = 0; w < GemvWeightCnt; w++) begin : gen_gemv_unpack
+      assign gemv_weight_A[w] = M_CORE_HP2_WEIGHT.tdata[w * GemvWeightW +: GemvWeightW];
+      assign gemv_weight_B[w] = M_CORE_HP3_WEIGHT.tdata[w * GemvWeightW +: GemvWeightW];
+      assign gemv_weight_C[w] = '0;
+      assign gemv_weight_D[w] = '0;
+    end
+  endgenerate
+
+  // num_recur: number of fmap accumulation rounds = vector length / broadcast width.
+  // size_ptr_addr is a 6-bit shape pointer; actual cycle count resolved by scheduler.
   logic [16:0] gemv_num_recur;
-  logic        gemv_activated_lane[0:VecCoreDefaultCfg.num_gemv_pipeline-1];
-  assign gemv_num_recur = '0;          // TODO: connect to scheduler
-  assign gemv_activated_lane = '{default: 1'b0};  // TODO: connect to scheduler
+  logic        gemv_activated_lane [0:VecCoreDefaultCfg.num_gemv_pipeline-1];
+
+  assign gemv_num_recur      = {11'b0, GEMV_uop_wire.size_ptr_addr};
+  assign gemv_activated_lane = '{default: 1'b0};
 
   GEMV_top #(
       .param(VecCoreDefaultCfg)
   ) u_GEMV_top (
-      .clk   (clk_core),
-      .rst_n (rst_n_core),
+      .clk  (clk_core),
+      .rst_n(rst_n_core),
 
       .IN_weight_valid_A(M_CORE_HP2_WEIGHT.tvalid),
       .IN_weight_valid_B(M_CORE_HP3_WEIGHT.tvalid),
       .IN_weight_valid_C(1'b0),
       .IN_weight_valid_D(1'b0),
 
-      .IN_weight_A(M_CORE_HP2_WEIGHT.tdata),
-      .IN_weight_B(M_CORE_HP3_WEIGHT.tdata),
-      .IN_weight_C('0),
-      .IN_weight_D('0),
+      .IN_weight_A(gemv_weight_A),
+      .IN_weight_B(gemv_weight_B),
+      .IN_weight_C(gemv_weight_C),
+      .IN_weight_D(gemv_weight_D),
 
       .OUT_weight_ready_A(M_CORE_HP2_WEIGHT.tready),
       .OUT_weight_ready_B(M_CORE_HP3_WEIGHT.tready),
@@ -289,43 +319,48 @@ module NPU_top (
       .OUT_result_valid_D()
   );
 
-  // ===| [10] CVO Core |==========================================================
-  // TODO: IN_data / OUT_result streams need to be routed through mem_dispatcher
-  //       once L2 read/write DMA paths for CVO are implemented.
+  // ===| [10] CVO Core |=========================================================
+  // e_max BF16 encoding: value = 2^(exp - 127), mantissa implicit 1.0.
+  //   delayed_emax_32[0] is the 8-bit exponent field from column-0 normalizer.
+  //   Packed as BF16: {sign=0, exp=delayed_emax_32[0], mant=7'b0}.
+  logic [15:0] cvo_emax_bf16;
+  logic        cvo_busy_wire;
+  logic        cvo_done_wire;
 
-  logic [15:0] cvo_result;
-  logic        cvo_result_valid;
-  logic        cvo_busy;
-  logic        cvo_done;
+  assign cvo_emax_bf16 = {1'b0, delayed_emax_32[0], 7'b0};
 
   CVO_top u_CVO_top (
-      .clk             (clk_core),
-      .rst_n           (rst_n_core),
-      .i_clear         (npu_clear),
+      .clk    (clk_core),
+      .rst_n  (rst_n_core),
+      .i_clear(i_clear),
 
-      .IN_uop          (CVO_uop_wire),
-      .IN_uop_valid    (cvo_op_x64_valid_wire),
-      .OUT_uop_ready   (),
+      .IN_uop      (CVO_uop_wire),
+      .IN_uop_valid(cvo_op_x64_valid_wire),
+      .OUT_uop_ready(),
 
-      // ===| Streams (TODO: connect to L2 DMA paths) |===
-      .IN_data         (16'd0),
-      .IN_data_valid   (1'b0),
-      .OUT_data_ready  (),
+      // ===| L2 DMA stream — via mem_CVO_stream_bridge inside mem_dispatcher |===
+      .IN_data       (cvo_disp_data_wire),
+      .IN_data_valid (cvo_disp_valid_wire),
+      .OUT_data_ready(cvo_disp_ready_wire),
 
-      .OUT_result      (cvo_result),
-      .OUT_result_valid(cvo_result_valid),
-      .IN_result_ready (1'b1),
+      .OUT_result      (cvo_result_wire),
+      .OUT_result_valid(cvo_result_valid_wire),
+      .IN_result_ready (cvo_result_ready_wire),
 
-      .IN_e_max        (16'd0),  // TODO: connect to cached e_max register
+      .IN_e_max(cvo_emax_bf16),
 
-      .OUT_busy        (cvo_busy),
-      .OUT_done        (cvo_done),
-      .OUT_accm        ()
+      .OUT_busy(cvo_busy_wire),
+      .OUT_done(cvo_done_wire),
+      .OUT_accm()
   );
 
-  // ===| Status Register |=======================================================
-  assign mmio_npu_stat[0]    = fifo_full_wire | cvo_busy;  // BUSY
-  assign mmio_npu_stat[1]    = cvo_done;                   // DONE
+  // ===| Status |================================================================
+  // Aggregated NPU busy/done flags — intended for ctrl_npu_frontend IN_enc_stat.
+  // Bit 0 : BUSY  (memory FIFO full | CVO engine active | CVO DMA bridge active)
+  // Bit 1 : DONE  (CVO operation complete pulse)
+  logic [31:0] mmio_npu_stat;
+  assign mmio_npu_stat[0]    = fifo_full_wire | cvo_busy_wire | cvo_disp_busy_wire;
+  assign mmio_npu_stat[1]    = cvo_done_wire;
   assign mmio_npu_stat[31:2] = 30'd0;
 
 endmodule

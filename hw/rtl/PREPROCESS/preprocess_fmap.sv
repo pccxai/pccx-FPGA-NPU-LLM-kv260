@@ -28,11 +28,10 @@ module preprocess_fmap #(
 
 
 
-    // Output to Branch Engines (Systolic / LUT / etc.)
-    output logic [`FIXED_MANT_WIDTH-1:0] o_fmap_broadcast[0:`ARRAY_SIZE_H-1][0:PIPELINE_CNT-1],
-    output logic                         o_fmap_valid    [ 0:PIPELINE_CNT-1],
+    // Output to Branch Engines (Systolic / GEMV / CVO)
+    output logic [`FIXED_MANT_WIDTH-1:0] o_fmap_broadcast[0:`ARRAY_SIZE_H-1],
+    output logic                         o_fmap_valid,
 
-    output logic                       o_GEMV_emax  [ 0:PIPELINE_CNT-1],
     output logic [`BF16_EXP_WIDTH-1:0] o_cached_emax[0:`ARRAY_SIZE_H-1]
 );
 

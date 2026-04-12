@@ -157,6 +157,7 @@ package isa_pkg;
     from_L2_to_host     = {data_from_GLOBAL_cache,      data_to_host            },
     from_L2_to_L1_GEMM  = {data_from_GLOBAL_cache,      data_to_L1_cache_GEMM_in},
     from_L2_to_L1_GEMV  = {data_from_GLOBAL_cache,      data_to_L1_cache_GEMV_in},
+    from_L2_to_CVO      = {data_from_GLOBAL_cache,      data_to_CVO_in          },
     from_GEMV_res_to_L2 = {data_from_L1_cache_GEMV_res, data_to_GLOBAL_cache    },
     from_GEMM_res_to_L2 = {data_from_L1_cache_GEMM_res, data_to_GLOBAL_cache    },
     from_CVO_res_to_L2  = {data_from_CVO_res,           data_to_GLOBAL_cache    }

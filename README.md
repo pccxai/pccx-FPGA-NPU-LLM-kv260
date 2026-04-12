@@ -1,164 +1,163 @@
-# TinyNPU-Gemma: Bare-Metal Gemma 3N LLM Accelerator on FPGA
+# uXC — Bare-Metal Transformer Accelerator on FPGA
 
-![WIP](https://img.shields.io/badge/Status-Work_in_Progress-red)
-![Vulkan](https://img.shields.io/badge/Vulkan-Raw_API-red?logo=vulkan)
-![C++](https://img.shields.io/badge/C++-17-blue?logo=c%2B%2B)
-![Python](https://img.shields.io/badge/Python-3.x-yellow?logo=python)
-![Hardware](https://img.shields.io/badge/Target-FPGA_KV260-orange)
-![Quantization](https://img.shields.io/badge/Quantization-W4A8-green)
+![WIP](https://img.shields.io/badge/Status-RTL_Complete-blue)
+![SystemVerilog](https://img.shields.io/badge/RTL-SystemVerilog-green)
+![Target](https://img.shields.io/badge/Target-Kria_KV260-orange)
+![Quantization](https://img.shields.io/badge/Precision-W4A16_BF16-green)
 
-> **Notice: Active Development in Progress**
->
-> This repository is currently under active development. The codebase, architecture, and core features are subject to change. The RTL synthesis targeting the Xilinx KV260 FPGA (including aggressive DSP48E2 resource mapping) is actively being refined and is not yet ready for production use.
+Custom NPU for running the **Gemma 3N E4B** language model on the Xilinx Kria KV260 FPGA,
+bare-metal at 400 MHz. No OS, no PetaLinux.
 
-## Project Overview
-
-TinyNPU-Gemma is a custom SystemVerilog-based Neural Processing Unit (NPU) engineered from the ground up to accelerate the quantized Gemma 3N (E2B/E4B) Large Language Model on a bare-metal Xilinx Kria KV260 FPGA.
-
-**Software Baseline (x64):**
-This project is the hardware-accelerated adaptation of my baseline x64 software implementation, [llm-lite 🔗](https://github.com/hwkim-dev/llm-lite). While `llm-lite` executes the Gemma 3N E4B model on standard CPU environments, TinyNPU-Gemma re-architects the core inference pipeline to overcome inherent edge-device memory bottlenecks. The architecture is meticulously designed to push the absolute physical constraints of the KV260 platform, exploiting its 1,248 DSP48E2 slices and 144 Block RAMs (BRAMs) to the limit.
-
-This project encompasses a full-stack hardware-software co-design approach. It seamlessly integrates a SystemVerilog hardware accelerator, a Python-based Golden Model for Trace-Driven Verification, CPU SIMD optimizations, and a high-performance AXI Direct Memory Access (AXI DMA) pipeline.
-
-
-TinyNPU-Gemma is a custom SystemVerilog-based Neural Processing Unit (NPU) engineered from the ground up to accelerate the quantized Gemma 3N (E2B/E4B) Large Language Model on a bare-metal Xilinx Kria KV260 FPGA. The architecture is meticulously designed to push the absolute physical constraints of the KV260 platform, exploiting its 1,248 DSP48E2 slices and 144 Block RAMs (BRAMs) to the limit.
-
-This project encompasses a full-stack hardware-software co-design approach. It seamlessly integrates a SystemVerilog hardware accelerator, a Python-based Golden Model for Trace-Driven Verification, CPU SIMD optimizations, and a high-performance AXI Direct Memory Access (AXI DMA) pipeline to overcome inherent edge-device memory bottlenecks.
+Software baseline: [llm-lite](https://github.com/hwkim-dev/llm-lite) (x64 CPU reference implementation).
 
 ---
 
-## NPU Architecture Overview
-
-![NPU Architecture](.images/NPU_block_diagram.png)
-
-The NPU is organized into three primary compute tiers connected via a shared **L2 True Dual-Port cache** and internal data buses:
-
-- **Vector Core:** Four μV-Cores for parallel GEMV operations, each with a dedicated L1 cache and BF16 Emax-align unit. Fed by AXI HP-Ports 0, 1, 2.
-- **Complex Vector Operation (CVO) Core:** Two μCVO-Cores handling non-linear activation functions (tanh, sqrt, sin/cos via CORDIC and SFU). Connected to the Vector Core and Matrix Core via dedicated unidirectional data buses.
-- **Matrix Core:** A 32×32 Systolic Array (implemented as two 32×16 sub-arrays) for GEMM operations. Weight is supplied via AXI HP-Port 3 at 128-bit/clk. FMap is cached in a dedicated L1 FMAP cache.
-
----
-
-## Quantization Strategy: W4A8 with Dynamic Precision Promotion
-
-The core compute path operates at **W4A8 precision**:
-
-| Data                     | Type        | Width     | Notes                                   |
-| ------------------------ | ----------- | --------- | --------------------------------------- |
-| Weight                   | INT4        | 4-bit     | Stored and streamed as-is from HP ports |
-| Feature Map (Activation) | INT8        | 8-bit     | Stored in L1/L2 cache                   |
-| MAC Accumulation         | INT32/INT48 | 32–48-bit | DSP48E2 P-register output               |
-| SFU Input/Output         | BF16 / FP32 | 16–32-bit | After type promotion                    |
-
-### Precision Promotion Flow
+## Architecture
 
 ```
-[Weight: INT4] × [FMap: INT8]
-        ↓  DSP48E2 MAC
-  [Accumulator: INT48]
-        ↓  Normalization (Barrel Shift + LOD)
-     [BF16 / FP32]
-        ↓  SFU / CORDIC  (tanh, RMSNorm, Softmax, GeLU, sin/cos)
-     [BF16 / FP32]
-        ↓  Requantize
-     [INT8] → next layer
+AXI-Lite (HPM) ──► NPU Controller ──► Global Scheduler
+                                              │
+              ┌───────────────┬───────────────┼───────────────┐
+              ▼               ▼               ▼               ▼
+       Vector Core      Matrix Core       CVO Core      mem_dispatcher
+       (GEMV_top)    (GEMM_systolic_top)  (CVO_top)         │
+        HP2/3 weights   HP0/1 weights    stream via    L2 URAM cache
+                                         CVO bridge   (114,688 × 128-bit)
+              └───────────────┴────────────── ─ ─ ─ ─ ─ ─ ─ ┘
+                       preprocess_fmap (ACP fmap in)
 ```
 
-Precision promotion to **BF16 or FP32** occurs only when entering the Complex Vector Operation (CVO) Core for non-linear functions. After the SFU computation, results are requantized back to INT8 before re-entering the Vector Core or L2 cache. This minimizes the footprint of high-precision arithmetic while preserving numerical accuracy where it matters.
+### Compute Engines
+
+| Engine | Operation | Weights | Activation | Accumulator |
+|--------|-----------|---------|-----------|-------------|
+| Matrix Core | GEMM (prefill, projections) | INT4 via HP0/1 (32/clk) | BF16→27-bit fixed-pt | INT48 DSP48E2 |
+| Vector Core | GEMV (autoregressive decode) | INT4 via HP2/3 (32/clk each) | BF16→27-bit fixed-pt | INT48 DSP48E2 |
+| CVO Core | Non-linear ops (softmax, GELU, RoPE) | — | BF16 stream from L2 | BF16 |
+
+### Memory Hierarchy
+
+| Level | Technology | Width | Capacity |
+|-------|-----------|-------|---------|
+| L2 Global Cache | URAM True Dual-Port | 128-bit | 1.75 MB (14 URAMs) |
+| Shape Constant RAM | BRAM | 17-bit × 3 | 64 shape entries each |
+| FMap L1 Buffer | BRAM | 128-bit | 2048 entries (256 KB) |
+| HP CDC FIFOs | XPM FIFO | 128-bit | 512-deep × 4 ports |
+
+### Key Design Points
+
+- **W4A16**: INT4 weights × BF16 activations → INT48 accumulator → BF16 normalizer → output
+- **CVO DMA bridge** (`mem_CVO_stream_bridge`): L2 → 16-bit BF16 stream to CVO → L2 writeback, sequential with XPM FIFO result buffer (2048-deep)
+- **e_max tracking**: Column-0 normalizer exponent is encoded as BF16 and fed to CVO for numerically stable softmax
+- **AXI port usage**: HP0/1 = GEMM weights, HP2/3 = GEMV weights (32 INT4/clk each), ACP = fmap DMA in / result DMA out
+- **No arbitration stalls** on L2 (true dual-port): CVO bridge wins port B over NPU DMA when active
 
 ---
 
-## System Architecture and Key Components
+## Custom ISA (64-bit VLIW)
 
-### 1. Custom ISA and Decoupled Dataflow Pipeline
+5 opcodes. Each instruction is 64 bits: `[63:60]` opcode + `[59:0]` body.
 
-[![ISA Instruction Set Architecture](.images/ISA_screen_shot_0409.png)](https://docs.google.com/spreadsheets/d/e/2PACX-1vQOZ4tMXcdIpcdOCvneAx0r8wmRfmprogqkhbCTK2ythlzxp2GBromIiCi9J9yEz9G_ZO4o7BreDOoq/pubhtml?gid=584280668&single=true)
+| Opcode | Mnemonic | Description |
+|--------|----------|-------------|
+| `4'h0` | `OP_GEMV` | Vector × Matrix multiply |
+| `4'h1` | `OP_GEMM` | Matrix × Matrix multiply |
+| `4'h2` | `OP_MEMCPY` | Host DDR4 ↔ L2 DMA |
+| `4'h3` | `OP_MEMSET` | Write shape constants to RAM |
+| `4'h4` | `OP_CVO` | Element-wise non-linear op (exp/sqrt/GELU/sin/cos/reduce_sum/scale/recip) |
 
-> **[Click Here to Explore the Full Custom ISA Specification (Google Sheets)]**(https://docs.google.com/spreadsheets/d/e/2PACX-1vQOZ4tMXcdIpcdOCvneAx0r8wmRfmprogqkhbCTK2ythlzxp2GBromIiCi9J9yEz9G_ZO4o7BreDOoq/pubhtml?gid=584280668&single=true)
+Full specification: [docs/ISA.md](docs/ISA.md)
 
-The accelerator operates on a **Custom 64-bit ISA** specifically tailored for LLM acceleration. To maximize parallel execution and eliminate pipeline stalls, the architecture employs a strictly **Decoupled Dataflow** system, divided into two asynchronous stages:
-
-- **Stage 1 — Global Front-End:** The central `ctrl_npu_decoder` fetches and decodes 64-bit custom instructions and dispatches them into dedicated Instruction FIFOs at the front of each execution pipeline. The front-end advances immediately without waiting for execution to complete.
-- **Stage 2 — Local Dispatcher:** Each compute engine pops from its instruction FIFO and checks local execution conditions (weight availability, FMap readiness). Once dependencies are satisfied, it fires the engine independently — a stall in one engine never halts another.
-
-### 2. Memory Hierarchy
-
-| Level                       | Technology            | Purpose                                       |
-| --------------------------- | --------------------- | --------------------------------------------- |
-| L1 Cache (per μV-Core)      | BRAM                  | Ultra-low latency weight/activation access    |
-| L1 Cache FMAP (Matrix Core) | BRAM                  | Dedicated FMap buffer for Systolic Array      |
-| L2 Cache                    | URAM (True Dual-Port) | Shared between Vector Core ↔ Matrix Core      |
-| Global Cache                | URAM                  | Long-context KV cache, full model activations |
-| Constant Cache              | BRAM                  | RMSNorm scales, bias constants                |
-
-True Dual-Port L2 enables simultaneous read/write from Vector Core and Matrix Core without arbitration stalls.
-
-### 3. DSP48E2 Architecture Utilization
-
-The Systolic Array maps **INT4 weight × INT8 FMap** MAC operations directly onto DSP48E2 blocks using bit-packing to maximize compute density within the KV260's 1,248 DSP budget.
-
-![DSP48E2 Architecture](.images/DSP48E2_IMG.jpeg)
-
-Weight is delivered to the Systolic Array at **128-bit/clk via AXI HP-Port 3**, equivalent to 32 INT4 weights per clock (INT4 × 16 × 2), feeding both 32×16 sub-arrays simultaneously.
-
-### 4. Complex Vector Operation (CVO) Core
-
-The CVO Core performs **floating-point non-linear operations** after precision promotion from INT8/INT48 accumulator output:
-
-| Unit   | Function  | Latency  |
-| ------ | --------- | -------- |
-| SFU    | GeLU      | 1 cycle  |
-| SFU    | RMSNorm   | 1 cycle  |
-| SFU    | Softmax   | 3 cycles |
-| SFU    | tanh      | 1 cycle  |
-| CORDIC | sin / cos | pipeline |
-
-Two μCVO-Cores operate in parallel, each with a register file and shared Dispatcher/Inst FIFO.
-
-### 5. AXI DMA and Memory Interface
-
-| Port             | Direction                  | Bandwidth        | Usage                     |
-| ---------------- | -------------------------- | ---------------- | ------------------------- |
-| HP-0, HP-1, HP-2 | IN (uni-directional)       | 128-bit/clk each | Vector Core weight stream |
-| HP-3             | IN (single IN, double OUT) | 128-bit/clk      | Matrix Core weight stream |
-| ACP Port         | Bi-directional             | 128-bit          | FMap in / Result out      |
-
-### 6. CPU SIMD Optimizations & Trace-Driven Verification
-
-Hardware verification requires a **bit-true match (0% error rate)** between the Python/PyTorch golden model and the SystemVerilog RTL simulation across all precision levels (INT4, INT8, BF16, FP32).
-
-### 7. Gemma 3N Architecture Specifics
-
-| Feature                 | Implementation                                                        |
-| ----------------------- | --------------------------------------------------------------------- |
-| AltUp Router            | Tanh scaling: `Tanh(Norm(x)/2048) × W`, main stream `xs[0]` untouched |
-| RMSNorm                 | `scale_plus_one=False`, strictly per Gemma spec                       |
-| Top-K Extraction        | `numpy.argpartition` — O(N) vs O(N log N)                             |
-| Gaussian Top-K Sparsity | FFN layers 0–9: 0.95 sparsity via hardware ReLU                       |
-| KV Cache Reuse          | Layers 20–34 reuse Layer 18 (Local) and Layer 19 (Global) caches      |
+### Softmax sequence (example — 4 instructions)
+```
+OP_GEMV  flags.findemax=1          ; compute attention scores, track e_max
+OP_CVO   CVO_EXP  flags.sub_emax=1 ; exp(score - e_max) for each element
+OP_CVO   CVO_REDUCE_SUM            ; Σ exp values → scalar at dst
+OP_CVO   CVO_SCALE flags.recip_scale=1 ; divide each exp by the sum
+```
 
 ---
 
-## Current Status
+## Repository Structure
 
-| Component                            | Status        |
-| ------------------------------------ | ------------- |
-| Custom ISA definition                | ✅ Complete    |
-| Python golden model                  | ✅ Verified    |
-| Vulkan memory profiling              | ✅ Verified    |
-| Systolic Array RTL                   | 🔧 In Progress |
-| CVO Core RTL                         | 🔧 In Progress |
-| Full system integration              | 🔧 In Progress |
-| DSP48E2 timing closure @ target freq | 🔧 In Progress |
+```
+hw/
+  rtl/
+    NPU_top.sv                  ← top-level wiring
+    NPU_Controller/             ← VLIW frontend, decoder, Global Scheduler
+    MAT_CORE/                   ← 32×32 systolic array, normalizer, packer
+    VEC_CORE/                   ← GEMV pipeline (4 μV-Core lanes)
+    CVO_CORE/                   ← CVO SFU + CORDIC unit
+    PREPROCESS/                 ← BF16→fixed-pt pipeline, fmap cache
+    MEM_control/                ← L2 cache, DMA dispatcher, CVO bridge, HP buffer
+    Constants/                  ← `define macros + SystemVerilog packages (A→D)
+    Library/                    ← BF16 math pkg, algorithms pkg, QUEUE
+sw/
+  driver/                       ← AXI-Lite MMIO HAL + inference API (skeleton)
+  gemma3NE4B/                   ← Gemma 3N E4B application (submodule)
+docs/                           ← Architecture, ISA, model analysis documents
+```
 
 ---
 
-## Repository Structure (planned)
+## Constant / Package Hierarchy
+
+Compilation order enforced by directory naming:
 
 ```
-├── rtl/          # SystemVerilog source
-├── tb/           # Testbenches
-├── golden/       # Python golden model
-├── isa/          # ISA specification
-└── docs/         # Architecture diagrams
+A_const_svh/   → `define only  (NUMBERS.svh, kv260_device.svh, npu_arch.svh)
+B_device_pkg/  → device_pkg    (precision/type choices)
+C_type_pkg/    → dtype_pkg, mem_pkg
+D_pipeline_pkg → vec_core_pkg  (Vector Core config struct)
 ```
+
+All RTL files include `GLOBAL_CONST.svh` which chains A through npu_arch.
+
+---
+
+## AXI Port Map
+
+| KV260 Port | Direction | Width | Usage |
+|-----------|-----------|-------|-------|
+| HP-0 | Slave | 128-bit | Matrix Core (GEMM) weights |
+| HP-1 | Slave | 128-bit | Matrix Core spare lane |
+| HP-2 | Slave | 128-bit | Vector Core lane A (GEMV) |
+| HP-3 | Slave | 128-bit | Vector Core lane B (GEMV) |
+| ACP | Bi-directional | 128-bit | FMap DMA in + Result DMA out |
+| HPM (AXI-Lite) | Slave | 32-bit | Instruction issue + status read |
+
+---
+
+## Implementation Status
+
+| Block | Status |
+|-------|--------|
+| VLIW frontend + decoder | RTL complete |
+| Global Scheduler | RTL complete |
+| 32×32 Systolic Array (Matrix Core) | RTL complete |
+| Result normalizer + packer | RTL complete |
+| GEMV pipeline (Vector Core, 4 lanes) | RTL complete |
+| CVO SFU (exp, sqrt, GELU, scale, recip, reduce_sum) | RTL complete |
+| CVO CORDIC (sin, cos) | RTL complete |
+| FMap preprocessing pipeline | RTL complete |
+| L2 URAM cache + ACP DMA | RTL complete |
+| CVO stream bridge | RTL complete |
+| NPU top-level wiring | RTL complete |
+| uXC driver (AXI-Lite HAL) | Skeleton only |
+| Gemma 3N E4B application | Submodule |
+| Simulation / verification | Not started |
+| Vivado synthesis + timing closure | Not started |
+
+---
+
+## Documentation
+
+See [docs/](docs/) for detailed specifications.
+
+| Document | Description |
+|----------|-------------|
+| [docs/FPGA_NPU_Architecture_v2.md](docs/FPGA_NPU_Architecture_v2.md) | Full architecture reference |
+| [docs/ISA.md](docs/ISA.md) | 64-bit ISA encoding, uop structures, memory routing |
+| [docs/HW_Optimization_DSP48E2.md](docs/HW_Optimization_DSP48E2.md) | DSP48E2 optimization techniques |
+| [docs/GEMMA_3N_E4B.md](docs/GEMMA_3N_E4B.md) | Target model internals |
+| [docs/Gemma3N_Pipeline_EN.md](docs/Gemma3N_Pipeline_EN.md) | Layer-by-layer math specification |

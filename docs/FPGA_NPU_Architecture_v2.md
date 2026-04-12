@@ -1,53 +1,48 @@
-# uXC NPU Architecture — V2 (W4A8, 400MHz Target)
+# uXC NPU Architecture — V2 (W4A16/BF16, 400 MHz Target)
 
-Target board: **Xilinx Kria KV260** | Bare-metal (no OS) | 400MHz core clock
-
-Block diagram: `/.images/NPU_block_diagram.png`
+Target board: **Xilinx Kria KV260** | Bare-metal (no OS) | 400 MHz core clock
 
 ---
 
 ## 1. System Overview
 
-The uXC NPU is a custom neural processing unit designed to run the **Gemma 3N E4B** model
-at full throughput on the KV260. The core compute paradigm is **W4A8**:
-INT4 weights × INT8 activations, accumulating into INT48 via DSP48E2 P-registers.
-Precision is promoted to BF16/FP32 only inside the CVO Core for non-linear functions.
+The uXC (micro eXcelerator Core) NPU is a custom neural processing unit designed to run
+the **Gemma 3N E4B** model on the KV260 FPGA.
 
-### 1.1 Top-Level Data Flow
+Compute paradigm: **W4A16** — INT4 weights × BF16 activations, accumulating into INT48
+via DSP48E2 P-registers. Precision is promoted to BF16/FP32 only inside the CVO Core
+for non-linear functions.
+
+### 1.1 Top-Level Block Diagram
 
 ```
-                         ┌─────────────────────────────────────────┐
-                         │              NPU Frontend                │
-AXI-Lite (HPM) ─────────►  AXIL_CMD_IN → Decoder → Global Scheduler│
-                         └─────────┬───────────────────────────────┘
-                                   │ uop dispatch
-              ┌────────────────────┼──────────────────────┐
-              ▼                    ▼                       ▼
-         Vector Core          CVO Core              Matrix Core
-       (4 × μV-Cores)    (2 × μCVO-Cores)        (Systolic Array)
-              │                    │                       │
-              └────────────────────┴───────────────────────┘
-                                   │
-                          L2 Cache [True Dual-Port URAM]
-                                   │
-                          Global Cache [URAM]
-                          Constant Cache [BRAM]
+AXI-Lite (HPM) ─────────► ctrl_npu_frontend ──► ctrl_npu_decoder ──► Global_Scheduler
+                                                                              │
+                                  uop dispatch per engine                     │
+                 ┌────────────────────┬──────────────────┬────────────────────┤
+                 ▼                    ▼                   ▼                    ▼
+          Vector Core           Matrix Core           CVO Core          mem_dispatcher
+        (GEMV_top)           (GEMM_systolic_top)    (CVO_top)               │
+         HP2/3 weights          HP0/1 weights      stream via          L2 URAM cache
+              │                      │             mem_CVO_stream_bridge      │
+              └──────────────────────┴─────────────────────────────────────────┘
+                              preprocess_fmap (ACP fmap in)
 ```
 
 ---
 
 ## 2. Memory Hierarchy
 
-| Level | Technology | Capacity | Access | Purpose |
-|-------|-----------|----------|--------|---------|
-| L1 Cache (per μV-Core) | BRAM | per-core | single-port | GEMV weight + activation |
-| L1 FMAP Cache (Matrix Core) | BRAM | dedicated | single-port | Systolic Array fmap buffer |
-| L2 Cache | URAM (True Dual-Port) | shared | dual-port (no arbiter) | Vector Core ↔ Matrix Core |
-| Global Cache | URAM | large | shared | KV cache, long-context activations |
-| Constant Cache | BRAM | small | read-only | RMSNorm scales, bias constants |
+| Level | Module | Technology | Width | Purpose |
+|-------|--------|-----------|-------|---------|
+| L2 Global Cache | `mem_L2_cache_fmap` (inside `mem_GLOBAL_cache`) | URAM (True Dual-Port) | 128-bit | Shared fmap / result storage |
+| Shape Constant RAM | `fmap_array_shape`, `weight_array_shape` | BRAM | 17-bit × 3 | Tensor shape descriptors |
+| FMap L1 SRAM | `fmap_cache` | BRAM | 128-bit | Broadcast buffer per column |
+| HP CDC FIFO | `mem_HP_buffer` | XPM FIFO | 128-bit × 4 ports | AXI→core clock domain crossing |
+| ACP CDC FIFO | `mem_BUFFER` | XPM FIFO | 128-bit | ACP DMA staging |
 
-True Dual-Port L2 allows simultaneous read from Vector Core and write from Matrix Core
-(or vice versa) without arbitration stalls.
+**L2 address convention:** 128-bit word units. Element address ÷ 8 = word address.  
+**L2 capacity:** 114,688 × 128-bit words = 1.75 MB (14 URAMs).
 
 ---
 
@@ -55,171 +50,180 @@ True Dual-Port L2 allows simultaneous read from Vector Core and write from Matri
 
 | Port | Direction | Width | Usage |
 |------|-----------|-------|-------|
-| HP-0 | IN | 128-bit/clk | μV-Core weight stream (GEMV) |
-| HP-1 | IN | 128-bit/clk | μV-Core weight stream (GEMV) |
-| HP-2 | IN | 128-bit/clk | μV-Core weight stream (GEMV) |
-| HP-3 | IN (single IN, double OUT) | 128-bit/clk | Matrix Core weight stream (GEMM) |
-| ACP | Bi-directional | 128-bit | FMap in / Result out (coherent) |
-| HPM | AXI-Lite | 64-bit | Control plane — ISA instruction issue |
+| HP-0 | IN | 128-bit/clk | Matrix Core (GEMM) weight stream |
+| HP-1 | IN | 128-bit/clk | Matrix Core (GEMM) weight stream (spare lane) |
+| HP-2 | IN | 128-bit/clk | Vector Core (GEMV) weight lane A |
+| HP-3 | IN | 128-bit/clk | Vector Core (GEMV) weight lane B |
+| ACP  | Bi-directional | 128-bit | FMap DMA in / Result DMA out (coherent) |
+| HPM  | AXI-Lite slave | 32-bit | Control plane — VLIW instruction issue |
+
+All HP ports go through `mem_HP_buffer` (XPM async FIFO for AXI→core CDC) before
+reaching the compute engines.
 
 ---
 
-## 4. Vector Core (4 × μV-Cores)
+## 4. Vector Core (GEMV_top)
 
-Handles all **GEMV** (vector × matrix) operations — the dominant operation in
-the decode phase of autoregressive generation.
+Handles all **GEMV** (vector × matrix) operations — dominant in autoregressive decoding.
 
-### Structure of each μV-Core
+**Configuration** (`VecCoreDefaultCfg`):
+- 4 parallel μV-Core lanes
+- INT4 weights, BF16 activations
+- 32 weights per HP port per clock
+- 32-element fmap broadcast per cycle (`ARRAY_SIZE_H`)
 
+**Data flow:**
 ```
-HP-x (128-bit) ──► FIFO WEIGHT ──► Dispatcher
-                                         │
-                                    L1 Cache (BRAM)
-                                         │
-                          ┌──────────────▼──────────────┐
-                          │  DSP48E2 Array               │
-                          │  (INT4 weight × INT8 fmap)   │
-                          └──────────────┬───────────────┘
-                                         │
-                                    Accumulator
-                                         │
-                                    ──► DATA BUS Vec
+HP2 (128-bit) → unpack 32 × INT4 → lane A weight
+HP3 (128-bit) → unpack 32 × INT4 → lane B weight
+ACP fmap → preprocess_fmap → BF16→fixed-point → broadcast[0:31]
+                                                         │
+                                           GEMV_generate_lut
+                                           (builds LUT per weight bit)
+                                                         │
+                                           GEMV_reduction_branch
+                                           (INT4 × fixed-pt dot-product)
+                                                         │
+                                           GEMV_accumulate → output
 ```
 
-- **Weight precision:** INT4 (streamed from HP-0/1/2, 32 weights/clk)
-- **Activation precision:** INT8 (read from L1 or L2 cache)
-- **Accumulation:** INT48 (DSP48E2 P-register)
-- **Output:** promoted to BF16 before entering DATA BUS
-
----
-
-## 5. Complex Vector Operation (CVO) Core (2 × μCVO-Cores)
-
-Handles non-linear activation functions that require floating-point precision.
-Receives promoted BF16/FP32 data from the Vector Core or Matrix Core via the DATA BUS.
-
-### Units per μCVO-Core
-
-| Unit | Functions | Latency |
-|------|-----------|---------|
-| SFU (Special Function Unit) | GeLU, RMSNorm, Softmax, tanh, exp, sqrt | 1–3 cycles |
-| CORDIC | sin, cos (for RoPE) | pipeline |
-
-### Precision Promotion Flow
-
-```
-[INT48 accumulator]
-       │
-  Normalizer (barrel shift + LOD → BF16)
-       │
-  SFU / CORDIC  ← operates in BF16 / FP32
-       │
-  Requantize → INT8
-       │
-  Back to L2 cache or next layer
+**Weight unpacking** is done in `NPU_top.sv` via a `generate` loop:
+```systemverilog
+assign gemv_weight_A[w] = M_CORE_HP2_WEIGHT.tdata[w*4 +: 4];  // for each w in 0..31
 ```
 
 ---
 
-## 6. Matrix Core (32×32 Systolic Array)
+## 5. Matrix Core (GEMM_systolic_top)
 
-Handles **GEMM** (matrix × matrix) operations — used during the prefill phase
-and for projection layers.
+Handles **GEMM** (matrix × matrix) operations — prefill phase and projection layers.
 
-### Structure
+**Configuration:**
+- 32×32 systolic array
+- INT4 weights from HP0, 128-bit/clk (32 weights/clk)
+- BF16 → 27-bit fixed-point fmap from `preprocess_fmap`
+- DSP48E2 B-port: INT4 (4-bit), A-port: fixed-point (27-bit → 30-bit padded)
+- P-register: INT48 accumulator
 
+**Control:** `global_inst[2:0]` = `flags[5:3]` = `{findemax, accm, w_scale}` from `GEMM_uop`.
+
+**Output pipeline** (one per column, 32 total):
 ```
-HP-3 (128-bit, 32 INT4 weights/clk) ──► FIFO WEIGHT
-                                               │
-                                          Dispatcher ◄── Inst FIFO
-                                               │
-                       ┌───────────────────────┴──────────────────────────┐
-                       │             Systolic Array                        │
-                       │  ┌─────────────────┐  ┌─────────────────┐       │
-                       │  │  32 × 16 Array  │  │  32 × 16 Array  │       │
-                       │  │  (DSP48E2)      │  │  (DSP48E2)      │       │
-                       │  └────────┬────────┘  └────────┬────────┘       │
-                       │           └───────────┬─────────┘                │
-                       │               Accumulator 32 × 1                 │
-                       └───────────────────────┬──────────────────────────┘
-                                               │
-                                   L1 FMAP Cache ◄── ACP (fmap in)
+raw_res_sum[n] [48-bit]
+      │
+gemm_result_normalizer    ← sign-mag → LOD → barrel shift → BF16
+      │
+norm_res_seq[n] [16-bit BF16]
+      │
+FROM_gemm_result_packer   ← pack 8 × BF16 → 128-bit AXI-S word
+      │
+M_AXIS_ACP_RESULT
 ```
 
-- **Weight:** INT4, 128-bit/clk from HP-3 (32 weights per clock, feeds both sub-arrays)
-- **FMap:** INT8, from L1 FMAP cache (pre-loaded via ACP)
-- **Array size:** 32×32 implemented as two 32×16 sub-arrays
-- **Accumulator:** INT48, 32 outputs (one per row)
+---
 
-### DSP48E2 Utilization
+## 6. CVO Core (CVO_top)
 
-Each DSP48E2 handles `INT4 weight × INT8 fmap` via bit-packing.
-Two INT4 weights are packed into a single B-port input (18-bit), allowing
-two MACs per DSP per clock when using the cascade chain.
+Handles non-linear activation functions that require floating-point precision:
+**exp, sqrt, GELU, sin, cos (CORDIC), reduce_sum, scale, recip**.
+
+**Data flow:**
+```
+OP_CVO instruction → Global_Scheduler → CVO_uop
+                                              │
+                                        mem_dispatcher
+                                              │
+                              mem_CVO_stream_bridge (inside mem_dispatcher)
+                              ├─ Phase 1 READ : L2[src_addr] → 8×BF16/cycle → CVO_top
+                              └─ Phase 2 WRITE: CVO results ← XPM FIFO → L2[dst_addr]
+```
+
+**e_max encoding for softmax:**
+```systemverilog
+// BF16 = {sign=0, exp=delayed_emax_32[0], mant=7'b0}
+// Encodes 2^(exp-127) — the exponent-max from the GEMM normalizer pipeline
+assign cvo_emax_bf16 = {1'b0, delayed_emax_32[0], 7'b0};
+```
+
+**Softmax sequence (4 CVO ops):**
+1. `OP_GEMV` with `FLAG_FINDEMAX` — find e_max over attention scores
+2. `OP_CVO CVO_EXP` with `FLAG_SUB_EMAX` — exp(x − e_max) per element
+3. `OP_CVO CVO_REDUCE_SUM` — Σ exp(xᵢ − e_max) (denominator)
+4. `OP_CVO CVO_SCALE` with `FLAG_RECIP_SCALE` — divide each by denominator
 
 ---
 
 ## 7. FMap Preprocessing Pipeline
 
-Before entering the systolic array, BF16 feature maps from the ACP port are:
+Before entering the systolic array or Vector Core, BF16 feature maps from the ACP port are:
 
-1. Cached in the L1 FMAP SRAM (`fmap_cache.sv`)
-2. Converted from BF16 → 27-bit fixed-point mantissa (`preprocess_bf16_fixed_pipeline.sv`)
-3. Exponent-max (`e_max`) extracted per column (`BF16_Emax_Align.sv`)
-4. Broadcast to all 32 columns with staggered delay (0–31 cycles)
+1. Received via ACP → `S_AXIS_ACP_FMAP` interface
+2. Buffered in a 128-bit XPM FIFO inside `mem_BUFFER` (AXI→core CDC)
+3. Processed by `preprocess_bf16_fixed_pipeline`:
+   - Takes 2 clocks × 16 BF16 elements = 32-element block
+   - Finds global e_max across the block
+   - Shifts each mantissa to align with e_max → 27-bit fixed-point
+4. Cached in `fmap_cache` (BRAM, depth 2048)
+5. Broadcast to all 32 PE columns when `i_rd_start` pulses (from `sram_rd_start_wire`)
 
 ---
 
-## 8. Output Pipeline
+## 8. Memory Dispatcher (`mem_dispatcher`)
 
-After computation, each PE row produces a 48-bit raw accumulator value.
+Central DMA controller. Translates Global_Scheduler micro-ops into cache commands.
 
-```
-[48-bit raw result × 32 rows]
-          │
-  stlc_result_normalizer.sv   ← sign-magnitude, LOD, barrel shift, e_max restore
-          │
-  [BF16 × 32 rows]
-          │
-  FROM_stlc_result_packer.sv  ← pack 8 × BF16 → 128-bit
-          │
-  [128-bit AXI stream → ACP → Host]
-```
+**Sub-modules:**
+| Module | Role |
+|--------|------|
+| `mem_GLOBAL_cache` | L2 URAM TDP cache + ACP DMA state machine |
+| `mem_L2_cache_fmap` | XPM TDP URAM macro (114,688 × 128-bit) |
+| `mem_u_operation_queue` | Command FIFOs (ACP + NPU, 35-bit uop, depth 512) |
+| `mem_CVO_stream_bridge` | L2 ↔ CVO 16-bit stream adapter (READ→WRITE sequentially) |
+| `fmap_array_shape` | Shape constant RAM for fmap tensors |
+| `weight_array_shape` | Shape constant RAM for weight tensors |
+
+**LOAD uop priority:** GEMM > GEMV > MEMCPY > CVO
+
+**Port B arbitration:** `cvo_bridge_busy` wins over NPU DMA state machine.
 
 ---
 
 ## 9. Control Plane
 
-The NPU is controlled via a 64-bit custom ISA issued over AXI-Lite (HPM port).
+```
+Host (AXI-Lite HPM) ──► AXIL_CMD_IN ──► ctrl_npu_frontend ──► ctrl_npu_decoder
+                                                                       │
+                                    ┌──────────┬────────┬─────────────┤
+                                    ▼          ▼        ▼             ▼
+                               GEMV FIFO  GEMM FIFO  CVO FIFO   MEM/MEMSET FIFO
+                                    └──────────┴────────┴─────────────┘
+                                                     │
+                                             Global_Scheduler
+                                             (single always_ff per uop type,
+                                              GEMM > GEMV > MEMCPY > CVO priority)
+```
+
 See [ISA.md](ISA.md) for the full instruction encoding reference.
-
-```
-Host (AXI-Lite) ──► AXIL_CMD_IN ──► ctrl_npu_decoder
-                                            │
-                         ┌──────────┬───────┴──────┬──────────┐
-                         ▼          ▼               ▼          ▼
-                    GEMV FIFO  GEMM FIFO        MEM FIFO   MEMSET FIFO
-                         │          │               │          │
-                     μV-Cores   Systolic       mem_dispatcher  mem_set
-                                 Array
-```
-
-The Global Scheduler (`Global_Scheduler.sv`) arbitrates between engine FIFOs
-and dispatches uops. Engines run independently — a stall in one does not
-block the others.
 
 ---
 
 ## 10. Implementation Status
 
-| Block | RTL File(s) | Status |
-|-------|-------------|--------|
-| NPU Controller (frontend + decoder + scheduler) | `NPU_Controller/` | In Progress |
-| GEMM Systolic Array (32×16 × 2) | `GEMM_PIPELINE/` | In Progress |
-| GEMV Pipeline (μV-Cores) | `GEMV_PIPELINE/` | In Progress |
-| FMap Preprocessing | `PREPROCESS/` | In Progress |
-| Memory Hierarchy (L1/L2/Global/Constant) | `MEM_control/` | In Progress |
-| CVO Core (SFU + CORDIC) | — | Not Started |
-| Result Normalizer + Packer | `stlc_result_normalizer.sv`, `FROM_stlc_result_packer.sv` | In Progress |
+| Block | Key Files | Status |
+|-------|-----------|--------|
+| NPU Controller (frontend + decoder) | `NPU_Controller/NPU_frontend/`, `ctrl_npu_decoder.sv` | RTL Complete |
+| Global Scheduler | `Global_Scheduler.sv` | RTL Complete |
+| Matrix Core — Systolic Array | `MAT_CORE/GEMM_systolic_top.sv` | RTL Complete |
+| Matrix Core — Result Normalizer | `MAT_CORE/mat_result_normalizer.sv` | RTL Complete |
+| Matrix Core — Result Packer | `MAT_CORE/FROM_mat_result_packer.sv` | RTL Complete |
+| Vector Core (GEMV) | `VEC_CORE/GEMV_top.sv` | RTL Complete |
+| CVO Core (SFU + CORDIC) | `CVO_CORE/CVO_top.sv` | RTL Complete |
+| FMap Preprocessing | `PREPROCESS/preprocess_fmap.sv` | RTL Complete |
+| Memory Dispatcher | `MEM_control/top/mem_dispatcher.sv` | RTL Complete |
+| L2 URAM Cache | `MEM_control/top/mem_L2_cache_fmap.sv` | RTL Complete |
+| CVO Stream Bridge | `MEM_control/top/mem_CVO_stream_bridge.sv` | RTL Complete |
+| HP Weight CDC Buffer | `MEM_control/top/mem_HP_buffer.sv` | RTL Complete |
+| NPU Top — Final Wiring | `NPU_top.sv` | RTL Complete |
 | uXC Driver (HAL + API) | `sw/driver/` | Skeleton Only |
 | Gemma 3N E4B Application | `sw/gemma3NE4B/` | Submodule |
+| Verification / Simulation | — | Not Started |
