@@ -85,7 +85,7 @@ void uca_gemm(uint32_t dest_reg,   uint32_t src_addr,
     uca_hal_issue_instr(instr);
 }
 
-// ===| Compute: CVO Core |=======================================================
+// ===| Compute: CVO Core (Complex Vector Operation Core) |=======================
 void uca_cvo(uint8_t  cvo_func,  uint32_t src_addr,
              uint32_t dst_addr,  uint16_t length,
              uint8_t  flags,     uint8_t  async) {

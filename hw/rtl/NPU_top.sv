@@ -59,15 +59,15 @@ module NPU_top (
   axis_if #(.DATA_WIDTH(128)) M_CORE_HP3_WEIGHT ();
 
   // ===| Internal Wires — Instruction Path |=====================================
-  logic                  GEMV_op_x64_valid_wire;
-  logic                  GEMM_op_x64_valid_wire;
-  logic                  memcpy_op_x64_valid_wire;
-  logic                  memset_op_x64_valid_wire;
-  logic                  cvo_op_x64_valid_wire;
+  logic                GEMV_op_x64_valid_wire;
+  logic                GEMM_op_x64_valid_wire;
+  logic                memcpy_op_x64_valid_wire;
+  logic                memset_op_x64_valid_wire;
+  logic                cvo_op_x64_valid_wire;
 
-  instruction_op_x64_t   instruction;
+  instruction_op_x64_t instruction;
 
-  logic                  fifo_full_wire;
+  logic                fifo_full_wire;
 
   // ===| [1] NPU Controller |====================================================
   npu_controller_top #() u_npu_controller_top (
@@ -136,14 +136,14 @@ module NPU_top (
       .S_AXIS_ACP_FMAP  (S_AXIS_ACP_FMAP),
       .M_AXIS_ACP_RESULT(M_AXIS_ACP_RESULT),
 
-      .IN_LOAD_uop    (LOAD_uop_wire),
-      .IN_mem_set_uop (mem_set_uop),
-      .IN_CVO_uop     (CVO_uop_wire),
+      .IN_LOAD_uop     (LOAD_uop_wire),
+      .IN_mem_set_uop  (mem_set_uop),
+      .IN_CVO_uop      (CVO_uop_wire),
       .IN_cvo_uop_valid(cvo_op_x64_valid_wire),
 
-      .OUT_cvo_data      (cvo_disp_data_wire),
-      .OUT_cvo_valid     (cvo_disp_valid_wire),
-      .IN_cvo_data_ready (cvo_disp_ready_wire),
+      .OUT_cvo_data     (cvo_disp_data_wire),
+      .OUT_cvo_valid    (cvo_disp_valid_wire),
+      .IN_cvo_data_ready(cvo_disp_ready_wire),
 
       .IN_cvo_result       (cvo_result_wire),
       .IN_cvo_result_valid (cvo_result_valid_wire),
@@ -172,9 +172,9 @@ module NPU_top (
   );
 
   // ===| [5] FMap Preprocessing Pipeline |=======================================
-  logic [`FIXED_MANT_WIDTH-1:0] fmap_broadcast      [0:`ARRAY_SIZE_H-1];
+  logic [`FIXED_MANT_WIDTH-1:0] fmap_broadcast       [0:`ARRAY_SIZE_H-1];
   logic                         fmap_broadcast_valid;
-  logic [  `BF16_EXP_WIDTH-1:0] cached_emax_out     [0:`ARRAY_SIZE_H-1];
+  logic [  `BF16_EXP_WIDTH-1:0] cached_emax_out      [0:`ARRAY_SIZE_H-1];
 
   preprocess_fmap #() u_fmap_pre (
       .clk    (clk_core),
@@ -248,7 +248,7 @@ module NPU_top (
       .row_res_valid(norm_res_seq_valid),
       .packed_data  (packed_res_data),
       .packed_valid (packed_res_valid),
-      .packed_ready (1'b1),   // downstream accepts unconditionally for now
+      .packed_ready (1'b1),                // downstream accepts unconditionally for now
       .o_busy       ()
   );
 
@@ -256,18 +256,18 @@ module NPU_top (
   // Unpack 128-bit flat HP bus → 32 × INT4 per lane before feeding GEMV_top.
   // HP2 → lane A, HP3 → lane B;  C/D tied to zero (2-lane configuration).
   localparam int GemvWeightCnt = mem_pkg::HpSingleWeightCnt;  // 32 weights per port
-  localparam int GemvWeightW   = mem_pkg::WeightBitWidth;      // 4-bit INT4
+  localparam int GemvWeightW = mem_pkg::WeightBitWidth;  // 4-bit INT4
 
-  logic [GemvWeightW-1:0] gemv_weight_A [0:GemvWeightCnt-1];
-  logic [GemvWeightW-1:0] gemv_weight_B [0:GemvWeightCnt-1];
-  logic [GemvWeightW-1:0] gemv_weight_C [0:GemvWeightCnt-1];
-  logic [GemvWeightW-1:0] gemv_weight_D [0:GemvWeightCnt-1];
+  logic [GemvWeightW-1:0] gemv_weight_A[0:GemvWeightCnt-1];
+  logic [GemvWeightW-1:0] gemv_weight_B[0:GemvWeightCnt-1];
+  logic [GemvWeightW-1:0] gemv_weight_C[0:GemvWeightCnt-1];
+  logic [GemvWeightW-1:0] gemv_weight_D[0:GemvWeightCnt-1];
 
   genvar w;
   generate
     for (w = 0; w < GemvWeightCnt; w++) begin : gen_gemv_unpack
-      assign gemv_weight_A[w] = M_CORE_HP2_WEIGHT.tdata[w * GemvWeightW +: GemvWeightW];
-      assign gemv_weight_B[w] = M_CORE_HP3_WEIGHT.tdata[w * GemvWeightW +: GemvWeightW];
+      assign gemv_weight_A[w] = M_CORE_HP2_WEIGHT.tdata[w*GemvWeightW+:GemvWeightW];
+      assign gemv_weight_B[w] = M_CORE_HP3_WEIGHT.tdata[w*GemvWeightW+:GemvWeightW];
       assign gemv_weight_C[w] = '0;
       assign gemv_weight_D[w] = '0;
     end
@@ -276,7 +276,7 @@ module NPU_top (
   // num_recur: number of fmap accumulation rounds = vector length / broadcast width.
   // size_ptr_addr is a 6-bit shape pointer; actual cycle count resolved by scheduler.
   logic [16:0] gemv_num_recur;
-  logic        gemv_activated_lane [0:VecCoreDefaultCfg.num_gemv_pipeline-1];
+  logic        gemv_activated_lane[0:VecCoreDefaultCfg.num_gemv_pipeline-1];
 
   assign gemv_num_recur      = {11'b0, GEMV_uop_wire.size_ptr_addr};
   assign gemv_activated_lane = '{default: 1'b0};
@@ -334,8 +334,8 @@ module NPU_top (
       .rst_n  (rst_n_core),
       .i_clear(i_clear),
 
-      .IN_uop      (CVO_uop_wire),
-      .IN_uop_valid(cvo_op_x64_valid_wire),
+      .IN_uop       (CVO_uop_wire),
+      .IN_uop_valid (cvo_op_x64_valid_wire),
       .OUT_uop_ready(),
 
       // ===| L2 DMA stream — via mem_CVO_stream_bridge inside mem_dispatcher |===

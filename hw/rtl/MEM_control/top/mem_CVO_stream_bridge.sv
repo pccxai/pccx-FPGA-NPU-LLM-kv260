@@ -19,8 +19,8 @@ import isa_pkg::*;
 // ===============================================================================
 
 module mem_CVO_stream_bridge (
-    input  logic        clk,
-    input  logic        rst_n,
+    input logic clk,
+    input logic rst_n,
 
     // ===| Dispatch from mem_dispatcher |========================================
     input  cvo_control_uop_t IN_cvo_uop,
@@ -31,26 +31,26 @@ module mem_CVO_stream_bridge (
     // ===| L2 port B direct interface (128-bit) |================================
     // Single-address mux: write takes priority over read.
     output logic         OUT_l2_we,
-    output logic  [16:0] OUT_l2_addr,
+    output logic [ 16:0] OUT_l2_addr,
     output logic [127:0] OUT_l2_wdata,
-    input  logic [127:0] IN_l2_rdata,    // valid 3 cycles after OUT_l2_addr+~we
+    input  logic [127:0] IN_l2_rdata,   // valid 3 cycles after OUT_l2_addr+~we
 
     // ===| CVO data stream (to CVO_top.IN_data) |=================================
-    output logic [15:0]  OUT_cvo_data,
-    output logic         OUT_cvo_valid,
-    input  logic         IN_cvo_data_ready,
+    output logic [15:0] OUT_cvo_data,
+    output logic        OUT_cvo_valid,
+    input  logic        IN_cvo_data_ready,
 
     // ===| CVO result stream (from CVO_top.OUT_result) |==========================
-    input  logic [15:0]  IN_cvo_result,
-    input  logic         IN_cvo_result_valid,
-    output logic         OUT_cvo_result_ready
+    input  logic [15:0] IN_cvo_result,
+    input  logic        IN_cvo_result_valid,
+    output logic        OUT_cvo_result_ready
 );
 
   // ===| State Machine |=========================================================
   typedef enum logic [1:0] {
     ST_IDLE  = 2'b00,
-    ST_READ  = 2'b01,   // reading L2 → CVO (buffering outputs)
-    ST_WRITE = 2'b10,   // draining buffer → L2
+    ST_READ  = 2'b01,  // reading L2 → CVO (buffering outputs)
+    ST_WRITE = 2'b10,  // draining buffer → L2
     ST_DONE  = 2'b11
   } bridge_state_e;
 
@@ -67,28 +67,28 @@ module mem_CVO_stream_bridge (
   end
 
   // ===| Read-side state |=======================================================
-  logic [12:0] rd_word_cnt;    // words issued so far
-  logic [ 2:0] rd_elem_idx;    // current element within 128-bit deser buffer
+  logic [ 12:0] rd_word_cnt;  // words issued so far
+  logic [  2:0] rd_elem_idx;  // current element within 128-bit deser buffer
   logic [127:0] rd_deser_buf;  // latched 128-bit L2 word
-  logic        rd_buf_valid;   // deser buffer holds valid data
-  logic [15:0] elems_fed;      // elements delivered to CVO
+  logic         rd_buf_valid;  // deser buffer holds valid data
+  logic [ 15:0] elems_fed;  // elements delivered to CVO
 
   // 3-cycle read latency tracking
-  logic [2:0]  rd_lat_pipe;    // shift register: [2]=oldest, [0]=newest
+  logic [  2:0] rd_lat_pipe;  // shift register: [2]=oldest, [0]=newest
 
   // ===| Write-side state |======================================================
-  logic [ 2:0]  wr_elem_idx;   // accumulation index 0..7
-  logic [127:0] wr_ser_buf;    // serialisation buffer
-  logic [12:0]  wr_word_cnt;   // words written so far
-  logic [15:0]  elems_result;  // results drained from FIFO
+  logic [  2:0] wr_elem_idx;  // accumulation index 0..7
+  logic [127:0] wr_ser_buf;  // serialisation buffer
+  logic [ 12:0] wr_word_cnt;  // words written so far
+  logic [ 15:0] elems_result;  // results drained from FIFO
 
   // ===| Output FIFO (CVO results → write buffer) |==============================
   // XPM FIFO sync, depth=2048, width=16 bit (max 32 KB = 1 BRAM36)
-  logic        fifo_wr_en;
-  logic        fifo_rd_en;
-  logic [15:0] fifo_dout;
-  logic        fifo_empty;
-  logic        fifo_full;
+  logic         fifo_wr_en;
+  logic         fifo_rd_en;
+  logic [ 15:0] fifo_dout;
+  logic         fifo_empty;
+  logic         fifo_full;
 
   assign fifo_wr_en = IN_cvo_result_valid && (state == ST_READ);
   assign OUT_cvo_result_ready = ~fifo_full && (state == ST_READ);
@@ -101,16 +101,16 @@ module mem_CVO_stream_bridge (
       .READ_MODE       ("std"),
       .FULL_RESET_VALUE(0)
   ) u_result_fifo (
-      .sleep    (1'b0),
-      .rst      (~rst_n),
-      .wr_clk   (clk),
-      .rd_clk   (clk),
-      .wr_en    (fifo_wr_en),
-      .din      (IN_cvo_result),
-      .rd_en    (fifo_rd_en),
-      .dout     (fifo_dout),
-      .empty    (fifo_empty),
-      .full     (fifo_full)
+      .sleep (1'b0),
+      .rst   (~rst_n),
+      .wr_clk(clk),
+      .rd_clk(clk),
+      .wr_en (fifo_wr_en),
+      .din   (IN_cvo_result),
+      .rd_en (fifo_rd_en),
+      .dout  (fifo_dout),
+      .empty (fifo_empty),
+      .full  (fifo_full)
   );
 
   // ===| Main FSM |==============================================================
@@ -162,8 +162,8 @@ module mem_CVO_stream_bridge (
 
           // Issue next L2 read when deser buffer is empty (pre-fetch when 3 left)
           if (!rd_buf_valid && rd_word_cnt < 13'(total_words)) begin
-            rd_lat_pipe[0]  <= 1'b1;   // mark new read outstanding
-            rd_word_cnt     <= rd_word_cnt + 13'd1;
+            rd_lat_pipe[0] <= 1'b1;  // mark new read outstanding
+            rd_word_cnt    <= rd_word_cnt + 13'd1;
           end
 
           // Capture L2 data 3 cycles after read issued
@@ -191,7 +191,7 @@ module mem_CVO_stream_bridge (
         // ===| WRITE: drain FIFO → L2 |=========================================
         ST_WRITE: begin
           if (!fifo_empty) begin
-            wr_ser_buf <= {fifo_dout, wr_ser_buf[127:16]};
+            wr_ser_buf   <= {fifo_dout, wr_ser_buf[127:16]};
             wr_elem_idx  <= wr_elem_idx + 3'd1;
             elems_result <= elems_result + 16'd1;
           end
@@ -243,7 +243,7 @@ module mem_CVO_stream_bridge (
   // ===| CVO data output ========================================================
   // Mux the correct 16-bit slice from the deser buffer
   always_comb begin
-    OUT_cvo_data  = rd_deser_buf[rd_elem_idx * 16 +: 16];
+    OUT_cvo_data  = rd_deser_buf[rd_elem_idx*16+:16];
     OUT_cvo_valid = rd_buf_valid && (state == ST_READ);
   end
 
