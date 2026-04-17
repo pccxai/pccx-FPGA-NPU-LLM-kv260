@@ -1,272 +1,263 @@
-# uXC — Bare-Metal Transformer Accelerator on FPGA
+# uXC — Bare-Metal Transformer Accelerator on Kria KV260
 
-![RTL Complete](https://img.shields.io/badge/Status-RTL_Complete-blue)
-![SystemVerilog](https://img.shields.io/badge/RTL-SystemVerilog-green)
+![Architecture](https://img.shields.io/badge/Architecture-pccx_v002-purple)
+![RTL](https://img.shields.io/badge/RTL-SystemVerilog-green)
 ![Target](https://img.shields.io/badge/Target-Kria_KV260-orange)
-![Quantization](https://img.shields.io/badge/Precision-W4A16_BF16-green)
+![Precision](https://img.shields.io/badge/Precision-W4A8_(1_DSP_%3D_2_MAC)-green)
+![Clock](https://img.shields.io/badge/Core-400_MHz-blue)
+![Goal](https://img.shields.io/badge/Gemma_3N_E4B-20_tok%2Fs-yellow)
 
-Custom NPU for running the **Gemma 3N E4B** language model on the Xilinx Kria KV260 FPGA,
-bare-metal at 400 MHz. No OS, no PetaLinux.
+This repo is the **bare-metal Kria KV260 implementation** (RTL + driver +
+application) of the **pccx v002** NPU architecture. It exists to close
+the loop between the pccx architecture specification and a working
+Gemma 3N E4B decoder on a real FPGA.
 
-Software baseline: [llm-lite](https://github.com/hwkim-dev/llm-lite) (x64 CPU reference implementation).
+- Architecture specification (authoritative, rendered): **[pccx v002 docs →](https://hwkim-dev.github.io/pccx/en/docs/v002/index.html)**
+- Korean mirror: [pccx v002 docs (KO)](https://hwkim-dev.github.io/pccx/ko/docs/v002/index.html)
+- pccx source repo: [github.com/hwkim-dev/pccx](https://github.com/hwkim-dev/pccx)
+- x64 CPU baseline (golden reference): [llm-lite](https://github.com/hwkim-dev/llm-lite)
 
------
+---
 
-## Project Overview
+## What's here vs. what's in pccx
 
-uXC is a custom SystemVerilog-based Neural Processing Unit (NPU) engineered from the ground up to accelerate the quantized Gemma 3N E4B Large Language Model on a bare-metal Xilinx Kria KV260 FPGA. The architecture is meticulously designed to push the absolute physical constraints of the KV260 platform, exploiting its 1,248 DSP48E2 slices and 144 Block RAMs (BRAMs) to the limit.
+| Layer                                | Lives in                                   | Authoritative source                                                                     |
+| ------------------------------------ | ------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| Architecture / ISA / driver spec     | `pccx/docs/v002/`                          | [pccx v002 docs](https://hwkim-dev.github.io/pccx/en/docs/v002/index.html)               |
+| Target-model pipeline (Gemma 3N E4B) | `pccx/docs/v002/Models/`                   | [Models section](https://hwkim-dev.github.io/pccx/en/docs/v002/Models/index.html)        |
+| RTL (SystemVerilog)                  | this repo — `hw/rtl/`                      | —                                                                                         |
+| Bare-metal driver (C/C++)            | this repo — `sw/driver/`                   | API spec: [Drivers/api](https://hwkim-dev.github.io/pccx/en/docs/v002/Drivers/api.html)  |
+| Application                          | this repo — `sw/gemma3NE4B/`               | —                                                                                         |
 
-This project encompasses a full-stack hardware-software co-design approach. It seamlessly integrates a SystemVerilog hardware accelerator, a Python-based Golden Model for Trace-Driven Verification, and a high-performance AXI Direct Memory Access (AXI DMA) pipeline to overcome inherent edge-device memory bottlenecks.
+If you want to **read about how the accelerator works**, go to the pccx
+site. If you want to **read the RTL or synthesize the bitstream**, stay
+here.
 
------
+---
 
-## NPU Architecture Overview
+## Architecture Snapshot (pccx v002)
 
-![NPU Architecture](.images/NPU_block_diagram.png)
+[![pccx v002 architecture](https://raw.githubusercontent.com/hwkim-dev/pccx/main/assets/images/Architecture/v002/architecture_v002.png)](https://hwkim-dev.github.io/pccx/en/docs/v002/Architecture/top_level.html)
 
-```
-AXI-Lite (HPM) ──► NPU Controller ──► Global Scheduler
-                                              │
-              ┌───────────────┬───────────────┼───────────────┐
-              ▼               ▼               ▼               ▼
-       Vector Core      Matrix Core       CVO Core      mem_dispatcher
-       (GEMV_top)    (GEMM_systolic_top)  (CVO_top)         │
-        HP2/3 weights   HP0/1 weights    stream via    L2 URAM cache
-                                         CVO bridge   (114,688 × 128-bit)
-              └───────────────┴────────────── ─ ─ ─ ─ ─ ─ ─ ┘
-                       preprocess_fmap (ACP fmap in)
-```
+*Click the diagram for the annotated top-level page on the pccx site.*
 
-The NPU is organized into three primary compute tiers connected via a shared **L2 True Dual-Port cache** and internal data buses:
+Three heterogeneous cores around a centralized L2 URAM cache:
 
-- **Vector Core:** Four μV-Cores for parallel GEMV operations, each with a dedicated L1 cache and BF16 Emax-align unit. Fed by AXI HP-Ports 2 and 3 (32 INT4 weights/clk each).
-- **Complex Vector Operation (CVO) Core:** Handles non-linear activation functions (GELU, sqrt, exp, sin/cos via CORDIC and SFU). Connected to the L2 cache via a dedicated CVO stream bridge (`mem_CVO_stream_bridge`).
-- **Matrix Core:** A 32×32 Systolic Array for GEMM operations. Weights supplied via AXI HP-Port 0/1 at 128-bit/clk. FMap is cached in a dedicated L1 FMAP cache.
+| Core                      | Shape        | What it runs                                                       |
+| ------------------------- | ------------ | ------------------------------------------------------------------ |
+| **Systolic Array (GEMM)** | 32 × 16 × 2  | Prefill — ``Q · Kᵀ`` across the full context, FFN in prefill       |
+| **GEMV Core**             | 32 × 1 × 4   | Decode — every projection in the autoregressive step               |
+| **SFU (CVO)**             | 32 × 1 × 4   | Softmax · GELU · RMSNorm · RoPE · sin/cos · reduce · scale · recip |
 
------
+- **Clock domains**: AXI 250 MHz ↔ core 400 MHz, crossed by async CDC FIFOs.
+- **Weight path**: HP0/1 = GEMM weights, HP2/3 = GEMV weights, 128-bit/clk each.
+- **Activation path**: host DDR4 → ACP DMA → L2 URAM (1.75 MB, true dual port).
+- **Direct-connect FIFO**: GEMV → SFU, so softmax runs without an L2 round-trip.
 
-## Quantization Strategy: W4A16 with BF16 Activations
+Full rationale and numbers: [Top-Level →](https://hwkim-dev.github.io/pccx/en/docs/v002/Architecture/top_level.html)
+· [Design rationale →](https://hwkim-dev.github.io/pccx/en/docs/v002/Architecture/rationale.html)
 
-The core compute path operates at **W4A16 precision**:
+---
 
-|Data                    |Type |Width |Notes                                  |
-|------------------------|-----|------|---------------------------------------|
-|Weight                  |INT4 |4-bit |Stored and streamed as-is from HP ports|
-|Feature Map (Activation)|BF16 |16-bit|BF16→27-bit fixed-pt conversion        |
-|MAC Accumulation        |INT48|48-bit|DSP48E2 P-register output              |
-|SFU Input/Output        |BF16 |16-bit|After normalization                    |
+## Matrix Core (GEMM) — 32 × 16 × 2 Systolic Array
 
-### Precision Promotion Flow
+Weight-stationary 2D systolic layout. Activations broadcast along
+columns, partial sums propagate vertically into the result accumulator.
+Used only during prefill; idle during decode.
 
-```
-[Weight: INT4] × [FMap: BF16→27-bit fixed-pt]
-        ↓  DSP48E2 MAC
-  [Accumulator: INT48]
-        ↓  Normalization (Barrel Shift + LOD)
-     [BF16]
-        ↓  SFU / CORDIC  (exp, RMSNorm, Softmax, GELU, sin/cos)
-     [BF16]
-        ↓  Output
-     [BF16] → next layer
-```
+[![GEMM array layout](https://raw.githubusercontent.com/hwkim-dev/pccx/main/assets/images/Architecture/v002/Processing_Elements_GEMM_1_v002.png)](https://hwkim-dev.github.io/pccx/en/docs/v002/Architecture/gemm_core.html)
 
-Precision promotion to **BF16** occurs when entering the Complex Vector Operation (CVO) Core for non-linear functions. The BF16→27-bit fixed-point conversion in the preprocessing pipeline ensures full mantissa precision is preserved during INT4 multiplication while fitting the DSP48E2 27-bit A-port.
+Inside each PE — a DSP48E2 wrapped with input flip-flops on both
+Activation and Weight ports, and an accumulator with a P-register
+output:
 
------
+[![GEMM single PE](https://raw.githubusercontent.com/hwkim-dev/pccx/main/assets/images/Architecture/v002/Processing_Elements_GEMM_2_v002.png)](https://hwkim-dev.github.io/pccx/en/docs/v002/Architecture/gemm_core.html)
 
-## Compute Engines
+Details: [GEMM core →](https://hwkim-dev.github.io/pccx/en/docs/v002/Architecture/gemm_core.html)
+· [GEMM dataflow →](https://hwkim-dev.github.io/pccx/en/docs/v002/ISA/dataflow.html)
 
-|Engine     |Operation                           |Weights                     |Activation          |Accumulator  |
-|-----------|------------------------------------|----------------------------|--------------------|-------------|
-|Matrix Core|GEMM (prefill, projections)         |INT4 via HP0/1 (32/clk)     |BF16→27-bit fixed-pt|INT48 DSP48E2|
-|Vector Core|GEMV (autoregressive decode)        |INT4 via HP2/3 (32/clk each)|BF16→27-bit fixed-pt|INT48 DSP48E2|
-|CVO Core   |Non-linear ops (softmax, GELU, RoPE)|—                           |BF16 stream from L2 |BF16         |
+---
 
------
+## Vector Core (GEMV) — 32 × 1 × 4 Lanes
 
-## System Architecture and Key Components
+Four parallel GEMV lanes, each an 8-wide DSP pipeline fed by an
+Activation broadcast and a Weight row. Outputs feed a reduction tree
+that collapses partial products into the final vector entry register.
+The primary compute path during autoregressive decode.
 
-### 1. Custom ISA (64-bit VLIW) and Decoupled Dataflow Pipeline
+[![GEMV core layout](https://raw.githubusercontent.com/hwkim-dev/pccx/main/assets/images/Architecture/v002/Processing_Elements_GEMV_1_v002.png)](https://hwkim-dev.github.io/pccx/en/docs/v002/Architecture/gemv_core.html)
 
-[![ISA Instruction Set Architecture](.images/ISA_screen_shot_0409.png)](https://docs.google.com/spreadsheets/d/e/2PACX-1vQOZ4tMXcdIpcdOCvneAx0r8wmRfmprogqkhbCTK2ythlzxp2GBromIiCi9J9yEz9G_ZO4o7BreDOoq/pubhtml?gid=584280668&single=true)
+Per-cycle operand shapes — a 1×N activation row multiplied against an
+N×N weight tile:
 
-> **[Click Here to Explore the Full Custom ISA Specification (Google Sheets)](https://docs.google.com/spreadsheets/d/e/2PACX-1vQOZ4tMXcdIpcdOCvneAx0r8wmRfmprogqkhbCTK2ythlzxp2GBromIiCi9J9yEz9G_ZO4o7BreDOoq/pubhtml?gid=584280668&single=true)**
+[![GEMV operand shapes](https://raw.githubusercontent.com/hwkim-dev/pccx/main/assets/images/Architecture/v002/Processing_Elements_GEMV_2_v002.png)](https://hwkim-dev.github.io/pccx/en/docs/v002/Architecture/gemv_core.html)
 
-5 opcodes. Each instruction is 64 bits: `[63:60]` opcode + `[59:0]` body.
+Details: [GEMV core →](https://hwkim-dev.github.io/pccx/en/docs/v002/Architecture/gemv_core.html)
+· [GEMV dataflow →](https://hwkim-dev.github.io/pccx/en/docs/v002/ISA/dataflow.html)
 
-|Opcode|Mnemonic   |Description                                                              |
-|------|-----------|-------------------------------------------------------------------------|
-|`4'h0`|`OP_GEMV`  |Vector × Matrix multiply                                                 |
-|`4'h1`|`OP_GEMM`  |Matrix × Matrix multiply                                                 |
-|`4'h2`|`OP_MEMCPY`|Host DDR4 ↔ L2 DMA                                                       |
-|`4'h3`|`OP_MEMSET`|Write shape constants to RAM                                             |
-|`4'h4`|`OP_CVO`   |Element-wise non-linear op (exp/sqrt/GELU/sin/cos/reduce_sum/scale/recip)|
+---
 
-The accelerator employs a strictly **Decoupled Dataflow** system to maximize parallel execution and eliminate pipeline stalls, divided into two asynchronous stages:
+## Why W4A8 with 1 DSP = 2 MAC
 
-- **Stage 1 — Global Front-End:** The central `ctrl_npu_decoder` fetches and decodes 64-bit custom instructions and dispatches them into dedicated Instruction FIFOs at the front of each execution pipeline. The front-end advances immediately without waiting for execution to complete.
-- **Stage 2 — Local Dispatcher:** Each compute engine pops from its instruction FIFO and checks local execution conditions (weight availability, FMap readiness). Once dependencies are satisfied, it fires the engine independently — a stall in one engine never halts another.
+The DSP48E2 has a single 27×18 multiplier, not two. pccx v002 bit-packs
+**two INT4 weights into port A** alongside a single INT8 activation on
+port B, so each DSP emits **two MACs per cycle** into the 48-bit
+accumulator with a 19-bit guard band between the two channels.
 
-Full specification: <docs/ISA.md>
+[![DSP48E2 W4A8 port layout](https://raw.githubusercontent.com/hwkim-dev/pccx/main/assets/images/Architecture/v002/Processing_Elements_GEMM_4_v002.png)](https://hwkim-dev.github.io/pccx/en/docs/v002/Architecture/dsp48e2_w4a8.html)
 
-#### Softmax sequence (example — 4 instructions)
+After accumulation, a sign-recovery step restores the upper channel
+when the lower channel borrowed a carry:
 
-```
-OP_GEMV  flags.findemax=1          ; compute attention scores, track e_max
-OP_CVO   CVO_EXP  flags.sub_emax=1 ; exp(score - e_max) for each element
-OP_CVO   CVO_REDUCE_SUM            ; Σ exp values → scalar at dst
-OP_CVO   CVO_SCALE flags.recip_scale=1 ; divide each exp by the sum
-```
+[![Sign recovery SV snippet](https://raw.githubusercontent.com/hwkim-dev/pccx/main/assets/images/Architecture/v002/Processing_Elements_GEMM_5_v002.png)](https://hwkim-dev.github.io/pccx/en/docs/v002/Architecture/dsp48e2_w4a8.html)
 
-### 2. Memory Hierarchy
+- Maximum accumulations before draining the ACCM: **2^10 ≈ 1024** per
+  channel (guard-band limited).
+- For K > 1024 (e.g. Gemma 3N's FFN with K = 16384), the Global
+  Scheduler drains the ACCM every 1024 cycles into a LUT-based adder
+  tree and merges the partial sums.
+- Peak: **2048 MAC × 400 MHz ≈ 819 GMAC/s** across the two systolic arrays.
 
-|Level             |Technology         |Width     |Capacity / Purpose                                              |
-|------------------|-------------------|----------|----------------------------------------------------------------|
-|L2 Global Cache   |URAM True Dual-Port|128-bit   |1.75 MB (14 URAMs) — Shared between Vector Core ↔ Matrix Core   |
-|Shape Constant RAM|BRAM               |17-bit × 3|64 shape entries each — RMSNorm scales, bias constants          |
-|FMap L1 Buffer    |BRAM               |128-bit   |2048 entries (256 KB) — Dedicated FMap buffer for Systolic Array|
-|HP CDC FIFOs      |XPM FIFO           |128-bit   |512-deep × 4 ports — Clock domain crossing                      |
+Details: [DSP48E2 W4A8 bit-packing →](https://hwkim-dev.github.io/pccx/en/docs/v002/Architecture/dsp48e2_w4a8.html)
 
-True Dual-Port L2 enables simultaneous read/write from Vector Core and Matrix Core without arbitration stalls. CVO bridge wins port B over NPU DMA when active — **no arbitration stalls** on L2.
+---
 
-### 3. DSP48E2 Architecture Utilization
+## How Gemma 3N E4B Runs on This Thing
 
-![DSP48E2 Architecture](.images/DSP48E2_IMG.jpeg)
+The target model (Google Gemma 3N E4B) has several deviations from a
+textbook decoder that the scheduler has to honor. The short list:
 
-The Systolic Array maps **INT4 weight × BF16→27-bit fixed-point activation** MAC operations directly onto DSP48E2 blocks using bit-packing to maximize compute density within the KV260’s 1,248 DSP budget.
+| Feature                             | Effect                                                                                                                                                      |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AltUp 4 residual streams            | Four copies of ``xs`` live in L2; main stream ``xs[0]`` stays clean, shadow streams ``xs[1..3]`` receive depth-dependent updates.                           |
+| Alternating RoPE θ (5-layer cycle)  | θ = 10 000 (local) or 1 000 000 (global), preloaded per-layer via ``MEMSET``.                                                                               |
+| No attention scaling, no softcap    | Softmax sequence drops from 4 CVO instructions to 3.                                                                                                        |
+| LAuReL parallel branch              | Two tiny GEMVs (``D × 64``, ``64 × D``) + a ``CVO_SCALE`` by ``1/sqrt(2)``.                                                                                 |
+| PLE shadow-stream injection         | Per-Layer Embedding only touches ``xs[1..3]`` at the *end* of each layer; the main stream is untouched.                                                     |
+| FFN Gaussian Top-K sparsity (L0–9)  | Replaces a sort with `Mean + 1.645·Std`; ~95 % of `gate_raw` becomes zero and ``W_down`` skips masked rows.                                                 |
+| Cross-layer KV sharing              | Only layers 0–19 own their KV cache; layers 20–34 reuse layer 18 (local) or 19 (global). Cache shape is ``[20, L, 512]``, not ``[35, L, 512]``.             |
 
-Weights are delivered to the Systolic Array at **128-bit/clk via AXI HP-Ports**, equivalent to 32 INT4 weights per clock, feeding the 32×32 array.
+End-to-end decode flow, per-cycle overlap strategy, instruction-level
+mapping, memory layout, and the performance budget all live in the
+pccx Models section:
 
-### 4. Complex Vector Operation (CVO) Core
+- [Gemma 3N overview](https://hwkim-dev.github.io/pccx/en/docs/v002/Models/gemma3n_overview.html)
+- [Full operator pipeline (embedding → sampling)](https://hwkim-dev.github.io/pccx/en/docs/v002/Models/gemma3n_pipeline.html)
+- [Attention & RoPE constraints](https://hwkim-dev.github.io/pccx/en/docs/v002/Models/gemma3n_attention_rope.html)
+- [PLE & LAuReL routing rules](https://hwkim-dev.github.io/pccx/en/docs/v002/Models/gemma3n_ple_laurel.html)
+- [FFN Gaussian Top-K sparsity](https://hwkim-dev.github.io/pccx/en/docs/v002/Models/gemma3n_ffn_sparsity.html)
+- [**Execution & scheduling on pccx v002**](https://hwkim-dev.github.io/pccx/en/docs/v002/Models/gemma3n_execution.html)
 
-The CVO Core performs **floating-point non-linear operations** after normalization from INT48 accumulator output:
+---
 
-|Unit  |Function  |Description       |
-|------|----------|------------------|
-|SFU   |exp       |Exponential       |
-|SFU   |GELU      |Activation        |
-|SFU   |sqrt      |Square root       |
-|SFU   |scale     |Scalar multiply   |
-|SFU   |recip     |Reciprocal        |
-|SFU   |reduce_sum|Vector reduction  |
-|CORDIC|sin / cos |Pipelined rotation|
+## Custom 64-bit VLIW ISA
 
-**CVO DMA bridge** (`mem_CVO_stream_bridge`): L2 → 16-bit BF16 stream to CVO → L2 writeback, sequential with XPM FIFO result buffer (2048-deep).
+Five opcodes, 64 bits each: `[63:60]` opcode + `[59:0]` body.
 
-**e_max tracking**: Column-0 normalizer exponent is encoded as BF16 and fed to CVO for numerically stable softmax.
+| Opcode | Mnemonic   | Use                                                                      |
+| ------ | ---------- | ------------------------------------------------------------------------ |
+| `4'h0` | `OP_GEMV`  | Vector × Matrix — decode projections                                     |
+| `4'h1` | `OP_GEMM`  | Matrix × Matrix — prefill Q·Kᵀ, A·V across full sequence                 |
+| `4'h2` | `OP_MEMCPY`| Host DDR4 ↔ L2 DMA (ACP)                                                 |
+| `4'h3` | `OP_MEMSET`| Write shape / size / scale constants to the Constant Cache              |
+| `4'h4` | `OP_CVO`   | Element-wise non-linear (exp, sqrt, GELU, sin, cos, reduce_sum, scale, recip) |
 
-### 5. AXI DMA and Memory Interface
+Spec: [Per-instruction encoding →](https://hwkim-dev.github.io/pccx/en/docs/v002/ISA/instructions.html)
+· [Dataflow per opcode →](https://hwkim-dev.github.io/pccx/en/docs/v002/ISA/dataflow.html)
 
-|Port          |Direction     |Width  |Usage                          |
-|--------------|--------------|-------|-------------------------------|
-|HP-0          |Slave (IN)    |128-bit|Matrix Core (GEMM) weights     |
-|HP-1          |Slave (IN)    |128-bit|Matrix Core spare lane         |
-|HP-2          |Slave (IN)    |128-bit|Vector Core lane A (GEMV)      |
-|HP-3          |Slave (IN)    |128-bit|Vector Core lane B (GEMV)      |
-|ACP           |Bi-directional|128-bit|FMap DMA in + Result DMA out   |
-|HPM (AXI-Lite)|Slave         |32-bit |Instruction issue + status read|
+The pipeline is **fully decoupled**: the front-end decodes and enqueues
+into per-engine FIFOs, and each compute engine fires independently once
+its local dependencies (weight stream, fmap ready) are satisfied. A
+stall in one engine never halts another.
 
-### 6. FMap Preprocessing Pipeline
-
-The BF16→fixed-point conversion pipeline (`preprocess_fmap`) sits between ACP ingress and the compute engines:
-
-- BF16 activations are converted to 27-bit signed fixed-point format to fit the DSP48E2 A-port
-- Emax alignment ensures numerical stability across vector lanes
-- Preprocessed data is cached in the L1 FMAP buffer for Systolic Array consumption
-
-### 7. Gemma 3N E4B Architecture Specifics
-
-|Feature       |Implementation                                                       |
-|--------------|---------------------------------------------------------------------|
-|AltUp Router  |Tanh scaling: `Tanh(Norm(x)/2048) × W`, main stream `xs[0]` untouched|
-|RMSNorm       |`scale_plus_one=False`, strictly per Gemma spec                      |
-|KV Cache Reuse|Layers 20–34 reuse Layer 18 (Local) and Layer 19 (Global) caches     |
-
-### 8. Trace-Driven Verification
-
-Hardware verification targets a **bit-true match** between the Python golden model and the SystemVerilog RTL simulation across all precision levels (INT4, BF16, INT48).
-
------
-
-## Constant / Package Hierarchy
-
-Compilation order enforced by directory naming:
+#### Example — softmax sequence (three CVO calls because Gemma 3N has no softcap)
 
 ```
-A_const_svh/   → `define only  (NUMBERS.svh, kv260_device.svh, npu_arch.svh)
-B_device_pkg/  → device_pkg    (precision/type choices)
-C_type_pkg/    → dtype_pkg, mem_pkg
-D_pipeline_pkg → vec_core_pkg  (Vector Core config struct)
+GEMV   flags.findemax=1              ; Q · Kᵀ, track e_max
+CVO    CVO_EXP  flags.sub_emax=1     ; exp(score - e_max)
+CVO    CVO_REDUCE_SUM                ; Σ exp → scalar
+CVO    CVO_SCALE flags.recip_scale=1 ; divide each exp by the sum
 ```
 
-All RTL files include `GLOBAL_CONST.svh` which chains A through npu_arch.
+---
 
------
+## KV Cache Strategy
 
-## Key Design Points
+KV bandwidth (not FLOPs) is what pins down `L` on KV260. At 32 K context
+the cumulative cache would hit ~1.31 GB, and DDR4's ~10 GB/s puts
+floor-to-floor read time above 130 ms per token. Three mitigations,
+enforced at RTL / memory controller / driver level:
 
-- **W4A16**: INT4 weights × BF16 activations → INT48 accumulator → BF16 normalizer → output
-- **CVO DMA bridge** (`mem_CVO_stream_bridge`): L2 → 16-bit BF16 stream to CVO → L2 writeback, sequential with XPM FIFO result buffer (2048-deep)
-- **e_max tracking**: Column-0 normalizer exponent is encoded as BF16 and fed to CVO for numerically stable softmax
-- **AXI port usage**: HP0/1 = GEMM weights, HP2/3 = GEMV weights (32 INT4/clk each), ACP = fmap DMA in / result DMA out
-- **No arbitration stalls** on L2 (true dual-port): CVO bridge wins port B over NPU DMA when active
+1. **KV quantization** — DRAM format is INT8 (default) or INT4. 2–4×
+   bandwidth and capacity savings, aligned with the W4A8 compute path.
+2. **Attention-sink + local-window eviction** — the driver retains only
+   the first few tokens and a sliding recent window; middle tokens are
+   evicted on a schedule, combined with Google Turbo-Quant-style
+   requantization.
+3. **Hard cap** — the KV ring-buffer ceiling is set at init
+   (`max_tokens = 8192`). Wrap-around overwrites the oldest entries.
+   This bounds both OOM risk and worst-case memory traffic.
 
------
+Details: [KV cache strategy →](https://hwkim-dev.github.io/pccx/en/docs/v002/Architecture/kv_cache.html)
+
+---
 
 ## Implementation Status
 
-|Block                                              |Status       |
-|---------------------------------------------------|-------------|
-|Custom ISA definition                              |✅ Complete   |
-|VLIW frontend + decoder                            |✅ Complete   |
-|Global Scheduler                                   |✅ Complete   |
-|32×32 Systolic Array (Matrix Core)                 |✅ Complete   |
-|Result normalizer + packer                         |✅ Complete   |
-|GEMV pipeline (Vector Core, 4 lanes)               |✅ Complete   |
-|CVO SFU (exp, sqrt, GELU, scale, recip, reduce_sum)|✅ Complete   |
-|CVO CORDIC (sin, cos)                              |✅ Complete   |
-|FMap preprocessing pipeline                        |✅ Complete   |
-|L2 URAM cache + ACP DMA                            |✅ Complete   |
-|CVO stream bridge                                  |✅ Complete   |
-|NPU top-level wiring                               |✅ Complete   |
-|Python golden model                                |✅ Verified   |
-|uXC driver (AXI-Lite HAL)                          |🔧 Skeleton   |
-|Gemma 3N E4B application                           |🔗 Submodule  |
-|Simulation / verification                          |🔜 Not started|
-|Vivado synthesis + timing closure                  |🔜 Not started|
+| Block                                            | Status         |
+| ------------------------------------------------ | -------------- |
+| Custom VLIW ISA                                  | Spec complete  |
+| VLIW frontend + decoder                          | RTL complete   |
+| Global Scheduler                                 | RTL complete   |
+| Systolic Array (Matrix Core, v001 32×32)         | RTL complete   |
+| GEMV pipeline (Vector Core, 4 lanes)             | RTL complete   |
+| CVO SFU + CORDIC                                 | RTL complete   |
+| FMap preprocessing (BF16 → fixed-pt)             | RTL complete   |
+| L2 URAM cache + ACP DMA                          | RTL complete   |
+| CVO ↔ L2 stream bridge                           | RTL complete   |
+| NPU top-level wiring                             | RTL complete   |
+| Python golden model                              | Verified       |
+| pccx v002 re-parameterization (1 DSP = 2 MAC)    | **In progress** |
+| uXC driver (AXI-Lite HAL)                        | Skeleton       |
+| Gemma 3N E4B application (submodule)             | Skeleton       |
+| Simulation / trace-driven verification           | Not started    |
+| Vivado synthesis + timing closure                | Not started    |
 
------
+> The current `hw/rtl/` tree reflects the v001 parameterization
+> (W4A16 / 32×32 array / 1 DSP = 1 MAC). Re-parameterization to the
+> v002 target (W4A8 / 32×16 ×2 / 1 DSP = 2 MAC) is the current
+> in-flight task. See the [design rationale](https://hwkim-dev.github.io/pccx/en/docs/v002/Architecture/rationale.html#id3)
+> for the 3.125× theoretical speedup.
 
-## Repository Structure
+---
+
+## Repository Layout
 
 ```
 hw/
   rtl/
-    NPU_top.sv                  ← top-level wiring
-    NPU_Controller/             ← VLIW frontend, decoder, Global Scheduler
-    MAT_CORE/                   ← 32×32 systolic array, normalizer, packer
-    VEC_CORE/                   ← GEMV pipeline (4 μV-Core lanes)
-    CVO_CORE/                   ← CVO SFU + CORDIC unit
-    PREPROCESS/                 ← BF16→fixed-pt pipeline, fmap cache
-    MEM_control/                ← L2 cache, DMA dispatcher, CVO bridge, HP buffer
-    Constants/                  ← `define macros + SystemVerilog packages (A→D)
-    Library/                    ← BF16 math pkg, algorithms pkg, QUEUE
+    NPU_top.sv                ← top-level wiring
+    NPU_Controller/           ← VLIW frontend, decoder, Global Scheduler
+    MAT_CORE/                 ← Systolic array, normalizer, packer
+    VEC_CORE/                 ← GEMV pipeline (4 μV-Core lanes)
+    CVO_CORE/                 ← CVO SFU + CORDIC unit
+    PREPROCESS/               ← BF16 → fixed-pt pipeline, fmap cache
+    MEM_control/              ← L2 cache, DMA dispatcher, CVO bridge, HP buffer
+    Constants/                ← `define macros + SystemVerilog packages (A → D)
+    Library/                  ← BF16 math pkg, algorithms pkg, QUEUE
 sw/
-  driver/                       ← AXI-Lite MMIO HAL + inference API (skeleton)
-  gemma3NE4B/                   ← Gemma 3N E4B application (submodule)
-docs/                           ← Architecture, ISA, model analysis documents
+  driver/                     ← AXI-Lite MMIO HAL + inference API (skeleton)
+  gemma3NE4B/                 ← Gemma 3N E4B application (submodule)
+docs/                         ← Redirect stub only — full docs live on pccx
 ```
 
------
+`docs/` in this repo is intentionally a **redirect stub**. All
+architectural and model documentation now lives in the pccx repo /
+GitHub Pages site.
 
-## Documentation
+---
 
-See <docs/> for detailed specifications.
+## License
 
-|Document                          |Description                                        |
-|----------------------------------|---------------------------------------------------|
-|<docs/FPGA_NPU_Architecture_v2.md>|Full architecture reference                        |
-|<docs/ISA.md>                     |64-bit ISA encoding, uop structures, memory routing|
-|<docs/HW_Optimization_DSP48E2.md> |DSP48E2 optimization techniques                    |
-|<docs/GEMMA_3N_E4B.md>            |Target model internals                             |
-|<docs/Gemma3N_Pipeline_EN.md>     |Layer-by-layer math specification                  |
+Apache 2.0 — same as pccx. This protects the architecture from patent
+risk while keeping the ecosystem open for hardware research.

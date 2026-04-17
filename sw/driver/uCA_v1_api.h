@@ -5,12 +5,12 @@
 // (sw/gemma3NE4B/ and future projects) should call only functions from
 // this layer — never touch the HAL directly.
 //
-// This layer builds 64-bit VLIW instructions per the ISA spec (docs/ISA.md)
-// and issues them via the HAL. The NPU frontend is fully decoupled: each
+// This layer builds 64-bit VLIW instructions per the pccx v002 ISA and
+// issues them via the HAL. The NPU frontend is fully decoupled: each
 // uca_* call returns immediately after issuing to the instruction FIFO.
 // Call uca_sync() to wait for all in-flight operations to complete.
 //
-// Encoding reference: docs/ISA.md
+// Encoding reference: https://hwkim-dev.github.io/pccx/en/docs/v002/ISA/index.html
 // ================================================================================
 
 #ifndef UCA_V1_API_H

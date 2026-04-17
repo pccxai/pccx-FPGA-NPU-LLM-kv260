@@ -1,60 +1,30 @@
-# uXC Documentation Index
+# Documentation has moved
 
-This directory contains all design documents for the uXC (micro eXcelerator Core) NPU project.
+All uXC / pccx architecture, ISA, driver, and Gemma 3N E4B model notes have
+been consolidated into the **pccx documentation site** (Sphinx, GitHub
+Pages, bilingual EN / KO).
 
----
+## Jump straight in
 
-## 1. Hardware Architecture
+- **Latest architecture — v002** (current target of this repo):
+  <https://hwkim-dev.github.io/pccx/en/docs/v002/index.html>
+- Documentation root (language picker):
+  <https://hwkim-dev.github.io/pccx/en/index.html>
+- pccx source repository:
+  <https://github.com/hwkim-dev/pccx>
 
-| File | Description |
-|------|-------------|
-| [FPGA_NPU_Architecture_v2.md](FPGA_NPU_Architecture_v2.md) | Top-level NPU architecture — block diagram, memory hierarchy, data flow for all engines |
-| [HW_Optimization_DSP48E2.md](HW_Optimization_DSP48E2.md) | DSP48E2-level optimization notes: constant folding, bit-shift tricks, RMSNorm scale cancellation |
+## Where the old documents went
 
----
+| Old file (deleted)               | New location                                                                                                                |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `FPGA_NPU_Architecture_v2.md`    | [v002 Architecture](https://hwkim-dev.github.io/pccx/en/docs/v002/Architecture/index.html)                                  |
+| `ISA.md`                         | [v002 ISA](https://hwkim-dev.github.io/pccx/en/docs/v002/ISA/index.html)                                                    |
+| `HW_Optimization_DSP48E2.md`     | [DSP48E2 W4A8 bit-packing](https://hwkim-dev.github.io/pccx/en/docs/v002/Architecture/dsp48e2_w4a8.html)                    |
+| `GEMMA_3N_E4B.md`                | [Gemma 3N overview](https://hwkim-dev.github.io/pccx/en/docs/v002/Models/gemma3n_overview.html)                             |
+| `Gemma3N_Pipeline_EN.md`         | [Gemma 3N pipeline](https://hwkim-dev.github.io/pccx/en/docs/v002/Models/gemma3n_pipeline.html)                             |
+| `Attention_RoPE.md`              | [Gemma 3N attention / RoPE](https://hwkim-dev.github.io/pccx/en/docs/v002/Models/gemma3n_attention_rope.html)               |
+| `PLE_LAuReL.md`                  | [Gemma 3N PLE & LAuReL](https://hwkim-dev.github.io/pccx/en/docs/v002/Models/gemma3n_ple_laurel.html)                       |
+| `FFN_Sparsity.md`                | [Gemma 3N FFN sparsity](https://hwkim-dev.github.io/pccx/en/docs/v002/Models/gemma3n_ffn_sparsity.html)                     |
+| *(new)* how the model runs here  | [Gemma 3N on pccx v002 execution](https://hwkim-dev.github.io/pccx/en/docs/v002/Models/gemma3n_execution.html)              |
 
-## 2. ISA & Driver
-
-| File | Description |
-|------|-------------|
-| [ISA.md](ISA.md) | 64-bit VLIW ISA specification: opcode table, instruction encoding, memory routing, uop structures |
-
----
-
-## 3. Gemma 3N E4B Model Analysis
-
-These documents describe the mathematical behavior and hardware constraints of the target model.
-Read before implementing any compute pipeline.
-
-| File | Description |
-|------|-------------|
-| [GEMMA_3N_E4B.md](GEMMA_3N_E4B.md) | Comprehensive Gemma 3N E4B model analysis: weights, layers, quantization, KV cache |
-| [Gemma3N_Pipeline_EN.md](Gemma3N_Pipeline_EN.md) | Full pipeline mathematical specification (English) — token to logit, all 35 layers |
-| [Attention_RoPE.md](Attention_RoPE.md) | Attention constraints: no scaling, no softcap, alternating RoPE theta |
-| [FFN_Sparsity.md](FFN_Sparsity.md) | Gaussian Top-K sparsity (0.95) in FFN layers 0–9 |
-| [PLE_LAuReL.md](PLE_LAuReL.md) | LAuReL parallel calibration and PLE shadow-stream injection rules |
-
----
-
-## Reading Order
-
-**Hardware engineers starting on RTL:**
-1. `FPGA_NPU_Architecture_v2.md` — full system understanding
-2. `ISA.md` — instruction set before touching the controller
-3. `HW_Optimization_DSP48E2.md` — DSP tricks for compute pipelines
-
-**Understanding the target workload:**
-1. `Gemma3N_Pipeline_EN.md` — ground truth mathematical spec
-2. `Attention_RoPE.md`, `FFN_Sparsity.md`, `PLE_LAuReL.md` — critical constraint details
-3. `GEMMA_3N_E4B.md` — model internals deep-dive
-
----
-
-## Project Structure
-
-```
-hw/rtl/          SystemVerilog RTL (synthesizable only, Vivado 2024.1)
-sw/driver/       uXC HAL driver — AXI-Lite MMIO + high-level inference API
-sw/gemma3NE4B/   Gemma 3N E4B inference application (calls uXC driver API)
-docs/            This directory
-```
+For the Korean mirror, swap `/en/` for `/ko/` in any of the links above.
