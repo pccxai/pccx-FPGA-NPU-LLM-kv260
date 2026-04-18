@@ -12,10 +12,17 @@ application) of the **pccx v002** NPU architecture. It exists to close
 the loop between the pccx architecture specification and a working
 Gemma 3N E4B decoder on a real FPGA.
 
-- Architecture specification (authoritative, rendered): **[pccx v002 docs →](https://hwkim-dev.github.io/pccx/en/docs/v002/index.html)**
-- Korean mirror: [pccx v002 docs (KO)](https://hwkim-dev.github.io/pccx/ko/docs/v002/index.html)
-- pccx source repo: [github.com/hwkim-dev/pccx](https://github.com/hwkim-dev/pccx)
-- x64 CPU baseline (golden reference): [llm-lite](https://github.com/hwkim-dev/llm-lite)
+> ### Start with the architecture docs
+>
+> The design rationale, ISA, memory map, and model-mapping notes live on
+> the **pccx documentation site**. This repo implements what that site
+> specifies — read the spec first, then come back here for the RTL.
+>
+> **→ [pccx v002 — Architecture & ISA spec](https://hwkim-dev.github.io/pccx/en/docs/v002/index.html)**
+> &nbsp;·&nbsp; [Gemma 3N E4B on pccx v002](https://hwkim-dev.github.io/pccx/en/docs/v002/Models/gemma3n_execution.html)
+> &nbsp;·&nbsp; [한국어 문서](https://hwkim-dev.github.io/pccx/ko/docs/v002/index.html)
+
+Related repos: [pccx (spec)](https://github.com/hwkim-dev/pccx) · [llm-lite (x64 golden reference)](https://github.com/hwkim-dev/llm-lite)
 
 ---
 
@@ -29,9 +36,10 @@ Gemma 3N E4B decoder on a real FPGA.
 | Bare-metal driver (C/C++)            | this repo — `sw/driver/`                   | API spec: [Drivers/api](https://hwkim-dev.github.io/pccx/en/docs/v002/Drivers/api.html)  |
 | Application                          | this repo — `sw/gemma3NE4B/`               | —                                                                                         |
 
-If you want to **read about how the accelerator works**, go to the pccx
-site. If you want to **read the RTL or synthesize the bitstream**, stay
-here.
+If you want to **read about how the accelerator works**, head to the
+**[pccx v002 docs](https://hwkim-dev.github.io/pccx/en/docs/v002/index.html)** —
+that's the canonical source for every architectural decision in this repo.
+If you want to **read the RTL or synthesize the bitstream**, stay here.
 
 ---
 
