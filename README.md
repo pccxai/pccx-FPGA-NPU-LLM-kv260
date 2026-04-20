@@ -288,6 +288,59 @@ GitHub Pages site.
 
 ---
 
+## Verification workflow
+
+The repo ships a minimal xsim harness at `hw/sim/` that every testbench
+under `hw/tb/tb_*.sv` plugs into. One command runs the full suite and
+emits a `.pccx` trace per bench for [pccx-lab][pccx-lab] to visualise:
+
+```bash
+hw/sim/run_verification.sh
+```
+
+### Current testbench matrix
+
+| Testbench | Module(s) under test | Cycles |
+|-----------|-----------------------|-------:|
+| `tb_GEMM_dsp_packer_sign_recovery` | `GEMM_dsp_packer` + `GEMM_sign_recovery` (W4A8 dual-MAC) | 1024 |
+| `tb_GEMM_weight_dispatcher`        | `GEMM_weight_dispatcher` (upper / lower AND-valid)      |  128 |
+| `tb_mat_result_normalizer`         | `mat_result_normalizer` (48 b 2sC → BF16 4-stage)       |  256 |
+| `tb_FROM_mat_result_packer`        | `FROM_gemm_result_packer` (32 lanes → 4×128 b FSM)      |    4 |
+| `tb_barrel_shifter_BF16`           | `barrel_shifter_BF16` (BF16 → 27 b fixed-point)         |  512 |
+| `tb_ctrl_npu_decoder`              | `ctrl_npu_decoder` (4-bit opcode → one-hot valid)       |    6 |
+
+Every bench emits the canonical `PASS: <N> cycles, …` line that
+[pccx-lab][pccx-lab]'s `from_xsim_log` converter recognises — the
+glob-based runner picks up any new tb that follows the convention.
+
+### Adding a new testbench
+
+Two lines in `hw/sim/run_verification.sh`:
+
+```bash
+TB_DEPS[tb_new_module]="SUB_DIR/new_module.sv"
+TB_CORE[tb_new_module]=N   # pick an unused core-id for the emitted trace
+```
+
+Then drop `hw/tb/tb_new_module.sv` with the canonical `$display` line on
+success / failure. See
+[pccx-lab's verification-workflow doc](https://hwkim-dev.github.io/pccx/en/lab/verification-workflow.html)
+for the end-to-end flow diagram and the Tauri IPC surface.
+
+### What plugs into pccx-lab
+
+| Surface                 | Command                                            |
+|-------------------------|----------------------------------------------------|
+| Full suite runner       | `run_verification` IPC → `run_verification.sh`     |
+| Per-tb trace loader     | "Open" button per row (calls `load_pccx`)          |
+| Synth utilisation       | `SynthStatusCard`  (parses `hw/build/reports/`)    |
+| Roofline classification | `RooflineCard`     (runs on the loaded trace)      |
+| Markdown summary        | `generate_markdown_report` IPC                     |
+
+[pccx-lab]: https://github.com/hwkim-dev/pccx-lab
+
+---
+
 ## License
 
 Apache 2.0 — same as pccx. This protects the architecture from patent
