@@ -30,6 +30,7 @@ declare -A TB_DEPS=(
     [tb_GEMM_dsp_packer_sign_recovery]="MAT_CORE/GEMM_dsp_packer.sv MAT_CORE/GEMM_sign_recovery.sv"
     [tb_mat_result_normalizer]="MAT_CORE/mat_result_normalizer.sv"
     [tb_GEMM_weight_dispatcher]="MAT_CORE/GEMM_weight_dispatcher.sv"
+    [tb_FROM_mat_result_packer]="MAT_CORE/FROM_mat_result_packer.sv"
 )
 
 # Core-id assigned to a tb's emitted pccx trace. Kept contiguous so the UI
@@ -38,6 +39,7 @@ declare -A TB_CORE=(
     [tb_GEMM_dsp_packer_sign_recovery]=0
     [tb_mat_result_normalizer]=1
     [tb_GEMM_weight_dispatcher]=2
+    [tb_FROM_mat_result_packer]=3
 )
 
 run_tb() {
