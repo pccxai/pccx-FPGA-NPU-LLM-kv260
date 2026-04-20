@@ -1,3 +1,5 @@
+`timescale 1ns / 1ps
+
 // ===| Device Configuration Package |==========================================
 // Selects the data type choices for this target design.
 // This is where algorithm-level decisions (precision, pipeline count) are made.
@@ -5,6 +7,8 @@
 // Compilation order: B — depends on A_const_svh (NUMBERS.svh).
 // Naming convention: localparam uses PascalCase (linter: parameter-name-style).
 // ===============================================================================
+
+`include "NUMBERS.svh"
 
 package device_pkg;
 

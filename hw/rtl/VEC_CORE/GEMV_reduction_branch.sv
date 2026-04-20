@@ -18,7 +18,7 @@ module GEMV_reduction_branch
     input logic [16:0] IN_num_recur,
 
     input logic IN_activated_lane,
-    input logic [param.fixed_mant_width+2:0] IN_fmap_LUT [0:param.fmap_cache_out_cnt-1][0:param.weight_width-1],
+    input logic signed [param.fixed_mant_width+2:0] IN_fmap_LUT [0:param.fmap_cache_out_cnt-1][0:param.weight_width-1],
 
     output logic [param.fixed_mant_width+2:0] OUT_GEMV_result_vector[0:param.gemv_batch-1],
     output logic OUT_valid
@@ -29,9 +29,7 @@ module GEMV_reduction_branch
   logic reduction_res_valid_wire;
 
   GEMV_reduction #(
-      .fmap_cache_out_cnt(param.fmap_cache_out_cnt),
-      .weight_type(param.weight_width),
-      .line_cnt(line_cnt)
+      .param(param)
   ) u_GEMV_reduction (
       .clk  (clk),
       .rst_n(rst_n),

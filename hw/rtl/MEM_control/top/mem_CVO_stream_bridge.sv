@@ -94,7 +94,7 @@ module mem_CVO_stream_bridge (
   assign OUT_cvo_result_ready = ~fifo_full && (state == ST_READ);
 
   xpm_fifo_sync #(
-      .FIFO_DEPTH      (2048),
+      .FIFO_WRITE_DEPTH(2048),
       .WRITE_DATA_WIDTH(16),
       .READ_DATA_WIDTH (16),
       .FIFO_MEMORY_TYPE("block"),
@@ -104,7 +104,6 @@ module mem_CVO_stream_bridge (
       .sleep (1'b0),
       .rst   (~rst_n),
       .wr_clk(clk),
-      .rd_clk(clk),
       .wr_en (fifo_wr_en),
       .din   (IN_cvo_result),
       .rd_en (fifo_rd_en),

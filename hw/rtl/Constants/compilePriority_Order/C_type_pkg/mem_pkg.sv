@@ -1,3 +1,5 @@
+`timescale 1ns / 1ps
+
 // ===| Memory Architecture Package |============================================
 // Derived memory parameters for the uXC NPU.
 // All values are computed from device_pkg and kv260_device.svh — no magic numbers.
@@ -5,6 +7,9 @@
 // Compilation order: C — depends on A_const_svh, B_device_pkg.
 // Naming convention: localparam uses PascalCase.
 // ===============================================================================
+
+`include "kv260_device.svh"
+`include "npu_arch.svh"
 
 package mem_pkg;
 

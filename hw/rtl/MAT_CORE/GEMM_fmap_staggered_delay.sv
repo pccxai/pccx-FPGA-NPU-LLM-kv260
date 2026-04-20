@@ -6,7 +6,7 @@ module GEMM_fmap_staggered_dispatch #(
     // Fixed-point width after shifter
     parameter fmap_width = 27,
     parameter array_size = 32,
-    parameter fmap_out_width = `ACIN
+    parameter fmap_out_width = `DEVICE_DSP_A_WIDTH
 ) (
     input logic clk,
     input logic rst_n,

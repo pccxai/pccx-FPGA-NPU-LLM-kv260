@@ -41,10 +41,12 @@ module GEMV_top
 
     input logic IN_activated_lane[0:param.num_gemv_pipeline-1],
 
-    output logic [param.fmap_type_mixed_precision - 1:0] OUT_final_fmap_A,
-    output logic [param.fmap_type_mixed_precision - 1:0] OUT_final_fmap_B,
-    output logic [param.fmap_type_mixed_precision - 1:0] OUT_final_fmap_C,
-    output logic [param.fmap_type_mixed_precision - 1:0] OUT_final_fmap_D,
+    // Per-lane batch vector. Width tracks `GEMV_reduction_branch`'s signed
+    // fixed-point format (fixed_mant_width + 2 headroom + 1 sign).
+    output logic [param.fixed_mant_width+2:0] OUT_final_fmap_A [0:param.gemv_batch-1],
+    output logic [param.fixed_mant_width+2:0] OUT_final_fmap_B [0:param.gemv_batch-1],
+    output logic [param.fixed_mant_width+2:0] OUT_final_fmap_C [0:param.gemv_batch-1],
+    output logic [param.fixed_mant_width+2:0] OUT_final_fmap_D [0:param.gemv_batch-1],
 
     output logic OUT_result_valid_A,
     output logic OUT_result_valid_B,
@@ -52,7 +54,7 @@ module GEMV_top
     output logic OUT_result_valid_D
 );
 
-  logic [param.fixed_mant_width+2:0] fmap_LUT_wire[0:param.fmap_cache_out_cnt-1][0:param.weight_width-1];
+  logic signed [param.fixed_mant_width+2:0] fmap_LUT_wire[0:param.fmap_cache_out_cnt-1][0:param.weight_width-1];
 
   logic fmap_ready_wire;
 

@@ -13,7 +13,7 @@ module GEMV_reduction
     input logic rst_n,
     input logic IN_is_lane_active,
     input logic IN_valid,
-    input logic [param.fixed_mant_width+2:0] IN_fmap_LUT[0:param.param.fmap_cache_out_cnt-1][0:param.weight_width-1],
+    input logic signed [param.fixed_mant_width+2:0] IN_fmap_LUT[0:param.fmap_cache_out_cnt-1][0:param.weight_width-1],
     input logic [param.weight_width - 1:0] IN_weight[0:param.weight_cnt -1],
 
     output logic [param.fixed_mant_width+2:0] OUT_reduction_result,

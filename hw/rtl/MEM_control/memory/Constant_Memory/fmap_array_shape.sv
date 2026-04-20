@@ -9,7 +9,9 @@
 //  [ read]  rd_addr → at same clk rd_val{0,1,2} out (comb logic)
 // ============================================================
 
-module fmap_array_shape (
+module fmap_array_shape
+  import isa_pkg::*;
+(
     input logic clk,
     input logic rst_n,
 

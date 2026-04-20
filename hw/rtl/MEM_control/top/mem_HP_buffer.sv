@@ -30,7 +30,7 @@ module mem_HP_buffer #(
   xpm_fifo_axis #(
       .FIFO_DEPTH      (URAM_FIFO_DEPTH),
       .TDATA_WIDTH     (128),
-      .FIFO_MEMORY_TYPE("ultra"),             // Forces UltraRAM
+      .FIFO_MEMORY_TYPE("block"),
       .CLOCKING_MODE   ("independent_clock")
   ) u_hp0_weight_fifo (
       .s_aclk(clk_axi),
@@ -49,7 +49,7 @@ module mem_HP_buffer #(
   xpm_fifo_axis #(
       .FIFO_DEPTH(URAM_FIFO_DEPTH),
       .TDATA_WIDTH(128),
-      .FIFO_MEMORY_TYPE("ultra"),
+      .FIFO_MEMORY_TYPE("block"),
       .CLOCKING_MODE("independent_clock")
   ) u_hp1_weight_fifo (
       .s_aclk(clk_axi),
@@ -68,7 +68,7 @@ module mem_HP_buffer #(
   xpm_fifo_axis #(
       .FIFO_DEPTH(URAM_FIFO_DEPTH),
       .TDATA_WIDTH(128),
-      .FIFO_MEMORY_TYPE("ultra"),
+      .FIFO_MEMORY_TYPE("block"),
       .CLOCKING_MODE("independent_clock")
   ) u_hp2_weight_fifo (
       .s_aclk(clk_axi),
@@ -87,7 +87,7 @@ module mem_HP_buffer #(
   xpm_fifo_axis #(
       .FIFO_DEPTH(URAM_FIFO_DEPTH),
       .TDATA_WIDTH(128),
-      .FIFO_MEMORY_TYPE("ultra"),
+      .FIFO_MEMORY_TYPE("block"),
       .CLOCKING_MODE("independent_clock")
   ) u_hp3_weight_fifo (
       .s_aclk(clk_axi),

@@ -68,17 +68,19 @@ module preprocess_bf16_fixed_pipeline (
         first_half_valid <= 1'b1;
         block_valid      <= 1'b0;
         phase            <= 1'b1;
-      end else begin
+      end else begin : second_half
+        automatic logic [7:0] local_max_high;
         // Second 16 words arrived! Combine to form 32-word block.
-        block_data_low  <= buffer_low;
-        block_data_high <= s_axis_tdata;
+        block_data_low   <= buffer_low;
+        block_data_high  <= s_axis_tdata;
 
-        // Compare max of low 16 and high 16 to get GLOBAL e_max
-        automatic logic [7:0] local_max_high = find_max_e_16(s_axis_tdata);
-        global_emax <= (local_max_low > local_max_high) ? local_max_low : local_max_high;
+        // Compare max of low 16 and high 16 to get GLOBAL e_max.
+        local_max_high   = find_max_e_16(s_axis_tdata);
+        global_emax      <= (local_max_low > local_max_high) ? local_max_low
+                                                             : local_max_high;
 
-        block_valid <= 1'b1;
-        phase       <= 1'b0;  // Reset for next block
+        block_valid      <= 1'b1;
+        phase            <= 1'b0;  // Reset for next block
       end
     end else begin
       block_valid <= 1'b0;

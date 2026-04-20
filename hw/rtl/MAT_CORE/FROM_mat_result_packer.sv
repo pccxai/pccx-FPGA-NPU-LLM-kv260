@@ -20,7 +20,7 @@ module FROM_gemm_result_packer #(
     input logic                   row_res_valid[0:ARRAY_SIZE-1],
 
     // =| Output to FIFO (128-bit) |=
-    output logic [`AXI_DATA_WIDTH-1:0] packed_data,
+    output logic [`AXI_STREAM_WIDTH-1:0] packed_data,
     output logic                       packed_valid,
     input  logic                       packed_ready,
 
@@ -31,7 +31,7 @@ module FROM_gemm_result_packer #(
   // ===| Internal Buffer to Hold Results |=======
   // Since systolic array results are staggered, we need to capture them.
   logic [`BF16_WIDTH-1:0] capture_reg[0:ARRAY_SIZE-1];
-  logic [ARRAY_SIZE-1:0] capture_valid;
+  logic [ARRAY_SIZE-1:0]  capture_valid;
 
   // ===| State Machine for Packing (Round-Robin) |=======
   typedef enum logic [1:0] {
@@ -39,7 +39,9 @@ module FROM_gemm_result_packer #(
     CHECK_VALID,
     SEND_DATA
   } state_t;
-  state_t state;
+  state_t     state;
+  logic [5:0] send_idx;  // 0 to 31, must be declared before the capture FSM
+                         // uses it to clear capture_valid bits on SEND_DATA.
 
   // Busy if any capture_valid bit is set or we are in a non-IDLE state
   assign o_busy = (|capture_valid) || (state != IDLE);
@@ -64,12 +66,6 @@ module FROM_gemm_result_packer #(
       end
     end
   end
-
-  // ===| State Machine for Packing (Round-Robin) |=======
-  // typedef enum logic [1:0] {IDLE, CHECK_VALID, SEND_DATA} state_t;
-  // state_t state;
-
-  logic [5:0] send_idx;  // 0 to 31
 
   always_ff @(posedge clk) begin
     if (!rst_n) begin

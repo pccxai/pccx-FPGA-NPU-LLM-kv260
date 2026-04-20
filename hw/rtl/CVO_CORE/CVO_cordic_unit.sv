@@ -177,7 +177,10 @@ module CVO_cordic_unit (
       if (leading >= 7)
         mant_out = mag[leading-1 -: 7];
       else
-        mant_out = 7'(mag[leading-1:0] << (7 - leading));
+        // SV disallows variable part-selects, so shift the full magnitude
+        // left to align its `leading` significant bits into the top 7
+        // positions, then truncate to 7 bits.
+        mant_out = 7'(mag << (7 - leading));
 
       return {sign_out, exp_out, mant_out};
     end

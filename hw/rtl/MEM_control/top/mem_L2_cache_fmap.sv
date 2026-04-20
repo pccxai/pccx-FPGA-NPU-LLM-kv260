@@ -35,8 +35,10 @@ module mem_L2_cache_fmap #(
       // ===| Geometry |===
       .ADDR_WIDTH_A       (17),
       .ADDR_WIDTH_B       (17),
-      .DATA_WIDTH_A       (128),
-      .DATA_WIDTH_B       (128),
+      .WRITE_DATA_WIDTH_A (128),
+      .READ_DATA_WIDTH_A  (128),
+      .WRITE_DATA_WIDTH_B (128),
+      .READ_DATA_WIDTH_B  (128),
       .BYTE_WRITE_WIDTH_A (128),
       .BYTE_WRITE_WIDTH_B (128),
       .MEMORY_SIZE        (128 * Depth),
@@ -46,8 +48,9 @@ module mem_L2_cache_fmap #(
       .CLOCKING_MODE      ("common_clock"),
       .READ_LATENCY_A     (3),
       .READ_LATENCY_B     (3),
-      .WRITE_MODE_A       ("write_first"),
-      .WRITE_MODE_B       ("write_first"),
+      // URAM true-dual-port requires no-change mode on both ports.
+      .WRITE_MODE_A       ("no_change"),
+      .WRITE_MODE_B       ("no_change"),
 
       // ===| Init / Misc |===
       .MEMORY_INIT_FILE   ("none"),

@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 
-`include "Algorithms.svh"
+// algorithms_pkg is compiled from Library/Algorithms/Algorithms.sv.
 `include "GLOBAL_CONST.svh"
 
 // AXIL_CMD_IN

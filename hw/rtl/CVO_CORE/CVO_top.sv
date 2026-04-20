@@ -88,6 +88,12 @@ module CVO_top (
     data_valid_to_unit_wire = (state == ST_RUNNING) && IN_data_valid;
   end
 
+  // ===| Opcode Routing (declared ahead of units that use it as a gating term) |
+  logic is_cordic_op_wire;
+  always_comb begin
+    is_cordic_op_wire = (uop_func == CVO_SIN) || (uop_func == CVO_COS);
+  end
+
   // ===| SFU Instantiation |=====================================================
   logic [15:0] sfu_result;
   logic        sfu_result_valid;
@@ -126,12 +132,6 @@ module CVO_top (
       .OUT_cos_bf16 (cordic_cos),
       .OUT_valid    (cordic_valid)
   );
-
-  // ===| Opcode Routing |========================================================
-  logic is_cordic_op_wire;
-  always_comb begin
-    is_cordic_op_wire = (uop_func == CVO_SIN) || (uop_func == CVO_COS);
-  end
 
   // ===| FSM Logic |=============================================================
   always_ff @(posedge clk) begin

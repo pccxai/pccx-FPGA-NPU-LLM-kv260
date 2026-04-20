@@ -52,7 +52,9 @@ interface IF_queue #(
   // consumer : only pops
   modport consumer(import pop, input empty, full, pop_data, clk, rst_n, output pop_en);
 
-  // owner : the FIFO module itself, full access
-  modport owner(input push_data, push_en, pop_en, output wr_ptr, rd_ptr, inout mem);
+  // owner : the FIFO module itself. Reads producer/consumer handshake
+  // signals, updates its own pointers + memory contents.
+  modport owner(input  clk, rst_n, push_data, push_en, pop_en, full, empty,
+                output wr_ptr, rd_ptr, ref mem);
 
 endinterface

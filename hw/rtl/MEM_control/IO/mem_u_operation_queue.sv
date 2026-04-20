@@ -50,7 +50,7 @@ module mem_u_operation_queue #() (
 
   // ===| ACP FIFO |==============================================================
   xpm_fifo_sync #(
-      .FIFO_DEPTH        (128),
+      .FIFO_WRITE_DEPTH  (128),
       .WRITE_DATA_WIDTH  (UopWidth),
       .READ_DATA_WIDTH   (UopWidth),
       .FIFO_MEMORY_TYPE  ("block"),
@@ -66,13 +66,12 @@ module mem_u_operation_queue #() (
       .prog_full(acp_fifo_full),
       .rd_en    (~IN_acp_is_busy & ~acp_fifo_empty),
       .dout     (OUT_acp_cmd),
-      .empty    (acp_fifo_empty),
-      .rd_clk   (clk_core)
+      .empty    (acp_fifo_empty)
   );
 
   // ===| NPU FIFO |==============================================================
   xpm_fifo_sync #(
-      .FIFO_DEPTH        (128),
+      .FIFO_WRITE_DEPTH  (128),
       .WRITE_DATA_WIDTH  (UopWidth),
       .READ_DATA_WIDTH   (UopWidth),
       .FIFO_MEMORY_TYPE  ("block"),
@@ -88,8 +87,7 @@ module mem_u_operation_queue #() (
       .prog_full(npu_fifo_full),
       .rd_en    (~IN_npu_is_busy & ~npu_fifo_empty),
       .dout     (OUT_npu_cmd),
-      .empty    (npu_fifo_empty),
-      .rd_clk   (clk_core)
+      .empty    (npu_fifo_empty)
   );
 
 endmodule

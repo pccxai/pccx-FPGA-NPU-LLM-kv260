@@ -1,3 +1,5 @@
+`timescale 1ns / 1ps
+
 // ===| Data Type Package |=======================================================
 // Numeric type constants for all data formats used in uXC.
 // Merges and replaces: float_pkg.sv, float_emax_align_pkg.sv

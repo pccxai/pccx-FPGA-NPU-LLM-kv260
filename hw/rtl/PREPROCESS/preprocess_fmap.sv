@@ -13,7 +13,7 @@
  * - SRAM Caching for broadcasting to multiple compute engines (Branch point).
  */
 module preprocess_fmap #(
-    parameter fmap_width = `ACP_PORT_IN
+    parameter fmap_width = `DEVICE_ACP_WIDTH_BIT
 ) (
     input logic clk,
     input logic rst_n,
@@ -46,14 +46,15 @@ module preprocess_fmap #(
   //assign S_AXIS_FMAP0.tready = s_axis_fmap_combined_tready & S_AXIS_FMAP1.tvalid;
   //assign S_AXIS_FMAP1.tready = s_axis_fmap_combined_tready & S_AXIS_FMAP0.tvalid;
 
-  // 256-bit FIFO for FMap
-  logic [fmap_width:0] fmap_fifo_data;
-  logic                fmap_fifo_valid;
-  logic                fmap_fifo_ready;
+  // 256-bit FIFO for FMap (two 128-bit ACP beats merged upstream — input
+  // is still 128-bit here, upper half will be driven by a future phase).
+  logic [255:0] fmap_fifo_data;
+  logic         fmap_fifo_valid;
+  logic         fmap_fifo_ready;
 
 
   xpm_fifo_axis #(
-      .FIFO_DEPTH(`XPM_FIFO_DEPTH),
+      .FIFO_DEPTH(`DEVICE_XPM_FIFO_DEPTH),
       .TDATA_WIDTH(256),
       .FIFO_MEMORY_TYPE("block"),
       .CLOCKING_MODE("common_clock")

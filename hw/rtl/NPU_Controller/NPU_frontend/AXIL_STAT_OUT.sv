@@ -1,5 +1,7 @@
 `timescale 1ns / 1ps
 
+`include "GLOBAL_CONST.svh"
+
 // AXIL_STAT_OUT
 // AXI4-Lite Read path : NPU → CPU
 // Upper module pushes status into FIFO continuously.

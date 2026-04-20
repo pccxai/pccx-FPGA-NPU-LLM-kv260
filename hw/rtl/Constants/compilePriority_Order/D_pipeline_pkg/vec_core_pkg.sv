@@ -1,3 +1,5 @@
+`timescale 1ns / 1ps
+
 // ===| Vector Core (muV-Core) Configuration Package |===========================
 // Defines the configuration struct and default parameters for the Vector Core.
 // The Vector Core consists of 4 parallel muV-Cores, each performing GEMV
