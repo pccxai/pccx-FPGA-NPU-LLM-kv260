@@ -27,9 +27,9 @@ formal/sail/
 ├── src/
 │   ├── prelude.sail         minimal bitvector helpers
 │   ├── pccx_types.sail      opcodes, body structs, flags, CVO funcs
-│   ├── pccx_regs.sail       cycle / pc / committed_any
+│   ├── pccx_regs.sail       cycle / pc / committed_any / per-unit commit counters
 │   ├── pccx_decode.sail     64-bit word → typed `instr` union
-│   └── pccx_execute.sail    executable semantics (1st increment: cycle counter + record_event stub)
+│   └── pccx_execute.sail    executable semantics (2nd increment: per-opcode MAC / DMA / SFU effects)
 └── tests/
     └── smoke_decode.sail    typecheck-only opcode-table smoke test
 ```
@@ -54,8 +54,11 @@ make doc
   (`OP_GEMV`, `OP_GEMM`, `OP_MEMCPY`, `OP_MEMSET`, `OP_CVO`).
 - done  Execute semantics first increment — non-interpreting cycle
   counter advance + `record_event` stub. See `src/pccx_execute.sail`.
-- WIP   Execute semantics second increment — concrete MAC accumulator,
-  DMA queue, SFU pipeline effects. Tracks pccx v002 architectural state.
+- done  Execute semantics second increment — per-opcode `execute_*`
+  dispatch, per-unit commit counters (`mac_ops_committed`,
+  `dma_ops_committed`, `sfu_ops_committed`), async-flag observation,
+  PC advance.  Still non-interpreting w.r.t. MAC data; numeric-effect
+  model follows in the 3rd increment.
 - WIP   Wire `record_event` to a real `.pccx` trace writer (C back end)
   so pccx-lab can diff RTL-simulated traces against the Sail reference.
 - planned  Isabelle / Coq / SystemVerilog back-end exports — pccx-lab
