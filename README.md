@@ -1,4 +1,4 @@
-# uXC — Bare-Metal Transformer Accelerator on Kria KV260
+# pccx — Bare-Metal Transformer Accelerator on Kria KV260
 
 ![Architecture](https://img.shields.io/badge/Architecture-pccx_v002-purple)
 ![RTL](https://img.shields.io/badge/RTL-SystemVerilog-green)
