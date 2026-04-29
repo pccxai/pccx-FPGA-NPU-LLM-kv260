@@ -81,8 +81,8 @@ afford.  A formal Sail model lets us:
   the RTL refines against (Sail's C / OCaml back-ends).
 - **Prove correctness properties** via Sail's Isabelle / Coq / HOL4
   back-ends once the execute pass lands.
-- **Advertise rigour** — the site [hwkim-dev.github.io/pccx][site]
+- **Advertise rigour** — the site [hkimw.github.io/pccx][site]
   lists Sail alongside Arm / RISC-V / CHERI as one of the ISAs
   authored with real ISA-semantics tooling.
 
-[site]: https://hwkim-dev.github.io/pccx/en/
+[site]: https://hkimw.github.io/pccx/en/
