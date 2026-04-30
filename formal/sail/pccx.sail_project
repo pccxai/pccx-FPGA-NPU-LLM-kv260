@@ -2,7 +2,7 @@
 //
 // Ground truth: ../../hw/rtl/NPU_Controller/NPU_Control_Unit/ISA_PACKAGE/isa_pkg.sv
 // Sail website:   https://sail-lang.org/
-// pccx docs:      https://hwkim-dev.github.io/pccx/en/docs/v002/ISA/
+// pccx docs:      https://pccxai.github.io/pccx/en/docs/v002/ISA/
 //
 // Build:   sail --check  pccx.sail_project   (type-check only)
 //          sail --help   pccx.sail_project   (list commands)

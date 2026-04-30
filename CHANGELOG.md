@@ -14,4 +14,4 @@ and this project follows [Semantic Versioning](https://semver.org/).
   bare-metal driver under `sw/driver/`.  Bitstreams are out of scope
   for this release.
 
-[Unreleased]: https://github.com/hkimw/pccx-FPGA-NPU-LLM-kv260/compare/HEAD...HEAD
+[Unreleased]: https://github.com/pccxai/pccx-FPGA-NPU-LLM-kv260/compare/HEAD...HEAD

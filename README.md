@@ -23,11 +23,11 @@ wiring are still in progress or planned.
 > the **pccx documentation site**. This repo implements what that site
 > specifies — read the spec first, then come back here for the RTL.
 >
-> **→ [pccx v002 — Architecture & ISA spec](https://hkimw.github.io/pccx/en/docs/v002/index.html)**
-> &nbsp;·&nbsp; [Gemma 3N E4B on pccx v002](https://hkimw.github.io/pccx/en/docs/v002/Models/gemma3n_execution.html)
-> &nbsp;·&nbsp; [한국어 문서](https://hkimw.github.io/pccx/ko/docs/v002/index.html)
+> **→ [pccx v002 — Architecture & ISA spec](https://pccxai.github.io/pccx/en/docs/v002/index.html)**
+> &nbsp;·&nbsp; [Gemma 3N E4B on pccx v002](https://pccxai.github.io/pccx/en/docs/v002/Models/gemma3n_execution.html)
+> &nbsp;·&nbsp; [한국어 문서](https://pccxai.github.io/pccx/ko/docs/v002/index.html)
 
-Related repos: [pccx (spec)](https://github.com/hkimw/pccx) · [pccx-lab (profiler / simulator)](https://github.com/hkimw/pccx-lab) · [llm-bottleneck-lab (related research)](https://github.com/hkimw/llm-bottleneck-lab)
+Related repos: [pccx (spec)](https://github.com/pccxai/pccx) · [pccx-lab (profiler / simulator)](https://github.com/pccxai/pccx-lab) · [llm-bottleneck-lab (related research)](https://github.com/hkimw/llm-bottleneck-lab)
 
 ---
 
@@ -35,14 +35,14 @@ Related repos: [pccx (spec)](https://github.com/hkimw/pccx) · [pccx-lab (profil
 
 | Layer                                | Lives in                                   | Authoritative source                                                                     |
 | ------------------------------------ | ------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| Architecture / ISA / driver spec     | `pccx/docs/v002/`                          | [pccx v002 docs](https://hkimw.github.io/pccx/en/docs/v002/index.html)               |
-| Target-model pipeline (Gemma 3N E4B) | `pccx/docs/v002/Models/`                   | [Models section](https://hkimw.github.io/pccx/en/docs/v002/Models/index.html)        |
+| Architecture / ISA / driver spec     | `pccx/docs/v002/`                          | [pccx v002 docs](https://pccxai.github.io/pccx/en/docs/v002/index.html)               |
+| Target-model pipeline (Gemma 3N E4B) | `pccx/docs/v002/Models/`                   | [Models section](https://pccxai.github.io/pccx/en/docs/v002/Models/index.html)        |
 | RTL (SystemVerilog)                  | this repo — `hw/rtl/`                      | —                                                                                         |
-| Bare-metal driver (C/C++)            | this repo — `sw/driver/`                   | API spec: [Drivers/api](https://hkimw.github.io/pccx/en/docs/v002/Drivers/api.html)  |
+| Bare-metal driver (C/C++)            | this repo — `sw/driver/`                   | API spec: [Drivers/api](https://pccxai.github.io/pccx/en/docs/v002/Drivers/api.html)  |
 | Application                          | this repo — `sw/gemma3NE4B/`               | —                                                                                         |
 
 If you want to **read about how the accelerator works**, head to the
-**[pccx v002 docs](https://hkimw.github.io/pccx/en/docs/v002/index.html)** —
+**[pccx v002 docs](https://pccxai.github.io/pccx/en/docs/v002/index.html)** —
 that's the canonical source for every architectural decision in this repo.
 If you want to **read the RTL or synthesize the bitstream**, stay here.
 
@@ -50,7 +50,7 @@ If you want to **read the RTL or synthesize the bitstream**, stay here.
 
 ## Architecture Snapshot (pccx v002)
 
-[![pccx v002 architecture](https://raw.githubusercontent.com/hkimw/pccx/main/assets/images/Architecture/v002/architecture_v002.png)](https://hkimw.github.io/pccx/en/docs/v002/Architecture/top_level.html)
+[![pccx v002 architecture](https://raw.githubusercontent.com/pccxai/pccx/main/assets/images/Architecture/v002/architecture_v002.png)](https://pccxai.github.io/pccx/en/docs/v002/Architecture/top_level.html)
 
 *Click the diagram for the annotated top-level page on the pccx site.*
 
@@ -67,8 +67,8 @@ Three heterogeneous cores around a centralized L2 URAM cache:
 - **Activation path**: host DDR4 → ACP DMA → L2 URAM (1.75 MB, true dual port).
 - **Direct-connect FIFO**: GEMV → SFU, so softmax runs without an L2 round-trip.
 
-Full rationale and numbers: [Top-Level →](https://hkimw.github.io/pccx/en/docs/v002/Architecture/top_level.html)
-· [Design rationale →](https://hkimw.github.io/pccx/en/docs/v002/Architecture/rationale.html)
+Full rationale and numbers: [Top-Level →](https://pccxai.github.io/pccx/en/docs/v002/Architecture/top_level.html)
+· [Design rationale →](https://pccxai.github.io/pccx/en/docs/v002/Architecture/rationale.html)
 
 ---
 
@@ -78,16 +78,16 @@ Weight-stationary 2D systolic layout. Activations broadcast along
 columns, partial sums propagate vertically into the result accumulator.
 Used only during prefill; idle during decode.
 
-[![GEMM array layout](https://raw.githubusercontent.com/hkimw/pccx/main/assets/images/Architecture/v002/Processing_Elements_GEMM_1_v002.png)](https://hkimw.github.io/pccx/en/docs/v002/Architecture/gemm_core.html)
+[![GEMM array layout](https://raw.githubusercontent.com/pccxai/pccx/main/assets/images/Architecture/v002/Processing_Elements_GEMM_1_v002.png)](https://pccxai.github.io/pccx/en/docs/v002/Architecture/gemm_core.html)
 
 Inside each PE — a DSP48E2 wrapped with input flip-flops on both
 Activation and Weight ports, and an accumulator with a P-register
 output:
 
-[![GEMM single PE](https://raw.githubusercontent.com/hkimw/pccx/main/assets/images/Architecture/v002/Processing_Elements_GEMM_2_v002.png)](https://hkimw.github.io/pccx/en/docs/v002/Architecture/gemm_core.html)
+[![GEMM single PE](https://raw.githubusercontent.com/pccxai/pccx/main/assets/images/Architecture/v002/Processing_Elements_GEMM_2_v002.png)](https://pccxai.github.io/pccx/en/docs/v002/Architecture/gemm_core.html)
 
-Details: [GEMM core →](https://hkimw.github.io/pccx/en/docs/v002/Architecture/gemm_core.html)
-· [GEMM dataflow →](https://hkimw.github.io/pccx/en/docs/v002/ISA/dataflow.html)
+Details: [GEMM core →](https://pccxai.github.io/pccx/en/docs/v002/Architecture/gemm_core.html)
+· [GEMM dataflow →](https://pccxai.github.io/pccx/en/docs/v002/ISA/dataflow.html)
 
 ---
 
@@ -98,15 +98,15 @@ Activation broadcast and a Weight row. Outputs feed a reduction tree
 that collapses partial products into the final vector entry register.
 The primary compute path during autoregressive decode.
 
-[![GEMV core layout](https://raw.githubusercontent.com/hkimw/pccx/main/assets/images/Architecture/v002/Processing_Elements_GEMV_1_v002.png)](https://hkimw.github.io/pccx/en/docs/v002/Architecture/gemv_core.html)
+[![GEMV core layout](https://raw.githubusercontent.com/pccxai/pccx/main/assets/images/Architecture/v002/Processing_Elements_GEMV_1_v002.png)](https://pccxai.github.io/pccx/en/docs/v002/Architecture/gemv_core.html)
 
 Per-cycle operand shapes — a 1×N activation row multiplied against an
 N×N weight tile:
 
-[![GEMV operand shapes](https://raw.githubusercontent.com/hkimw/pccx/main/assets/images/Architecture/v002/Processing_Elements_GEMV_2_v002.png)](https://hkimw.github.io/pccx/en/docs/v002/Architecture/gemv_core.html)
+[![GEMV operand shapes](https://raw.githubusercontent.com/pccxai/pccx/main/assets/images/Architecture/v002/Processing_Elements_GEMV_2_v002.png)](https://pccxai.github.io/pccx/en/docs/v002/Architecture/gemv_core.html)
 
-Details: [GEMV core →](https://hkimw.github.io/pccx/en/docs/v002/Architecture/gemv_core.html)
-· [GEMV dataflow →](https://hkimw.github.io/pccx/en/docs/v002/ISA/dataflow.html)
+Details: [GEMV core →](https://pccxai.github.io/pccx/en/docs/v002/Architecture/gemv_core.html)
+· [GEMV dataflow →](https://pccxai.github.io/pccx/en/docs/v002/ISA/dataflow.html)
 
 ---
 
@@ -117,12 +117,12 @@ The DSP48E2 has a single 27×18 multiplier, not two. pccx v002 bit-packs
 port B, so each DSP emits **two MACs per cycle** into the 48-bit
 accumulator with a 19-bit guard band between the two channels.
 
-[![DSP48E2 W4A8 port layout](https://raw.githubusercontent.com/hkimw/pccx/main/assets/images/Architecture/v002/Processing_Elements_GEMM_4_v002.png)](https://hkimw.github.io/pccx/en/docs/v002/Architecture/dsp48e2_w4a8.html)
+[![DSP48E2 W4A8 port layout](https://raw.githubusercontent.com/pccxai/pccx/main/assets/images/Architecture/v002/Processing_Elements_GEMM_4_v002.png)](https://pccxai.github.io/pccx/en/docs/v002/Architecture/dsp48e2_w4a8.html)
 
 After accumulation, a sign-recovery step restores the upper channel
 when the lower channel borrowed a carry:
 
-[![Sign recovery SV snippet](https://raw.githubusercontent.com/hkimw/pccx/main/assets/images/Architecture/v002/Processing_Elements_GEMM_5_v002.png)](https://hkimw.github.io/pccx/en/docs/v002/Architecture/dsp48e2_w4a8.html)
+[![Sign recovery SV snippet](https://raw.githubusercontent.com/pccxai/pccx/main/assets/images/Architecture/v002/Processing_Elements_GEMM_5_v002.png)](https://pccxai.github.io/pccx/en/docs/v002/Architecture/dsp48e2_w4a8.html)
 
 - Maximum accumulations before draining the ACCM: **2^10 ≈ 1024** per
   channel (guard-band limited).
@@ -131,7 +131,7 @@ when the lower channel borrowed a carry:
   tree and merges the partial sums.
 - Peak: **2048 MAC × 400 MHz ≈ 819 GMAC/s** across the two systolic arrays.
 
-Details: [DSP48E2 W4A8 bit-packing →](https://hkimw.github.io/pccx/en/docs/v002/Architecture/dsp48e2_w4a8.html)
+Details: [DSP48E2 W4A8 bit-packing →](https://pccxai.github.io/pccx/en/docs/v002/Architecture/dsp48e2_w4a8.html)
 
 ---
 
@@ -154,12 +154,12 @@ End-to-end decode flow, per-cycle overlap strategy, instruction-level
 mapping, memory layout, and the performance budget all live in the
 pccx Models section:
 
-- [Gemma 3N overview](https://hkimw.github.io/pccx/en/docs/v002/Models/gemma3n_overview.html)
-- [Full operator pipeline (embedding → sampling)](https://hkimw.github.io/pccx/en/docs/v002/Models/gemma3n_pipeline.html)
-- [Attention & RoPE constraints](https://hkimw.github.io/pccx/en/docs/v002/Models/gemma3n_attention_rope.html)
-- [PLE & LAuReL routing rules](https://hkimw.github.io/pccx/en/docs/v002/Models/gemma3n_ple_laurel.html)
-- [FFN Gaussian Top-K sparsity](https://hkimw.github.io/pccx/en/docs/v002/Models/gemma3n_ffn_sparsity.html)
-- [**Execution & scheduling on pccx v002**](https://hkimw.github.io/pccx/en/docs/v002/Models/gemma3n_execution.html)
+- [Gemma 3N overview](https://pccxai.github.io/pccx/en/docs/v002/Models/gemma3n_overview.html)
+- [Full operator pipeline (embedding → sampling)](https://pccxai.github.io/pccx/en/docs/v002/Models/gemma3n_pipeline.html)
+- [Attention & RoPE constraints](https://pccxai.github.io/pccx/en/docs/v002/Models/gemma3n_attention_rope.html)
+- [PLE & LAuReL routing rules](https://pccxai.github.io/pccx/en/docs/v002/Models/gemma3n_ple_laurel.html)
+- [FFN Gaussian Top-K sparsity](https://pccxai.github.io/pccx/en/docs/v002/Models/gemma3n_ffn_sparsity.html)
+- [**Execution & scheduling on pccx v002**](https://pccxai.github.io/pccx/en/docs/v002/Models/gemma3n_execution.html)
 
 ---
 
@@ -175,8 +175,8 @@ Five opcodes, 64 bits each: `[63:60]` opcode + `[59:0]` body.
 | `4'h3` | `OP_MEMSET`| Write shape / size / scale constants to the Constant Cache              |
 | `4'h4` | `OP_CVO`   | Element-wise non-linear (exp, sqrt, GELU, sin, cos, reduce_sum, scale, recip) |
 
-Spec: [Per-instruction encoding →](https://hkimw.github.io/pccx/en/docs/v002/ISA/instructions.html)
-· [Dataflow per opcode →](https://hkimw.github.io/pccx/en/docs/v002/ISA/dataflow.html)
+Spec: [Per-instruction encoding →](https://pccxai.github.io/pccx/en/docs/v002/ISA/instructions.html)
+· [Dataflow per opcode →](https://pccxai.github.io/pccx/en/docs/v002/ISA/dataflow.html)
 
 The pipeline is **fully decoupled**: the front-end decodes and enqueues
 into per-engine FIFOs, and each compute engine fires independently once
@@ -211,7 +211,7 @@ enforced at RTL / memory controller / driver level:
    (`max_tokens = 8192`). Wrap-around overwrites the oldest entries.
    This bounds both OOM risk and worst-case memory traffic.
 
-Details: [KV cache strategy →](https://hkimw.github.io/pccx/en/docs/v002/Architecture/kv_cache.html)
+Details: [KV cache strategy →](https://pccxai.github.io/pccx/en/docs/v002/Architecture/kv_cache.html)
 
 ---
 
@@ -233,8 +233,8 @@ This repository hosts the RTL for **both** active tracks. As of
 Full phase-by-phase plan, decision points, compute budget, and Year 2
 **Auto-Porting Pipeline α** vision:
 
-**→ [Roadmap (EN)](https://hkimw.github.io/pccx/en/docs/roadmap.html)**
-&nbsp;·&nbsp; [**한국어**](https://hkimw.github.io/pccx/ko/docs/roadmap.html)
+**→ [Roadmap (EN)](https://pccxai.github.io/pccx/en/docs/roadmap.html)**
+&nbsp;·&nbsp; [**한국어**](https://pccxai.github.io/pccx/ko/docs/roadmap.html)
 
 ---
 
@@ -262,7 +262,7 @@ Full phase-by-phase plan, decision points, compute budget, and Year 2
 > The current `hw/rtl/` tree reflects the v001 parameterization
 > (W4A16 / 32×32 array / 1 DSP = 1 MAC). Re-parameterization to the
 > v002 target (W4A8 / 32×16 ×2 / 1 DSP = 2 MAC) is the current
-> in-flight task. See the [design rationale](https://hkimw.github.io/pccx/en/docs/v002/Architecture/rationale.html#id3)
+> in-flight task. See the [design rationale](https://pccxai.github.io/pccx/en/docs/v002/Architecture/rationale.html#id3)
 > for the 3.125× theoretical speedup.
 
 ---
@@ -329,7 +329,7 @@ TB_CORE[tb_new_module]=N   # pick an unused core-id for the emitted trace
 
 Then drop `hw/tb/tb_new_module.sv` with the canonical `$display` line on
 success / failure. See
-[pccx-lab's verification-workflow doc](https://hkimw.github.io/pccx/en/lab/verification-workflow.html)
+[pccx-lab's verification-workflow doc](https://pccxai.github.io/pccx/en/lab/verification-workflow.html)
 for the end-to-end flow diagram and the Tauri IPC surface.
 
 ### What plugs into pccx-lab
@@ -342,7 +342,7 @@ for the end-to-end flow diagram and the Tauri IPC surface.
 | Roofline classification | `RooflineCard`     (runs on the loaded trace)      |
 | Markdown summary        | `generate_markdown_report` IPC                     |
 
-[pccx-lab]: https://github.com/hkimw/pccx-lab
+[pccx-lab]: https://github.com/pccxai/pccx-lab
 
 ---
 

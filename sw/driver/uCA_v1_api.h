@@ -10,7 +10,7 @@
 // uca_* call returns immediately after issuing to the instruction FIFO.
 // Call uca_sync() to wait for all in-flight operations to complete.
 //
-// Encoding reference: https://hwkim-dev.github.io/pccx/en/docs/v002/ISA/index.html
+// Encoding reference: https://pccxai.github.io/pccx/en/docs/v002/ISA/index.html
 // ================================================================================
 
 #ifndef UCA_V1_API_H

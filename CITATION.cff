@@ -12,8 +12,8 @@ abstract: >-
   production bitstream release.
 type: software
 license: Apache-2.0
-repository-code: "https://github.com/hkimw/pccx-FPGA-NPU-LLM-kv260"
-url: "https://hkimw.github.io/pccx/"
+repository-code: "https://github.com/pccxai/pccx-FPGA-NPU-LLM-kv260"
+url: "https://pccxai.github.io/pccx/"
 authors:
   - family-names: Kim
     given-names: Hyunwoo
@@ -24,7 +24,7 @@ authors:
 references:
   - type: software
     title: "pccx — open FPGA-oriented LLM inference accelerator"
-    repository-code: "https://github.com/hkimw/pccx"
+    repository-code: "https://github.com/pccxai/pccx"
     notes: "Canonical architecture, ISA, and docs that this repo implements."
 keywords:
   - FPGA
