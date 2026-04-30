@@ -1,0 +1,93 @@
+name: repo-validate
+
+# Lightweight always-run gate. Fast, decisive, no external installs.
+# Designed to be a stable required-status-check candidate for the main
+# branch. The Sail typecheck workflow has a strict paths filter and
+# cannot back a required check on its own; this fills that gap.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repo-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Forbidden basename scan
+        run: |
+          set -e
+          bad=""
+          for name in CLAUDE.md GEMINI.md AGENTS.md JULES_REVIEW.md TODO.md; do
+            hits=$(git ls-files | grep -E "(^|/)${name}\$" || true)
+            if [ -n "$hits" ]; then bad="${bad}${hits}"$'\n'; fi
+          done
+          for prefix in '.private-ai/' '.github/workflows/private-ci.yml' '.github/workflows/gemini-'; do
+            hits=$(git ls-files | grep -F "$prefix" || true)
+            if [ -n "$hits" ]; then bad="${bad}${hits}"$'\n'; fi
+          done
+          tasks=$(git ls-files | grep -F "_Tasks_for_Claude" || true)
+          if [ -n "$tasks" ]; then bad="${bad}${tasks}"$'\n'; fi
+          if [ -n "$bad" ]; then
+            echo "::error::Forbidden basenames present in tracked tree:"
+            printf '%s' "$bad"
+            exit 1
+          fi
+
+      - name: Stale owner URL scan
+        run: |
+          set -e
+          # pccx and pccx-lab moved to pccxai on 2026-04-30. The repo's
+          # own README intentionally keeps a 'Related repos' link to
+          # hkimw/llm-bottleneck-lab (personal research repo); the scan
+          # below targets transferred-repo paths only.
+          bad=""
+          for pattern in \
+            'hwkim-dev' \
+            'hkimw.github.io/pccx' \
+            'hwkim-dev.github.io/pccx' \
+            'github.com/hwkim-dev/pccx' \
+            'github.com/hkimw/pccx-lab' \
+            'github.com/hkimw/pccx-FPGA-NPU-LLM-kv260'
+          do
+            hits=$(git grep -nF -- "$pattern" -- ':!.github/workflows/validate.yml' || true)
+            if [ -n "$hits" ]; then bad="${bad}${hits}"$'\n'; fi
+          done
+          # Bare github.com/hkimw/pccx (not followed by -lab or -FPGA-...).
+          hits=$(git grep -nP 'github\.com/hkimw/pccx(?![A-Za-z0-9-])' -- ':!.github/workflows/validate.yml' || true)
+          if [ -n "$hits" ]; then bad="${bad}${hits}"$'\n'; fi
+          if [ -n "$bad" ]; then
+            echo "::error::Stale owner URLs found:"
+            printf '%s' "$bad"
+            exit 1
+          fi
+
+      - name: Phantom .gitmodules check
+        run: |
+          set -e
+          if [ -f .gitmodules ]; then
+            echo "::error::.gitmodules is present. The previous llm-lite submodule was a phantom and was removed; recreating it requires a real, reachable target."
+            cat .gitmodules
+            exit 1
+          fi
+
+      - name: YAML syntax (workflow files)
+        run: |
+          set -e
+          for f in .github/workflows/*.yml .github/workflows/*.yaml; do
+            [ -f "$f" ] || continue
+            python3 -c "import sys, yaml; yaml.safe_load(open(sys.argv[1]))" "$f" \
+              || { echo "::error::YAML parse error in $f"; exit 1; }
+          done
