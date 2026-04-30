@@ -1,0 +1,37 @@
+cff-version: 1.2.0
+message: >-
+  If you use the pccx KV260 RTL or driver source, please cite it using
+  the metadata in this file.  When citing the wider project, please
+  also reference the canonical architecture repository (`pccx`) listed
+  under `references:` below.
+title: "pccx-FPGA-NPU-LLM-kv260 — Kria KV260 RTL implementation of pccx v002"
+abstract: >-
+  An early SystemVerilog RTL and bare-metal driver source snapshot for
+  the pccx v002 NPU architecture targeting Xilinx Kria KV260.  This
+  repository is a reference implementation, not a timing-closed
+  production bitstream release.
+type: software
+license: Apache-2.0
+repository-code: "https://github.com/hkimw/pccx-FPGA-NPU-LLM-kv260"
+url: "https://hkimw.github.io/pccx/"
+authors:
+  - family-names: Kim
+    given-names: Hyunwoo
+    # TODO(hkimw): set orcid once registered
+    # orcid: "https://orcid.org/0000-0000-0000-0000"
+    # TODO(hkimw): fill in affiliation
+    # affiliation: ""
+references:
+  - type: software
+    title: "pccx — open FPGA-oriented LLM inference accelerator"
+    repository-code: "https://github.com/hkimw/pccx"
+    notes: "Canonical architecture, ISA, and docs that this repo implements."
+keywords:
+  - FPGA
+  - SystemVerilog
+  - Xilinx Kria KV260
+  - Zynq UltraScale+
+  - LLM inference
+  - W4A8 quantization
+  - GEMM
+  - GEMV
