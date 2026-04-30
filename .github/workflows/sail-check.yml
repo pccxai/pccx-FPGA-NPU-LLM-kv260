@@ -15,6 +15,12 @@ on:
       - 'formal/sail/**'
       - '.github/workflows/sail-check.yml'
 
+# Opt JavaScript actions into the Node.js 24 runtime ahead of the
+# 2026-06-02 forced cutover. See:
+# https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   typecheck:
     runs-on: ubuntu-latest
