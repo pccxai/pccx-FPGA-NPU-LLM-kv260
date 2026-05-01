@@ -7,11 +7,11 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## v0.1.0-alpha
+## v0.1.0-alpha — 2026-05-01
 
 First public RTL preview of the pccx v002 NPU implementation targeting
 Xilinx Kria KV260 (Zynq UltraScale+ ZU5EV) under the `pccxai`
-organization. Mirrors the release draft at
+organization. Mirrors the release notes at
 [`docs/releases/v0.1.0-alpha.md`](docs/releases/v0.1.0-alpha.md).
 
 ### Highlights

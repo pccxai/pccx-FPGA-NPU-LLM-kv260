@@ -33,7 +33,7 @@ Related repos: [pccx (spec)](https://github.com/pccxai/pccx) · [pccx-lab (profi
 
 ## Project status
 
-**Public alpha** — first tagged release `v0.1.0-alpha` is in draft. Core
+**Public alpha** — `v0.1.0-alpha` is published as a prerelease. Core
 RTL and ISA are stable; verification and KV260 bring-up are in
 progress. This is not a timing-closed bitstream release. Feedback and
 issues are welcome.
