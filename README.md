@@ -41,11 +41,19 @@ issues are welcome.
 | Entry point | Link |
 | --- | --- |
 | Architecture & ISA spec | <https://pccxai.github.io/pccx/en/docs/v002/index.html> |
+| RTL reference (this repo) | [`hw/rtl/`](hw/rtl/) — top wrapper [`NPU_top.sv`](hw/rtl/NPU_top.sv) |
 | Releases | <https://github.com/pccxai/pccx-FPGA-NPU-LLM-kv260/releases> |
+| `v0.1.0-alpha` notes | [docs/releases/v0.1.0-alpha.md](docs/releases/v0.1.0-alpha.md) |
 | Roadmap (project board) | <https://github.com/orgs/pccxai/projects/1> |
 | Contributing | <https://github.com/pccxai/.github/blob/main/CONTRIBUTING.md> |
-| Discussions | <https://github.com/pccxai/pccx-FPGA-NPU-LLM-kv260/discussions> |
+| How to cite | [CITATION.cff](CITATION.cff) |
+| Verification check | `Sail typecheck` + `repo-validate` required on `main` |
+| Discussions (board bring-up, RTL Q&A) | <https://github.com/pccxai/pccx-FPGA-NPU-LLM-kv260/discussions> |
 | Good first issues | <https://github.com/pccxai/pccx-FPGA-NPU-LLM-kv260/labels/good%20first%20issue> |
+
+> The repository **Wiki** is intentionally empty — RTL- and bring-up
+> questions belong in **Discussions**, and the canonical architecture
+> documentation lives on the [pccx Sphinx site](https://pccxai.github.io/pccx/en/docs/v002/index.html).
 
 ---
 
