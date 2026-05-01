@@ -65,7 +65,7 @@ issues are welcome.
 | Target-model pipeline (Gemma 3N E4B) | `pccx/docs/v002/Models/`                   | [Models section](https://pccxai.github.io/pccx/en/docs/v002/Models/index.html)        |
 | RTL (SystemVerilog)                  | this repo — `hw/rtl/`                      | —                                                                                         |
 | Bare-metal driver (C/C++)            | this repo — `sw/driver/`                   | API spec: [Drivers/api](https://pccxai.github.io/pccx/en/docs/v002/Drivers/api.html)  |
-| Application                          | this repo — `sw/gemma3NE4B/`               | —                                                                                         |
+| Application (planned, v0.2.0)        | this repo — `sw/gemma3NE4B/` (not yet in tree) | —                                                                                     |
 
 If you want to **read about how the accelerator works**, head to the
 **[pccx v002 docs](https://pccxai.github.io/pccx/en/docs/v002/index.html)** —
@@ -281,7 +281,7 @@ Full phase-by-phase plan, decision points, compute budget, and Year 2
 | Python golden model                              | Verified       |
 | pccx v002 re-parameterization (1 DSP = 2 MAC)    | **In progress** |
 | uXC driver (AXI-Lite HAL)                        | Skeleton       |
-| Gemma 3N E4B application (submodule)             | Skeleton       |
+| Gemma 3N E4B application (`sw/gemma3NE4B/`)      | Planned (v0.2.0) — not yet in tree |
 | Simulation / trace-driven verification           | Not started    |
 | Vivado synthesis + timing closure                | Not started    |
 
@@ -309,7 +309,7 @@ hw/
     Library/                  ← BF16 math pkg, algorithms pkg, QUEUE
 sw/
   driver/                     ← AXI-Lite MMIO HAL + inference API (skeleton)
-  gemma3NE4B/                 ← Gemma 3N E4B application (submodule)
+  gemma3NE4B/                 ← Gemma 3N E4B application — planned for v0.2.0, not yet in tree
 docs/                         ← Redirect stub only — full docs live on pccx
 ```
 
