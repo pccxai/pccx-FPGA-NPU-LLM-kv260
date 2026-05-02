@@ -22,10 +22,12 @@
 //   Saturation helper  : sat_inc(...) — saturates instead of wrapping.
 //
 // Stage C contract (this PR)
-//   This package adds vocabulary only. No module instantiates a counter
-//   yet. A later Stage D MVP commit may wire one or two boundary modules
-//   to the struct behind PerfCountersEnable; that wiring will be a
-//   separate, isolated commit per the Stage C decisions memo.
+//   This package defines the observability vocabulary AND now includes
+//   the first parameter-gated internal counter MVP in
+//   mem_u_operation_queue (per-channel handshake_counter_t behind
+//   EnablePerfCounters). Counters remain opt-in and default-disabled;
+//   further Stage D wiring will land as separate isolated commits per
+//   the Stage C decisions memo.
 //
 // Stability
 //   - Widths chosen to fit the worst-case at 400 MHz over a few seconds of
