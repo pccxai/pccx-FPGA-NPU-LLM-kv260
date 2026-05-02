@@ -34,6 +34,7 @@ rtl/Library/Algorithms/QUEUE/IF_queue.sv
 
 # ===| ISA package (depends on types) |========================================
 rtl/NPU_Controller/NPU_Control_Unit/ISA_PACKAGE/isa_pkg.sv
+rtl/MEM_control/memory/Constant_Memory/shape_const_ram.sv
 
 # ===| MAT_CORE |==============================================================
 rtl/MAT_CORE/GEMM_dsp_packer.sv
