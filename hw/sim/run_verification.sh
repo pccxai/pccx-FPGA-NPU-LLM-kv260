@@ -43,8 +43,7 @@ declare -A TB_DEPS=(
     [tb_barrel_shifter_BF16]="barrel_shifter_BF16.sv"
     [tb_ctrl_npu_decoder]="NPU_Controller/NPU_Control_Unit/ISA_PACKAGE/isa_pkg.sv NPU_Controller/NPU_Control_Unit/ctrl_npu_decoder.sv"
     [tb_mem_u_operation_queue]="Constants/compilePriority_Order/E_obs_pkg/perf_counter_pkg.sv NPU_Controller/NPU_Control_Unit/ISA_PACKAGE/isa_pkg.sv MEM_control/IO/mem_u_operation_queue.sv"
-    # tb_GEMM_fmap_staggered_delay: shift-chain timing model not yet
-    # aligned with xsim — drop for now, track as open item.
+    [tb_GEMM_fmap_staggered_delay]="MAT_CORE/GEMM_fmap_staggered_delay.sv"
 )
 
 # Core-id assigned to a tb's emitted pccx trace. Kept contiguous so the UI
@@ -59,6 +58,7 @@ declare -A TB_CORE=(
     [tb_barrel_shifter_BF16]=6
     [tb_ctrl_npu_decoder]=7
     [tb_mem_u_operation_queue]=8
+    [tb_GEMM_fmap_staggered_delay]=9
 )
 
 TB_LIST=(
@@ -71,6 +71,7 @@ TB_LIST=(
     tb_barrel_shifter_BF16
     tb_ctrl_npu_decoder
     tb_mem_u_operation_queue
+    tb_GEMM_fmap_staggered_delay
 )
 
 usage() {

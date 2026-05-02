@@ -91,3 +91,10 @@ rtl/barrel_shifter_BF16.sv
 
 # ===| Top level (last) |=====================================================
 rtl/NPU_top.sv
+
+# ===| BD packaging shim (plain-signal AXI4 around NPU_top) |==================
+# Not the synthesis top — `NPU_top` is. This wrapper exists so the BD IP
+# packager sees plain AXI4 interfaces instead of `axil_if` / `axis_if`.
+# Keeping it in the unified filelist means the BD owner does not have to
+# `add_files` it manually before packaging.
+vivado/npu_core_wrapper.sv

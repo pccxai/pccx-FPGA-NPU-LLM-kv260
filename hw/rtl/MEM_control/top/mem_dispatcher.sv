@@ -73,9 +73,13 @@ module mem_dispatcher #() (
   assign OUT_cvo_busy  = cvo_bridge_busy;
 
   // ===| Shape Constant RAM — FMap |=============================================
+  // Split write- and read-side pointers so the MEMSET handler (write side)
+  // and the LOAD-uop handler (read side) drive independent flops; sharing a
+  // single signal across two always_ff blocks tripped xelab's
+  // multi-driver check.
   logic        fmap_write_enable;
-  logic [ 5:0] fmap_shape_write_address;
-  logic [ 5:0] fmap_shape_read_address;
+  logic [ 5:0] fmap_shape_wr_addr;
+  logic [ 5:0] fmap_shape_rd_addr;
   logic [16:0] fmap_arr_shape_X;
   logic [16:0] fmap_arr_shape_Y;
   logic [16:0] fmap_arr_shape_Z;
@@ -87,8 +91,8 @@ module mem_dispatcher #() (
 
   // ===| Shape Constant RAM — Weight |===========================================
   logic        weight_write_enable;
-  logic [ 5:0] weight_shape_write_address;
-  logic [ 5:0] weight_shape_read_address;
+  logic [ 5:0] weight_shape_wr_addr;
+  logic [ 5:0] weight_shape_rd_addr;
   logic [16:0] weight_arr_shape_X;
   logic [16:0] weight_arr_shape_Y;
   logic [16:0] weight_arr_shape_Z;
@@ -101,35 +105,35 @@ module mem_dispatcher #() (
   // ===| MEMSET handler |========================================================
   always_ff @(posedge clk_core) begin
     if (!rst_n_core) begin
-      fmap_write_enable          <= 1'b0;
-      weight_write_enable        <= 1'b0;
-      fmap_shape_write_address   <= '0;
-      weight_shape_write_address <= '0;
-      fmap_arr_shape_X           <= '0;
-      fmap_arr_shape_Y           <= '0;
-      fmap_arr_shape_Z           <= '0;
-      weight_arr_shape_X         <= '0;
-      weight_arr_shape_Y         <= '0;
-      weight_arr_shape_Z         <= '0;
+      fmap_write_enable   <= 1'b0;
+      weight_write_enable <= 1'b0;
+      fmap_shape_wr_addr  <= '0;
+      weight_shape_wr_addr <= '0;
+      fmap_arr_shape_X    <= '0;
+      fmap_arr_shape_Y    <= '0;
+      fmap_arr_shape_Z    <= '0;
+      weight_arr_shape_X  <= '0;
+      weight_arr_shape_Y  <= '0;
+      weight_arr_shape_Z  <= '0;
     end else begin
       fmap_write_enable   <= 1'b0;
       weight_write_enable <= 1'b0;
 
       case (IN_mem_set_uop.dest_cache)
         data_to_fmap_shape: begin
-          fmap_shape_write_address <= IN_mem_set_uop.dest_addr;
-          fmap_arr_shape_X        <= IN_mem_set_uop.a_value;
-          fmap_arr_shape_Y        <= IN_mem_set_uop.b_value;
-          fmap_arr_shape_Z        <= IN_mem_set_uop.c_value;
-          fmap_write_enable       <= 1'b1;
+          fmap_shape_wr_addr <= IN_mem_set_uop.dest_addr;
+          fmap_arr_shape_X   <= IN_mem_set_uop.a_value;
+          fmap_arr_shape_Y   <= IN_mem_set_uop.b_value;
+          fmap_arr_shape_Z   <= IN_mem_set_uop.c_value;
+          fmap_write_enable  <= 1'b1;
         end
 
         data_to_weight_shape: begin
-          weight_shape_write_address <= IN_mem_set_uop.dest_addr;
-          weight_arr_shape_X        <= IN_mem_set_uop.a_value;
-          weight_arr_shape_Y        <= IN_mem_set_uop.b_value;
-          weight_arr_shape_Z        <= IN_mem_set_uop.c_value;
-          weight_write_enable       <= 1'b1;
+          weight_shape_wr_addr <= IN_mem_set_uop.dest_addr;
+          weight_arr_shape_X   <= IN_mem_set_uop.a_value;
+          weight_arr_shape_Y   <= IN_mem_set_uop.b_value;
+          weight_arr_shape_Z   <= IN_mem_set_uop.c_value;
+          weight_write_enable  <= 1'b1;
         end
 
         default: ;
@@ -141,8 +145,8 @@ module mem_dispatcher #() (
   // consumer input so a one-cycle LOAD uses its own shape_ptr_addr rather
   // than the previous MEMSET/LOAD address.
   always_comb begin
-    fmap_shape_read_address   = IN_LOAD_uop.shape_ptr_addr;
-    weight_shape_read_address = IN_mem_set_uop.dest_addr;
+    fmap_shape_rd_addr   = IN_LOAD_uop.shape_ptr_addr;
+    weight_shape_rd_addr = IN_mem_set_uop.dest_addr;
   end
 
   assign fmap_shape_wr_xyz.x = fmap_arr_shape_X;
@@ -156,9 +160,9 @@ module mem_dispatcher #() (
       .clk   (clk_core),
       .rst_n (rst_n_core),
       .wr_en (fmap_write_enable),
-      .wr_addr(fmap_shape_write_address),
+      .wr_addr(fmap_shape_wr_addr),
       .wr_xyz(fmap_shape_wr_xyz),
-      .rd_addr(fmap_shape_read_address),
+      .rd_addr(fmap_shape_rd_addr),
       .rd_xyz(fmap_shape_rd_xyz)
   );
 
@@ -173,9 +177,9 @@ module mem_dispatcher #() (
       .clk   (clk_core),
       .rst_n (rst_n_core),
       .wr_en (weight_write_enable),
-      .wr_addr(weight_shape_write_address),
+      .wr_addr(weight_shape_wr_addr),
       .wr_xyz(weight_shape_wr_xyz),
-      .rd_addr(weight_shape_read_address),
+      .rd_addr(weight_shape_rd_addr),
       .rd_xyz(weight_shape_rd_xyz)
   );
 

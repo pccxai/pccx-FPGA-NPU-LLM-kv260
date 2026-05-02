@@ -33,7 +33,16 @@ module GEMV_generate_lut
     // e_max (from Cache for Normalization alignment) — only the 8-bit BF16
     // exponent field is carried here; matches GEMV_top's port width.
     input logic [dtype_pkg::Bf16ExpWidth-1:0] IN_cached_emax_out[0:param.fmap_cache_out_cnt-1],
-    output logic signed [param.fixed_mant_width+2:0] OUT_fmap_LUT[0:param.fmap_cache_out_cnt-1][0:param.weight_width-1],
+    // LUT depth = 2^weight_width (one entry per signed INT4 value, -8..+7).
+    output logic signed [param.fixed_mant_width+2:0] OUT_fmap_LUT[0:param.fmap_cache_out_cnt-1][0:(1<<param.weight_width)-1],
+    // OUT_fmap_ready feeds GEMV_accumulate.init, which the reduction_branch
+    // header documents as a one-cycle pulse opening a new GEMV batch. This
+    // module is pure-combinational with no clk/rst_n, so it cannot produce
+    // such a pulse on its own; fmap_cache.rd_valid is also a level held
+    // high across the 2048-cycle broadcast burst. Driving this port from
+    // the level-valid signal would gate the accumulator off for the whole
+    // burst. Left undriven until a clocked edge-detector lands at the
+    // consumer side.
     output logic OUT_fmap_ready
 );
   genvar idx, w;
@@ -42,7 +51,7 @@ module GEMV_generate_lut
       wire signed [29:0] F;
       assign F = {{3{IN_fmap_broadcast[idx][26]}}, IN_fmap_broadcast[idx]};
 
-      for (w = 0; w < 16; w++) begin : lut_entry
+      for (w = 0; w < (1<<param.weight_width); w++) begin : lut_entry
         // w - 8 = INT4 range (-8 ~ 7)
         assign OUT_fmap_LUT[idx][w] = F * $signed(5'(w) - 5'd8);
       end

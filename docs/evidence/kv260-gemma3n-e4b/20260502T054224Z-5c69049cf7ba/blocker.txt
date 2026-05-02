@@ -1,0 +1,6 @@
+status=BLOCKED_BOARD
+reason=Missing required board SSH environment: PCCX_KV260_HOST,PCCX_KV260_USER,PCCX_MODEL_DIR,PCCX_BITSTREAM_PATH,PCCX_RUN_PROMPT,PCCX_RUN_TOKENS,PCCX_BOARD_RUNTIME_DIR
+instructions:
+- Export PCCX_KV260_HOST with the KV260 hostname or IP.
+- Export PCCX_KV260_USER with the SSH user configured for key-based login.
+- Re-run this script after the board is powered, booted, and reachable over SSH.
