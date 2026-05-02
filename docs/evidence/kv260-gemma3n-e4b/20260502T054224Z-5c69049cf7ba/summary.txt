@@ -1,0 +1,16 @@
+run_id=20260502T054224Z-5c69049cf7ba
+branch=bringup/kv260-gemma3n-e4b-runtime
+git_commit=5c69049cf7bac5f84d204ec586cfa1e212361da3
+result_status=BLOCKED_BOARD
+runtime_path=blocked
+board_reachable=no
+model_found=no
+model_location=unknown
+bitstream_found=no
+bitstream_loaded=no
+bitstream_basename=unknown
+bitstream_sha256=unknown
+token_count=unknown
+tok_per_sec=unknown
+elapsed_sec=0.003
+blocker_reason=Missing required board SSH environment: PCCX_KV260_HOST,PCCX_KV260_USER,PCCX_MODEL_DIR,PCCX_BITSTREAM_PATH,PCCX_RUN_PROMPT,PCCX_RUN_TOKENS,PCCX_BOARD_RUNTIME_DIR
