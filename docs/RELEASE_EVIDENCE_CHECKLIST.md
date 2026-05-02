@@ -24,13 +24,14 @@ and [`CHANGELOG.md`](../CHANGELOG.md) for the version under preparation.
 
 For each testbench run include the following.  Current TB inventory:
 `tb_barrel_shifter_BF16`, `tb_ctrl_npu_decoder`, `tb_FROM_mat_result_packer`,
+`tb_GEMM_fmap_staggered_delay`,
 `tb_GEMM_dsp_packer_sign_recovery`, `tb_GEMM_weight_dispatcher`,
-`tb_mat_result_normalizer`, `tb_GEMM_fmap_staggered_delay` (currently FAIL
-— tracked in [#28](https://github.com/pccxai/pccx-FPGA-NPU-LLM-kv260/issues/28)).
+`tb_mat_result_normalizer`, `tb_mem_u_operation_queue`,
+`tb_shape_const_ram`.
 
 - [ ] Command used to run: `cd hw/sim && bash run_verification.sh`
 - [ ] Vivado / xsim version recorded (currently: Vivado v2025.2)
-- [ ] Per-TB pass/fail summary (current: 6/7 PASS, 1 known FAIL)
+- [ ] Per-TB pass/fail summary from the deterministic runner
 - [ ] Known warnings or elaboration errors documented
 - [ ] `.pccx` trace artifacts retained in `hw/sim/work/<tb>/`
 - [ ] Waveform snapshots (`.wdb`) retained for failed TBs
