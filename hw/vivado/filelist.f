@@ -78,8 +78,6 @@ rtl/MEM_control/top/mem_dispatcher.sv
 
 # ===| NPU_Controller |========================================================
 rtl/NPU_Controller/NPU_Control_Unit/ctrl_npu_decoder.sv
-rtl/NPU_Controller/NPU_Control_Unit/ctrl_npu_dispatcher.sv
-rtl/NPU_Controller/NPU_frontend/ctrl_npu_interface.sv
 rtl/NPU_Controller/NPU_frontend/AXIL_CMD_IN.sv
 rtl/NPU_Controller/NPU_frontend/AXIL_STAT_OUT.sv
 rtl/NPU_Controller/NPU_frontend/ctrl_npu_frontend.sv
