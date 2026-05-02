@@ -70,6 +70,9 @@ module preprocess_fmap #(
   logic         fmap_fifo_ready;
 
 
+  // Pad the 128-bit ACP beat into the 256-bit FIFO word. The downstream
+  // shifter pipeline still expects 256 bits — the upper half stays zero
+  // until the two-beat merge harness above is wired up in a future phase.
   xpm_fifo_axis #(
       .FIFO_DEPTH(`DEVICE_XPM_FIFO_DEPTH),
       .TDATA_WIDTH(256),
@@ -79,7 +82,7 @@ module preprocess_fmap #(
       .s_aclk(clk),
       .m_aclk(clk),
       .s_aresetn(rst_n),
-      .s_axis_tdata(S_AXIS_ACP_FMAP.tdata),
+      .s_axis_tdata({128'd0, S_AXIS_ACP_FMAP.tdata}),
       .s_axis_tvalid(S_AXIS_ACP_FMAP.tvalid),
       .s_axis_tready(S_AXIS_ACP_FMAP.tready),
       .m_axis_tdata(fmap_fifo_data),

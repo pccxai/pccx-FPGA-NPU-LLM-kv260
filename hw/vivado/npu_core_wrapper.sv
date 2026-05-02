@@ -18,9 +18,12 @@
 
 `include "npu_interfaces.svh"
 
+// AXI-Lite parameter values must match the `axil_if` defaults in
+// `npu_interfaces.svh` (ADDR_W=12, DATA_W=64). The Zynq PS HPM is 32-bit
+// AXI-Lite; the BD inserts a Smart Connect to convert PS 32→IP 64 width.
 module npu_core_wrapper #(
-  parameter int AXIL_ADDR_W  = 32,
-  parameter int AXIL_DATA_W  = 32,
+  parameter int AXIL_ADDR_W  = 12,
+  parameter int AXIL_DATA_W  = 64,
   parameter int HP_DATA_W    = 128,
   parameter int ACP_DATA_W   = 128
 ) (
@@ -77,7 +80,10 @@ module npu_core_wrapper #(
   // ---------------------------------------------------------------------------
   // Interface instances — one per NPU_top port
   // ---------------------------------------------------------------------------
-  axil_if #(.ADDR_WIDTH(AXIL_ADDR_W), .DATA_WIDTH(AXIL_DATA_W)) axil_inst ();
+  axil_if #(.ADDR_W(AXIL_ADDR_W), .DATA_W(AXIL_DATA_W)) axil_inst (
+    .clk  (clk_axi),
+    .rst_n(rst_axi_n)
+  );
   axis_if #(.DATA_WIDTH(HP_DATA_W))  hp0_inst ();
   axis_if #(.DATA_WIDTH(HP_DATA_W))  hp1_inst ();
   axis_if #(.DATA_WIDTH(HP_DATA_W))  hp2_inst ();
