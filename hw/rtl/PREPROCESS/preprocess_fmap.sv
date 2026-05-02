@@ -3,15 +3,32 @@
 `include "GEMM_Array.svh"
 `include "npu_interfaces.svh"
 
-/**
- * Module: gemm_fmap_preprocessor
- *
- * Role:
- * - Combined 256-bit FMap streaming from HPC0/HPC1.
- * - e_max (Exponent) extraction and caching for BFP.
- * - Mantissa shifting to Fixed-point.
- * - SRAM Caching for broadcasting to multiple compute engines (Branch point).
- */
+// ===| Module: preprocess_fmap — BF16 → fixed-point fmap front-end |=============
+// Purpose      : Convert ACP-streamed BF16 fmap into the fixed-point mantissa
+//                array consumed by the systolic, GEMV, and CVO engines, plus
+//                cache the per-block e_max for downstream re-normalisation.
+// Spec ref     : pccx v002 §2.2 (PREPROCESS), §5.2 (fmap cache).
+// Clock        : clk @ 400 MHz.
+// Reset        : rst_n active-low; i_clear synchronous soft-clear (clears
+//                e_max cache pointers and SRAM write address).
+// Pipeline     : (1) 256-bit AXI-Stream FIFO  → (2) e_max parse / cache
+//                                              → (3) BF16-fixed shifter
+//                                              → (4) L1 SRAM (fmap_cache).
+// Latency      : ~ shifter pipeline depth + 1 SRAM cycle (see fmap_cache).
+// Throughput   : 32 fixed-point lanes broadcast per cycle once rd_start fires.
+// Handshake    : Input AXIS — backpressured by fmap_shifter_ready.
+//                Output broadcast — synchronous to o_fmap_valid; consumers
+//                must accept unconditionally during the steady-state run.
+// Reset state  : fmap_word_toggle = 0, emax_wr_addr = 0, sram_wr_addr = 0,
+//                emax_group_valid = 0.
+// Counters     : none. (Stage D: fmap_words_in, broadcast_pulses, stall_cycles.)
+// Assertions   : (Stage C) S_AXIS_ACP_FMAP backpressure stability; emax_wr_addr
+//                bounded by FMAP_CACHE_DEPTH.
+// Notes        : Two 128-bit ACP beats are merged into one 256-bit fifo word
+//                upstream; only the lower 128b is currently bound here (see
+//                commented merge harness — a future phase will expose the
+//                upper-half tdata).
+// ===============================================================================
 module preprocess_fmap #(
     parameter fmap_width = `DEVICE_ACP_WIDTH_BIT
 ) (

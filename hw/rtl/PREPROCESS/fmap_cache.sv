@@ -2,14 +2,31 @@
 `include "GEMM_Array.svh"
 `include "GLOBAL_CONST.svh"
 
-/**
- * Module: gemm_fmap_cache
- * Description:
- *   SRAM-based Feature Map Cache for Gemma 3N Decode Phase (GEMV).
- *   - Stores a 1x2048 Feature Map (BF16, converted to 27-bit Mantissas).
- *   - Write Interface: 432-bit (16 x 27-bit) to support high-bandwidth.
- *   - Read Interface: 27-bit (1 word) broadcast to 32 Vertical lanes.
- */
+// ===| Module: fmap_cache — L1 fmap broadcast SRAM (BRAM, 27b × 2048) |=========
+// Purpose      : Hold one Gemma 3N decode-phase fmap row (1×2048) in fixed-
+//                point form, then broadcast one 27-bit element/cycle to all
+//                LANES (= 32) PE columns once rd_start fires.
+// Spec ref     : pccx v002 §5.2 (fmap L1 cache).
+// Clock        : clk (common-clock with parent).
+// Reset        : rst_n active-low.
+// Geometry     : Asymmetric XPM SDPRAM:
+//                Port A (write) — DATA_WIDTH × WRITE_LANES = 27 × 16 = 432b.
+//                Port B (read)  — DATA_WIDTH = 27b, depth = CACHE_DEPTH = 2048.
+// Latency      : 2 BRAM cycles + 1 broadcast register = 3 cycles
+//                (rd_addr → rd_data_broadcast / rd_valid).
+// Throughput   : 1 broadcast element per cycle for CACHE_DEPTH cycles after
+//                rd_start.
+// Handshake    : Push-only on write side (wr_en & wr_valid).
+//                Read side: rd_start triggers a fixed-length sweep; rd_valid
+//                tracks the pipelined output; consumers must accept.
+// Reset state  : is_reading = 0; rd_addr = 0; rd_valid = 0.
+// Counters     : none.
+// Assertions   : (Stage C) is_reading auto-clears at rd_addr == CACHE_DEPTH-1;
+//                wr_addr stays inside [0, 127] (= CACHE_DEPTH/WRITE_LANES).
+// Notes        : The GEMV broadcast pattern (one element fanned across 32
+//                columns) is why we pick a 27b read port instead of a
+//                432b read port.
+// ===============================================================================
 module fmap_cache #(
     parameter DATA_WIDTH  = 27,    // Fixed-point Mantissa width
     parameter WRITE_LANES = 16,    // 16 words per write
