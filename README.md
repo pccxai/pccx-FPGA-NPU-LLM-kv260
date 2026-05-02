@@ -3,13 +3,19 @@
 Open SystemVerilog NPU for Gemma-class LLM inference on AMD/Xilinx
 Kria KV260.
 
-<p align="center">
-  <img src="docs/assets/pccx-kv260-roadmap.svg" alt="PCCX KV260 Roadmap status card" width="920">
-</p>
+```text
+PCCX KV260 Roadmap
 
-<p align="center">
-  <strong>Current status:</strong> RTL alpha · timing closure and full runtime bring-up in progress.
-</p>
+RTL Alpha        ███████████████░░  85%
+Verification     ███████████░░░░░  70%
+Driver Bring-up  ███████░░░░░░░░░  45%
+Bitstream        ████░░░░░░░░░░░░  25%
+Public Release   ██░░░░░░░░░░░░░░  15%
+
+Next milestone: v0.2.0 evidence pack
+```
+
+**Current status:** RTL alpha · timing closure and full runtime bring-up in progress.
 
 This repo is the **bare-metal Kria KV260 implementation** of the
 **pccx v002** NPU architecture. It hosts an early SystemVerilog RTL and
