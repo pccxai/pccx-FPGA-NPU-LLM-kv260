@@ -17,12 +17,43 @@ runtime side must respect.
 | TB regression (7 testbenches) | 7/7 PASS | `hw/sim/work/<tb>/xsim.log` |
 | `npu_core_wrapper` xelab (param fix) | clean past wrapper, hits pre-existing GEMV/`glbl` warnings | `hw/build/xvlog_filelist/xelab_wrapper2.log` |
 | Vivado `create_project.tcl` (KV260 part) | success | `hw/build/vivado_project.log` |
-| Vivado `synth.tcl` (OOC, NPU_top) | in flight — see `hw/build/vivado_synth.log` and `hw/build/reports/` |
+| Vivado `synth.tcl` (OOC, NPU_top) | **aborted intermediate run** — see §1.b below |
 | Vivado `impl.tcl` (place / route / bitstream) | not attempted — gated on BD + clean synth |
 | Block design (`system_bd.tcl`) | not yet authored |
 | Device-tree overlay (`sw/dtbo/`) | not yet authored |
 | Bitstream output (`hw/build/pccx_v002_kv260.bit`) | not yet produced |
 | KV260 smoke run | not possible tonight — see §5 blockers |
+
+### 1.b OOC synth was an intermediate validation run only
+
+OOC synth was attempted as an intermediate wrapper/top validation
+run. It did not complete on this 12 GB host due to swap pressure.
+This is **not** the final bitstream flow; final synthesis and
+implementation should be rerun on a higher-memory host after BD /
+DTBO packaging is in place.
+
+Concretely:
+
+- The run was launched with `./vivado/build.sh synth` against
+  `NPU_top` in OOC mode. It progressed through RTL elaboration,
+  FSM inference, DSP48E2 transformation (1120 instances), into the
+  Cross Boundary and Area Optimization phase, and then stalled with
+  the Vivado-internal "Thrashing Detected" notice as the host (12 GB
+  RAM + 31 GB swap) ran out of resident memory.
+- The run was deliberately stopped — not killed by OOM. The final
+  log tail is preserved in
+  `hw/build/synth_aborted_2026_05_02/runme.log` (1442 lines) so a
+  later host can compare what was reachable.
+- The wrapper / interface fixes documented in §4 do not depend on
+  this run for validation — they were verified independently by
+  xvlog, xelab on the wrapper, and the TB regression suite.
+- No timing report, no DRC report, no utilization report, no
+  bitstream was produced. The runtime worker must not interpret this
+  as silicon-readiness.
+
+When the BD/DTBO path lands and the build is moved to a higher-
+memory host, the same `./vivado/build.sh synth` (or `impl`) command
+re-runs the standard flow.
 
 ## 2. Top module and build commands
 
@@ -269,6 +300,31 @@ just told us about*.
 The runtime worker can ignore these for the AXIL/MMIO and GEMM/CVO
 paths (they are GEMV-internal) but must not advertise the GEMV path as
 silicon-ready until at least items (1) and (2) are fixed.
+
+A deeper xelab pass on `npu_core_wrapper` (with `unisims_ver` /
+`unimacro_ver` / `secureip` / `glbl` linked in) surfaces a few more
+integration-level findings that are also pre-existing — they do not
+fire on any of the unit testbenches because TBs do not stitch the
+full top together:
+
+4. **`mem_dispatcher.sv:77` — `fmap_shape_read_address` multi-driver.**
+   `ERROR: [VRFC 10-3818] variable 'fmap_shape_read_address' is driven
+   by invalid combination of procedural drivers`. This is a genuine
+   RTL bug (one variable assigned in two always blocks).
+5. **`ctrl_npu_frontend.sv:95` — port width mismatch.** `WARNING:
+   [VRFC 10-9543] actual bit length 65 differs from formal bit length
+   64 for port 'IN_data'`. Likely an off-by-one on a sign-extended
+   inst path; not load-bearing but dirty.
+6. **`preprocess_fmap.sv:82` — port width mismatch.** `WARNING: [VRFC
+   10-9543] actual bit length 128 differs from formal bit length 256
+   for port 's_axis_tdata'`. The ACP fmap path is 128-bit at the wrapper
+   port; whatever is declaring 256-bit is stale.
+7. **`ctrl_npu_frontend.sv:62` — `s_awprot` not connected.** Tied off
+   silently; harmless on Zynq HPM but should be wired.
+
+These all sit upstream / sideways of the wrapper change in this PR
+and are not introduced by it. They are listed here so the BD / impl
+owner is not surprised when the next clean-host synth surfaces them.
 
 ## 9. Risk notes
 
