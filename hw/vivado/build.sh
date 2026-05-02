@@ -7,6 +7,7 @@
 #   ./build.sh clean     # wipe build/ + generated .jou/.log
 #
 # Target: Vivado 2023.2+ on Linux. Will attempt Vivado 2025.2 if available.
+# Set PCCX_VIVADO_JOBS=1 or 2 on memory-constrained hosts.
 
 set -euo pipefail
 

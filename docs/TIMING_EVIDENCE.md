@@ -28,6 +28,12 @@ From `hw/`:
 long board-flow job and should only be launched when synthesis is clean
 and the wrapper/block-design boundary is ready.
 
+On memory-constrained hosts, reduce Vivado run parallelism:
+
+```bash
+PCCX_VIVADO_JOBS=1 ./vivado/build.sh synth
+```
+
 ## Expected Report Locations
 
 Generated files land under `hw/build/` and are ignored by git unless a
