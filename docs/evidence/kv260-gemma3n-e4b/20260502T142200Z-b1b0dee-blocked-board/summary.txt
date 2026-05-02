@@ -1,0 +1,16 @@
+run_id=20260502T142200Z-b1b0dee-blocked-board
+branch=closure/v002-runnable-candidate
+git_commit=b1b0dee023c4aeb161415fa3fda652dcf3d1c99a
+result_status=BLOCKED_BOARD
+runtime_path=blocked
+board_reachable=no
+model_found=no
+model_location=unknown
+bitstream_found=no
+bitstream_loaded=no
+bitstream_basename=unknown
+bitstream_sha256=unknown
+token_count=unknown
+tok_per_sec=unknown
+elapsed_sec=0.005
+blocker_reason=Missing required board SSH environment: PCCX_KV260_HOST,PCCX_KV260_USER,PCCX_MODEL_DIR,PCCX_BITSTREAM_PATH,PCCX_RUN_PROMPT,PCCX_RUN_TOKENS,PCCX_BOARD_RUNTIME_DIR

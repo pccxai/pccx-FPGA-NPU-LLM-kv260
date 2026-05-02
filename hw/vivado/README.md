@@ -40,8 +40,8 @@ cd hw
 | `xelab` on `GEMV_top`, `CVO_top`, `GEMM_systolic_top` | ✅ clean |
 | `xelab` on `NPU_top` standalone | ⚪ expected fail — interface ports need a wrapper; see `npu_core_wrapper.sv` |
 | `create_project.tcl` | ✅ runs green |
-| `synth.tcl` (out-of-context) | 🟡 first real smoke test — see `build/reports/` for the outcome of the current run |
-| `impl.tcl` (write_bitstream) | 🔴 not attempted yet — gated on synth being warning-free |
+| `synth.tcl` (out-of-context) | 🟡 attempted locally; no completed report yet. Use `PCCX_VIVADO_JOBS=1` on memory-constrained hosts |
+| `impl.tcl` (write_bitstream) | 🔴 not attempted yet — gated on completed synth evidence |
 | Block design / Zynq PS integration | 🔴 not written yet (see §Next steps) |
 | Device-tree overlay | 🔴 not written yet |
 | Driver smoke test on board | 🔴 not attempted yet |

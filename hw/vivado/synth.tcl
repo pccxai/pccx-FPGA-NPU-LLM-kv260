@@ -23,6 +23,19 @@ set PROJ_DIR [file normalize $HW_ROOT/build/pccx_v002_kv260]
 set REPORTS  $HW_ROOT/build/reports
 file mkdir $REPORTS
 
+set SYNTH_JOBS 4
+if {[info exists ::env(PCCX_VIVADO_JOBS)] && $::env(PCCX_VIVADO_JOBS) ne ""} {
+    set SYNTH_JOBS $::env(PCCX_VIVADO_JOBS)
+}
+if {![string is integer -strict $SYNTH_JOBS] || $SYNTH_JOBS < 1} {
+    puts "\[pccx\] invalid PCCX_VIVADO_JOBS=$SYNTH_JOBS; expected positive integer."
+    exit 2
+}
+if {[catch {set_param general.maxThreads $SYNTH_JOBS} msg]} {
+    puts "\[pccx\] warning: could not set general.maxThreads=$SYNTH_JOBS: $msg"
+}
+puts "\[pccx\] synth jobs/threads = $SYNTH_JOBS"
+
 # Open the project only if create_project.tcl wasn't sourced first.
 if {[llength [current_project -quiet]] == 0} {
     open_project $PROJ_DIR/pccx_v002_kv260.xpr
@@ -40,7 +53,7 @@ set_property -name {STEPS.SYNTH_DESIGN.ARGS.MORE OPTIONS} \
              -objects [get_runs synth_1]
 
 # Synthesize.
-launch_runs synth_1 -jobs 4
+launch_runs synth_1 -jobs $SYNTH_JOBS
 wait_on_run synth_1
 
 if {[get_property PROGRESS [get_runs synth_1]] ne "100%"} {

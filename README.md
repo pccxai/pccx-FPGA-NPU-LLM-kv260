@@ -293,7 +293,7 @@ Full phase-by-phase plan, decision points, compute budget, and Year 2
 | uXC driver (AXI-Lite HAL)                        | Skeleton       |
 | Gemma 3N E4B application (`sw/gemma3NE4B/`)      | Planned (v0.2.0) — not yet in tree |
 | Simulation / trace-driven verification           | xsim smoke suite active |
-| Vivado synthesis + timing closure                | Not started    |
+| Vivado synthesis + timing closure                | Synth attempted; no completed report yet. Timing closure pending. |
 
 > The current `hw/rtl/` tree reflects the v001 parameterization
 > (W4A16 / 32×32 array / 1 DSP = 1 MAC). Re-parameterization to the
@@ -347,6 +347,7 @@ PASS verdict rules, and the evidence checklist.
 | Testbench | Module(s) under test | Verdict count |
 |-----------|-----------------------|--------------:|
 | `tb_shape_const_ram`                | `shape_const_ram` (reset / write / read contract)        |   15 |
+| `tb_mem_dispatcher_shape_lookup`    | `mem_dispatcher` + `shape_const_ram` LOAD pointer routing |   11 |
 | `tb_GEMM_dsp_packer_sign_recovery` | `GEMM_dsp_packer` + `GEMM_sign_recovery` (W4A8 dual-MAC) | 1024 |
 | `tb_GEMM_fmap_staggered_delay`     | `GEMM_fmap_staggered_dispatch` (column stagger)          |   65 |
 | `tb_GEMM_weight_dispatcher`        | `GEMM_weight_dispatcher` (upper / lower AND-valid)      |  128 |
