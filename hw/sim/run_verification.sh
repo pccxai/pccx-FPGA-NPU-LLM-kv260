@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Unified verification runner for pccx-FPGA.
 #
-# Runs every known testbench (currently tb_GEMM_dsp_packer_sign_recovery)
-# and reports a one-line summary plus the path to the generated .pccx
-# traces so pccx-lab can visualise them.
+# Runs every known testbench in deterministic order and reports a one-line
+# summary plus the path to the generated .pccx traces so pccx-lab can
+# visualise them.
 #
 # Intentionally idempotent: each tb writes to its own work dir under
 # hw/sim/work/<tb_name>/ so concurrent / repeated runs don't stomp.
@@ -27,6 +27,7 @@ fi
 # ─── Per-testbench RTL dependency map ───────────────────────────────────────
 # Each entry lists the .sv modules xvlog must pick up, relative to hw/rtl/.
 declare -A TB_DEPS=(
+    [tb_shape_const_ram]="NPU_Controller/NPU_Control_Unit/ISA_PACKAGE/isa_pkg.sv MEM_control/memory/Constant_Memory/shape_const_ram.sv"
     [tb_GEMM_dsp_packer_sign_recovery]="MAT_CORE/GEMM_dsp_packer.sv MAT_CORE/GEMM_sign_recovery.sv"
     [tb_mat_result_normalizer]="Constants/compilePriority_Order/C_type_pkg/dtype_pkg.sv MAT_CORE/mat_result_normalizer.sv"
     [tb_GEMM_weight_dispatcher]="MAT_CORE/GEMM_weight_dispatcher.sv"
@@ -41,13 +42,25 @@ declare -A TB_DEPS=(
 # Core-id assigned to a tb's emitted pccx trace. Kept contiguous so the UI
 # Timeline shows one lane per testbench when the traces are composed.
 declare -A TB_CORE=(
-    [tb_GEMM_dsp_packer_sign_recovery]=0
-    [tb_mat_result_normalizer]=1
-    [tb_GEMM_weight_dispatcher]=2
-    [tb_FROM_mat_result_packer]=3
-    [tb_barrel_shifter_BF16]=4
-    [tb_ctrl_npu_decoder]=5
-    [tb_mem_u_operation_queue]=6
+    [tb_shape_const_ram]=0
+    [tb_GEMM_dsp_packer_sign_recovery]=1
+    [tb_mat_result_normalizer]=2
+    [tb_GEMM_weight_dispatcher]=3
+    [tb_FROM_mat_result_packer]=4
+    [tb_barrel_shifter_BF16]=5
+    [tb_ctrl_npu_decoder]=6
+    [tb_mem_u_operation_queue]=7
+)
+
+TB_LIST=(
+    tb_shape_const_ram
+    tb_GEMM_dsp_packer_sign_recovery
+    tb_mat_result_normalizer
+    tb_GEMM_weight_dispatcher
+    tb_FROM_mat_result_packer
+    tb_barrel_shifter_BF16
+    tb_ctrl_npu_decoder
+    tb_mem_u_operation_queue
 )
 
 run_tb() {
@@ -60,7 +73,9 @@ run_tb() {
         rtl_args+=("$HW_DIR/rtl/$rel")
     done
 
+    local tool_status=0
     (
+        set -euo pipefail
         cd "$work"
         echo "  [xvlog]"
         xvlog -sv \
@@ -84,11 +99,21 @@ run_tb() {
             --testbench "$tb" \
             --core-id "${TB_CORE[$tb]:-0}" \
             >"$work/from_xsim_log.log" 2>&1
-    )
+    ) || tool_status=$?
+
+    if (( tool_status != 0 )); then
+        printf '%-50s  TOOL FAIL: see %s\n' "$tb" "$work"
+        return 1
+    fi
 
     local verdict
-    verdict="$(grep -E '^(PASS|FAIL):' "$work/xsim.log" | head -1)"
+    verdict="$(awk '/^(PASS|FAIL):/ { print; exit }' "$work/xsim.log")"
+    if [[ -z "$verdict" ]]; then
+        verdict="FAIL: no PASS/FAIL verdict in $work/xsim.log"
+    fi
     printf '%-50s  %s\n' "$tb" "$verdict"
+
+    [[ "$verdict" == PASS:* ]]
 }
 
 # ─── Main ───────────────────────────────────────────────────────────────────
@@ -96,8 +121,11 @@ echo "==> Running pccx-FPGA testbench suite"
 echo ""
 printf '%-50s  %s\n' "TESTBENCH" "RESULT"
 printf '%-50s  %s\n' "---------" "------"
-for tb in "${!TB_DEPS[@]}"; do
-    run_tb "$tb"
+overall_status=0
+for tb in "${TB_LIST[@]}"; do
+    if ! run_tb "$tb"; then
+        overall_status=1
+    fi
 done
 
 echo ""
@@ -114,3 +142,5 @@ if [[ -f "$HW_DIR/build/reports/timing_summary_post_synth.rpt" ]]; then
 else
     echo "  No synth report — run hw/vivado/synth.tcl first."
 fi
+
+exit "$overall_status"

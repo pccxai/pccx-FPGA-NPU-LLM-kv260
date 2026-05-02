@@ -7,13 +7,9 @@
 //                `weight_array_shape` (Stage E analysis §6.3.1, Stage C
 //                decisions memo item 5).
 //
-//                **AUTHORED-BUT-UNWIRED** in this batch:
-//                this file is intentionally NOT in `hw/vivado/filelist.f`
-//                and `mem_dispatcher.sv` still instantiates the two
-//                concrete modules. It is staged here so a future commit
-//                can migrate `mem_dispatcher` to instantiate this
-//                parameterised form and delete the two duplicates with a
-//                single, focused review.
+//                Wired into `mem_dispatcher.sv` as the replacement for the
+//                legacy concrete shape RAM pair. The old modules can be
+//                removed after migration validation and review.
 //
 // Spec ref     : pccx v002 §3.3 (MEMSET), §5.4 (shape pointer routing).
 // Clock        : clk @ 400 MHz.
@@ -29,18 +25,10 @@
 //                identical to the existing modules' 3 × 17-bit fan-out so
 //                a parent migration is a one-line swap and a port name
 //                change.
-// Migration path:
-//   1. Land this file in filelist.f (after isa_pkg) without removing
-//      fmap_array_shape / weight_array_shape — confirms it lints clean.
-//   2. In `mem_dispatcher.sv`, swap each instance of
-//        fmap_array_shape   u_fmap_shape   (...);
-//        weight_array_shape u_weight_shape (...);
-//      for the parameterised form and rerun
-//      `bash hw/sim/run_verification.sh`.
-//   3. Once the two callers migrate, delete
-//      fmap_array_shape.sv / weight_array_shape.sv and remove the two
-//      filelist lines. `dead_module_inventory.md` updates reflect the
-//      removal.
+// Follow-up:
+//   Delete fmap_array_shape.sv / weight_array_shape.sv and remove their
+//   filelist entries once the dispatcher migration is reviewed with xsim
+//   evidence.
 // ===============================================================================
 
 module shape_const_ram
