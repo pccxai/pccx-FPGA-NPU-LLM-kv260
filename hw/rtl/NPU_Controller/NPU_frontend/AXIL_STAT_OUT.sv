@@ -2,8 +2,27 @@
 
 `include "GLOBAL_CONST.svh"
 
-// AXIL_STAT_OUT
-// AXI4-Lite Read path : NPU → CPU
+// ===| Module: AXIL_STAT_OUT — AXI4-Lite read-path status FIFO |================
+// Purpose      : Buffer NPU status words pushed by the FSM stat encoder,
+//                deliver them to the host via AXI-Lite reads.
+// Spec ref     : pccx v002 §4.1 (control plane register map).
+// Clock        : clk @ 400 MHz (single-clock).
+// Reset        : rst_n active-low; IN_clear synchronous soft-clear.
+// FIFO         : Custom synchronous FIFO, depth FIFO_DEPTH (default 8),
+//                width `ISA_WIDTH (= 64).
+// Latency      : 1 clock from IN_valid push → fifo_empty deassert.
+//                AR handshake → R-channel return on next clock.
+// Throughput   : 1 push and 1 pop per cycle (independent paths).
+// Handshake    : s_arready asserts only when ~rvalid_r && ~fifo_empty,
+//                guaranteeing one outstanding read at a time.
+// Backpressure : Producer side checks ~fifo_full before pushing
+//                (silent drop on overrun — Stage C should add an SVA).
+// Reset state  : wr_ptr/rd_ptr = 0; rvalid_r = 0.
+// Errors       : s_rresp tied 2'b00 (OKAY).
+// Counters     : none. (Stage D candidate: dropped_status_pushes.)
+// ===============================================================================
+//
+// AXI4-Lite Read path : NPU → CPU.
 // Upper module pushes status into FIFO continuously.
 // Drains FIFO to CPU when AXI4-Lite read handshake happens.
 

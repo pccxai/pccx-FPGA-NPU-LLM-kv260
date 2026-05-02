@@ -3,8 +3,28 @@
 // algorithms_pkg is compiled from Library/Algorithms/Algorithms.sv.
 `include "GLOBAL_CONST.svh"
 
-// AXIL_CMD_IN
-// AXI4-Lite Write path : CPU → NPU
+// ===| Module: AXIL_CMD_IN — AXI4-Lite write-path command FIFO |================
+// Purpose      : Accept AXI-Lite writes from the host (CPU), buffer the
+//                instruction stream in a small FIFO, and drain it to the
+//                decoder when IN_decoder_ready is asserted.
+// Spec ref     : pccx v002 §4.1 (control plane register map).
+// Clock        : clk @ 400 MHz (single-clock).
+// Reset        : rst_n active-low; IN_clear synchronous soft-clear.
+// Register map :
+//   ADDR_INST = 12'h000 — push instruction word into FIFO.
+//   ADDR_KICK = 12'h008 — push special marker {bit63=1, rest=0} as kick.
+// FIFO         : IF_queue (DEPTH = FIFO_DEPTH parameter, default 8).
+// Latency      : AXI write-handshake → FIFO push next clock; pop drains
+//                to OUT_data combinationally from cmd_q.pop_data.
+// Backpressure : s_awready deasserts when (aw_pending || cmd_q.full).
+// Reset state  : aw_pending = 0; FIFO cleared; bvalid_r = 0.
+// Errors       : s_bresp tied 2'b00 (OKAY) — no error mapping.
+// Counters     : none.
+// Assertions   : (Stage C) FIFO never overflows (gated by cmd_q.full);
+//                bvalid_r is one-cycle pulse per accepted W beat.
+// ===============================================================================
+//
+// AXI4-Lite Write path : CPU → NPU.
 // Stores incoming commands into a FIFO.
 // Drains FIFO to upper module when IN_decoder_ready is asserted.
 

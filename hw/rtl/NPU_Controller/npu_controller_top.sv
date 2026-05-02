@@ -4,9 +4,22 @@
 
 import isa_pkg::*;
 
-// ===| NPU Controller Top |======================================================
-// Wraps the AXI-Lite frontend and the opcode decoder.
-// Outputs one valid pulse per instruction type along with the raw 60-bit body.
+// ===| Module: npu_controller_top — control-plane wrapper |=====================
+// Purpose      : Aggregate AXIL frontend + opcode decoder behind one boundary.
+//                Hides FIFO/handshake/decoding complexity from NPU_top.
+// Spec ref     : pccx v002 §3 (ISA), §4 (control plane).
+// Clock        : clk (= clk_core, 400 MHz).
+// Reset        : rst_n active-low; i_clear synchronous soft-clear.
+// Latency      : Decode is 1-cycle registered after AXIL kick (ctrl_npu_decoder).
+// Throughput   : Issues at most 1 decoded uop per clock (ISA serial issue).
+// Handshake    : One-hot OUT_*_op_x64_valid pulses — exactly one (or none)
+//                asserted per cycle. Raw 60-bit body driven on OUT_op_x64.
+// Backpressure : Decoder gates pop via fetch_PC_ready; AXIL frontend respects.
+// Reset state  : All OUT_*_op_x64_valid = 0; OUT_op_x64 = 0.
+// Errors       : none surfaced (illegal opcodes silently dropped — TODO).
+// Counters     : none.
+// Assertions   : (Stage C) one-hot of decoded valids; raw_instruction stable
+//                while pop_valid && !fetch_PC_ready.
 // ===============================================================================
 
 module npu_controller_top #() (
