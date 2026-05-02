@@ -106,8 +106,32 @@ in-flight work. Do not delete.
 
 | File | Reason kept | Owner / next step |
 |---|---|---|
-| `Library/Typedef/bf16_int8_quant_pkg.sv` | W4A8 BF16 → INT8 BFP vocabulary; will be wired when `preprocess_bf16_int8_32_pipeline` lands. | User; deferred per Stage C decisions memo (item 6). |
-| `PREPROCESS/preprocess_bf16_int8_32_pipeline.sv` | New W4A8 path under construction. | User; do not auto-stage. |
+| `Library/Typedef/bf16_int8_quant_pkg.sv` | W4A8 BF16 → INT8 BFP vocabulary; will be wired when `preprocess_bf16_int8_32_pipeline` lands. | User; gating hold (see W4A8 gates below). Do not stage in this batch. |
+| `PREPROCESS/preprocess_bf16_int8_32_pipeline.sv` | New W4A8 path under construction. | User; gating hold (see W4A8 gates below). Do not auto-stage. |
+| `MEM_control/memory/Constant_Memory/shape_const_ram.sv` | Parameterised replacement for the duplicate `fmap_array_shape` + `weight_array_shape` pair (Stage C decisions item 5; KELLER §6.3.1). Authored to fix the consolidation shape; not yet wired so existing `mem_dispatcher.sv` still instantiates the legacy modules. | **Separate focused PR** — a self-contained shape-RAM consolidation commit per the "Migration path" comment block in the new file's header. Do NOT bundle with this batch. |
+
+> **W4A8 gating hold.** The two W4A8 files above
+> (`bf16_int8_quant_pkg.sv`, `preprocess_bf16_int8_32_pipeline.sv`)
+> stay untracked until **all five** of the following gates clear:
+>
+> 1. Package-import refactor in
+>    `preprocess_bf16_fixed_pipeline.sv` so the existing pipeline
+>    no longer hard-codes its own width macros and can be diffed
+>    against the new path on equal footing.
+> 2. Golden Python quantizer in `llm-lite/` that emits the bit-
+>    exact reference INT8 BFP stream the RTL must reproduce.
+> 3. Bit-exact RTL TB driving
+>    `preprocess_bf16_int8_32_pipeline` against the Python golden
+>    output, with PASS verdict on the same `run_verification.sh`
+>    harness.
+> 4. `hw/vivado/filelist.f` integration in compile order (after
+>    `dtype_pkg.sv`, before `preprocess_fmap.sv`).
+> 5. `preprocess_fmap` swap to consume the new path on the W4A8
+>    workload selector.
+>
+> Any partial subset of the five would land an authored-but-unwired
+> compile dependency; the user has been explicit that these belong
+> in their own focused PR sequence.
 
 ### 2.3 Safe-deletion candidates (deleted by the companion commit)
 

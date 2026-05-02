@@ -7,31 +7,62 @@ during the Stage C pass. **No assertions are inserted by this pass**;
 this map exists so the next batch can reach for a pre-vetted, ranked
 list rather than re-discover them.
 
-## 1. Why no assertions land in this pass
+## 1. Status — Tier 1 SVA + driver TB landed (this batch)
 
-Three constraints, all softly converging on the same call:
+The Tier 1 candidate `mem_u_operation_queue` push-while-full property
+plus a driver TB (`tb_mem_u_operation_queue`) shipped together in
+this batch. The flow established here — `\`ifndef SYNTHESIS`-guarded
+property/assertion pair at the bottom of the module, plus one TB
+that intentionally exercises the warning path — is the template
+later batches reuse for Tier 2/3/4 candidates.
 
-1. The Stage C scope memo restricts this pass to package / counter /
-   inventory work only.
-2. The current `hw/sim/run_verification.sh` exercises 6 testbenches —
-   `tb_GEMM_dsp_packer_sign_recovery`, `tb_mat_result_normalizer`,
-   `tb_GEMM_weight_dispatcher`, `tb_FROM_mat_result_packer`,
-   `tb_barrel_shifter_BF16`, `tb_ctrl_npu_decoder`. None of them
-   compile the modules where the highest-value SVAs would land
-   (`AXIL_STAT_OUT`, `mem_u_operation_queue`, `mem_dispatcher`,
-   `Global_Scheduler`, `mem_CVO_stream_bridge`, `GEMM_systolic_top`).
-   So an SVA added today only buys lint-time syntax coverage; it
-   wakes up later when a TB starts driving the affected pin.
-3. The codebase currently has zero SVA. There is no track record of
-   the simulator's `disable iff` / `\`ifndef SYNTHESIS` tolerance for
-   the project's xsim flow — adding the first assertion warrants its
-   own focused commit with a TB that intentionally exercises the
-   property, not a drive-by add.
+Specifically landed:
 
-Capture a behaviour-freeze sim baseline (already done — see
-`/tmp/sim_baseline.log` snapshot in the Stage C summary doc) **and**
-land at least one TB that drives one of the candidates below before
-the SVA goes in. The first SVA + its driver TB should ship together.
+  - `mem_u_operation_queue` ACP / NPU silent-drop properties:
+    `a_acp_no_silent_drop` / `a_npu_no_silent_drop` (severity
+    `$warning`).
+  - `mem_u_operation_queue` counter monotonicity properties:
+    `a_acp_in_monotonic` / `a_npu_in_monotonic` (severity
+    `$error` — the saturating counter helper guarantees this).
+  - Driver TB `tb_mem_u_operation_queue.sv` exercises both the
+    legitimate path (counters increment, no warnings) and the
+    over-push path (acp_perf.stall_cycles > 0, $warning fires).
+    Now part of the 7/7 PASS run.
+
+The remaining Tier 2/3/4 candidates below stay deferred for the same
+reason as before: each one needs a focused TB that drives the
+property fault path, otherwise the SVA only buys lint-time syntax
+coverage. Land one Tier 2 candidate per future batch alongside its
+driver TB.
+
+### 1.1 Caveats on what the Tier 1 batch actually covers
+
+The Tier 1 batch landed in this PR is intentionally narrow. Three
+gaps are explicit and stay open for follow-up batches:
+
+  - **Push-side only.** `a_acp_no_silent_drop` and
+    `a_npu_no_silent_drop` cover the silent-drop **push** surface
+    (`IN_*_rdy && fifo_full`). They do **not** observe the
+    pop-side: a consumer that misreads `OUT_*_cmd` because the
+    `valid` line and the `dout` payload are out of phase would not
+    fire either property.
+  - **Monotonicity is a regression guard, not positive coverage.**
+    `a_acp_in_monotonic` / `a_npu_in_monotonic` only check that
+    `in_count` never decreases. They are cheap insurance against a
+    future refactor that swaps `sat_inc_handshake` for a wrapping
+    increment; they say **nothing** about whether the count is
+    correct, whether pushes were lost, or whether the counter
+    actually advanced when expected.
+  - **Pop-side stale-data / `READ_MODE` timing is a separate
+    follow-up.** xpm_fifo_sync's `READ_MODE="std"` lets `empty`
+    deassert one BRAM cycle before `dout` is valid. The current
+    batch handles this in the **scoreboard** (the
+    `OutCountFloor = NPush - 8` tolerance in
+    `tb_mem_u_operation_queue`) and in the
+    `counter_mvp_notes.md` §5 FWFT experiment record. A property-
+    based check (e.g. `OUT_*_cmd_valid |-> $stable(OUT_*_cmd)`
+    until ack) belongs with the §2.3 Tier 3 streaming-handshake
+    work, not with this Tier 1 silent-drop pair.
 
 ## 2. Recommended assertion targets
 
@@ -45,6 +76,10 @@ is the right home.
 These modules silently swallow handshakes when their FIFO is full.
 The contract documentation flags the surface; an SVA makes it
 observable in simulation.
+
+> **Status (this batch):** `mem_u_operation_queue` Tier 1 SVA +
+> `tb_mem_u_operation_queue` driver TB shipped together (see §1).
+> `AXIL_STAT_OUT` remains the next candidate.
 
 #### `AXIL_STAT_OUT` — push dropped on `fifo_full`
 

@@ -33,6 +33,7 @@ declare -A TB_DEPS=(
     [tb_FROM_mat_result_packer]="MAT_CORE/FROM_mat_result_packer.sv"
     [tb_barrel_shifter_BF16]="barrel_shifter_BF16.sv"
     [tb_ctrl_npu_decoder]="NPU_Controller/NPU_Control_Unit/ISA_PACKAGE/isa_pkg.sv NPU_Controller/NPU_Control_Unit/ctrl_npu_decoder.sv"
+    [tb_mem_u_operation_queue]="Constants/compilePriority_Order/E_obs_pkg/perf_counter_pkg.sv NPU_Controller/NPU_Control_Unit/ISA_PACKAGE/isa_pkg.sv MEM_control/IO/mem_u_operation_queue.sv"
     # tb_GEMM_fmap_staggered_delay: shift-chain timing model not yet
     # aligned with xsim — drop for now, track as open item.
 )
@@ -46,6 +47,7 @@ declare -A TB_CORE=(
     [tb_FROM_mat_result_packer]=3
     [tb_barrel_shifter_BF16]=4
     [tb_ctrl_npu_decoder]=5
+    [tb_mem_u_operation_queue]=6
 )
 
 run_tb() {
@@ -69,7 +71,9 @@ run_tb() {
             >xvlog.log 2>&1
 
         echo "  [xelab]"
-        xelab -debug typical "$tb" -s snap >xelab.log 2>&1
+        # -L xpm: needed for TBs that compile xpm_fifo_sync (e.g. the
+        # mem_u_operation_queue queue smoke). No-op for TBs that don't.
+        xelab -L xpm -debug typical "$tb" -s snap >xelab.log 2>&1
 
         echo "  [xsim]"
         xsim snap -R >xsim.log 2>&1
