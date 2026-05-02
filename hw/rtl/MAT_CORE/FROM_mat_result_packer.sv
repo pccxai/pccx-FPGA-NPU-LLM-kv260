@@ -2,12 +2,28 @@
 `timescale 1ns / 1ps
 `include "GEMM_Array.svh"
 
-/**
- * Module: FROM_gemm_result_packer
- * Description:
- *   Collects 32 staggered 16-bit results and packs them into 128-bit DMA words.
- *   Uses an internal FSM to sequentially scan and pack results from all columns.
- */
+// ===| Module: FROM_gemm_result_packer — 32×BF16 → 128b AXIS packer |===========
+// Purpose      : Capture the staggered 16-bit normalised results from all
+//                ARRAY_SIZE columns, then pack 8-element groups into 128-bit
+//                DMA words for the result AXIS bus.
+// Spec ref     : pccx v002 §2.2.7 (result pack), §5.6 (result writeback).
+// Clock        : clk @ 400 MHz.
+// Reset        : rst_n active-low.
+// FSM          : IDLE → CHECK_VALID → SEND_DATA → (next group | IDLE).
+// Latency      : One group (= 8 columns) ready when capture_valid[idx +: 8]
+//                all set; pack happens in SEND_DATA when packed_ready high.
+// Throughput   : 4 packed 128-bit words per ARRAY_SIZE = 32 normaliser
+//                completions (8 BF16 lanes × 16 bit = 128 bit).
+// Handshake    : Standard valid/ready on packed_*. packed_valid is held
+//                high while waiting for packed_ready.
+// Reset state  : capture_valid = 0; capture_reg = 0; state = IDLE.
+// Counters     : o_busy reflects (|capture_valid) || (state != IDLE).
+// Errors       : none.
+// Assertions   : (Stage C) send_idx ≤ ARRAY_SIZE - 8.
+// Notes        : Because rows produce results staggered, capture_reg[i]
+//                holds row i's BF16 until consumed by the SEND_DATA arm
+//                that clears its capture_valid bit.
+// ===============================================================================
 
 module FROM_gemm_result_packer #(
     parameter ARRAY_SIZE = 32

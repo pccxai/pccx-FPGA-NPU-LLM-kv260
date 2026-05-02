@@ -1,30 +1,25 @@
 `timescale 1ns / 1ps
 
-// ===============================================================================
-// Module: GEMM_weight_dispatcher
-// Phase : pccx v002 (W4A8, 1 DSP = 2 MAC)
-//
-// Role
-// ----
-//   Registers the 32-wide INT4 weight stream that the upstream FIFO already
-//   unpacks from HP0 / HP1, and fans it out to the systolic array's
-//   H_in_upper / H_in_lower shift-register chains.
-//
-//   Upstream pipeline stages are responsible for:
-//     * deserializing 128-bit HP AXI words into 32 × INT4 arrays
-//     * interleaving the lane assignment: HP0 → upper channel,
-//       HP1 → lower channel (so both weights of a given PE arrive in
-//       the same cycle and can be packed together by GEMM_dsp_packer)
-//
-//   This module only does the final pipeline flop to preserve 400 MHz
-//   timing and emit a single `weight_valid` that gates `i_weight_valid`
-//   on every PE in the array.
-//
-// v001 -> v002 delta
-// ------------------
-//   v001 had a single unpacked stream (32 × INT4). v002 needs two streams
-//   (upper + lower) because each DSP MAC now processes two weights per
-//   cycle. Both streams use the same weight_cnt width.
+// ===| Module: GEMM_weight_dispatcher — dual-lane INT4 weight register stage |==
+// Purpose      : Final pipeline flop for the dual-lane (upper/lower) INT4
+//                weight bus before it enters the systolic array. Decouples
+//                the HP CDC FIFOs from the 32×32 PE grid timing.
+// Spec ref     : pccx v002 §2.2.2 (weight stationary fan-out).
+// Phase        : pccx v002 (W4A8, 1 DSP = 2 MAC).
+// Clock        : clk @ 400 MHz.
+// Reset        : rst_n active-low.
+// Width        : weight_size (= INT4 = 4) × weight_cnt (= 32).
+// Latency      : 1 register stage (input → weight_upper/lower / weight_valid).
+// Throughput   : 1 dual-INT4 vector per cycle while both lanes valid.
+// Handshake    : fifo_upper_ready / fifo_lower_ready tied to 1'b1 — module
+//                is push-only and never stalls. Misaligned valids starve
+//                the array of pairs (weight_valid is fifo_upper_valid &
+//                fifo_lower_valid).
+// Reset state  : weight_upper/lower zeroed; weight_valid = 0.
+// Counters     : none.
+// Migration    : v001 had a single 32 × INT4 stream; v002 needs two
+//                streams (upper + lower) because each DSP MAC processes
+//                two weights per cycle (GEMM_dsp_packer pairs them).
 // ===============================================================================
 
 `include "GLOBAL_CONST.svh"

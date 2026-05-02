@@ -2,12 +2,28 @@
 `timescale 1ns / 1ps
 `include "GEMM_Array.svh"
 
-/**
- * Module: gemm_result_normalizer
- * Description:
- *   Converts 48-bit 2's complement to Normalized Format (BF16-like).
- *   Pipeline: [1] Sign-Mag -> [2] LOD -> [3] Barrel Shift -> [4] Exp Adj
- */
+// ===| Module: gemm_result_normalizer — INT48 → BF16 4-stage pipeline |=========
+// Purpose      : Convert one column's 48-bit accumulated 2's-complement
+//                result into a BF16 word, re-using the column's delayed
+//                e_max for exponent alignment.
+// Spec ref     : pccx v002 §2.2.6 (output normalisation).
+// Clock        : clk @ 400 MHz.
+// Reset        : rst_n active-low.
+// Pipeline     : 4 stages, fully registered.
+//                  S1 — sign-magnitude (2's comp → |abs|, sign bit).
+//                  S2 — leading-one detect (LOD, priority encoder).
+//                  S3 — barrel shift mantissa + exp adjust (e_max + LOD - 26).
+//                  S4 — pack {sign[1], exp[8], mantissa[7]} = BF16.
+// Latency      : 4 cycles.
+// Throughput   : 1 BF16 word per cycle in steady state.
+// Handshake    : Push-only (valid_in propagates through registered valid).
+// Reset state  : All stage valids = 0; pipeline registers zeroed.
+// Errors       : Zero input → exp = 0, mantissa = 0 (denormal-flush style).
+// Counters     : none.
+// Notes        : The "26" subtraction in S3 assumes the upstream fixed-point
+//                shifter places the implicit-1 at bit 26 (FixedMantWidth−1).
+//                If FixedMantWidth changes, this constant must move with it.
+// ===============================================================================
 module gemm_result_normalizer (
     input logic clk,
     input logic rst_n,

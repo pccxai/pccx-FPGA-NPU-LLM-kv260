@@ -3,16 +3,34 @@
 `include "GLOBAL_CONST.svh"
 `include "GEMM_Array.svh"
 
-/**
- * Module: GEMM_systolic_top
- * Target: Kria KV260 @ 400MHz
- *
- * Architecture V2:
- * - Weight Dispatcher (Unpacker)
- * - Staggered Delay Lines for FMap & Instructions
- * - 32x32 Systolic Array Core
- * - e_max Pipe for Synchronization with Result Output
- */
+// ===| Module: GEMM_systolic_top — 32×32 dual-lane W4A8 systolic engine |========
+// Purpose      : Prefill-phase matrix multiply for transformer decode/prefill.
+//                Hosts the weight-stationary 32×32 PE array plus its weight
+//                unpacker, staggered fmap delay lines, and e_max pipe.
+// Spec ref     : pccx v002 §2.2 (Matrix Core), §3.3 (GEMM uop).
+// Target       : KV260 @ 400 MHz core; cascade break at row 16 per spec.
+// Clock        : clk @ 400 MHz.
+// Reset        : rst_n active-low; i_clear synchronous soft-clear.
+// Topology     : weight_dispatcher → systolic_array → V_ACC_out (raw_res_sum).
+//                emax_pipe[0..ARRAY_SIZE_H-1][0..TOTAL_LATENCY-1] keeps
+//                e_max aligned with raw_res_sum_valid for column normalisers.
+// Latency      : SYSTOLIC_TOTAL_LATENCY cycles (input fmap → V_ACC_out).
+// Throughput   : 1 PE-row per clock once the array is filled; 1 DSP = 2 MAC
+//                via INT4 packing on the A-port (see GEMM_dsp_packer).
+// Data widths  : INT4 weight (4b), INT8 activation (8b on B-port — current
+//                staggered_fmap_INT8 truncation is a v001→v002 migration
+//                placeholder, see TODO inside).
+// Handshake    : Weight side — IN_weight_*_valid + IN_weight_*_ready (dual-lane);
+//                fmap side — push-only (IN_fmap_broadcast / valid).
+// Reset state  : raw_res_sum* = 0, emax_pipe = 0.
+// Errors       : none.
+// Counters     : none.
+// Assertions   : (Stage C) IN_weight_upper_valid and IN_weight_lower_valid
+//                must rise in the same cycle for dual-MAC packing;
+//                staggered_inst_valid one-hot per row at issue.
+// Migration TODO (v002 §2.2): replace BF16 mantissa truncation with INT8
+//                fmap arriving directly from PREPROCESS.
+// ===============================================================================
 
 module GEMM_systolic_top #(
     parameter weight_lane_cnt      = `HP_PORT_CNT,

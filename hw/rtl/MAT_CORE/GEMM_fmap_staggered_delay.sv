@@ -2,6 +2,24 @@
 `timescale 1ns / 1ps
 `include "GEMM_Array.svh"
 
+// ===| Module: GEMM_fmap_staggered_dispatch — column-staggered fmap delay |======
+// Purpose      : Diagonal stagger for the fmap broadcast. Column c sees the
+//                same fmap c clocks later, so all PEs in the same anti-
+//                diagonal compute on the same fmap word. This is the systolic
+//                wave-front discipline.
+// Spec ref     : pccx v002 §2.2.3 (fmap diagonal stagger).
+// Clock        : clk @ 400 MHz.
+// Reset        : rst_n active-low.
+// Geometry     : array_size = number of columns (= ARRAY_SIZE_H = 32).
+//                Column 0 = 0 cycles delay; column N = N cycles delay.
+// Latency      : Per-column = column index; max latency = array_size-1 cycles.
+// Throughput   : 1 fmap broadcast/cycle accepted (push-only, no backpressure).
+// Reset state  : All shift register stages zeroed; row_valid = 0.
+// Counters     : none.
+// Notes        : global_inst (3-bit VLIW flag word) and global_inst_valid
+//                travel down the same delay line so each PE sees its
+//                instruction synchronised with its activation.
+// ===============================================================================
 module GEMM_fmap_staggered_dispatch #(
     // Fixed-point width after shifter
     parameter fmap_width = 27,

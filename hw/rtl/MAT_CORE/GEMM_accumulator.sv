@@ -2,6 +2,21 @@
 `timescale 1ns / 1ps
 `include "GEMM_Array.svh"
 
+// ===| Module: GEMM_accumulator — final-row 48-bit P-add (DSP48E2 ALU only) |===
+// Purpose      : One DSP48E2 per column at the bottom of the systolic array,
+//                used in ALU-only mode (USE_MULT = "NONE") to accumulate
+//                PCIN into the local P-register. Implements GEMM_uop_t.flags.accm.
+// Spec ref     : pccx v002 §2.2.5 (output accumulator strip).
+// Clock        : clk @ 400 MHz.
+// Reset        : rst_n active-low; i_clear synchronous soft-clear (drives RSTP).
+// Latency      : 1 cycle (PREG output register).
+// Throughput   : 1 accumulate/cycle while i_valid asserted (drives CEP).
+// OPMODE       : 9'b00_001_00_10  → P = P + PCIN  (W=00, Z=PCIN, Y=0, X=P).
+// Reset state  : P = 0 via RSTP.
+// Counters     : none.
+// Errors       : Accumulator overflow is not flagged — caller must ensure
+//                bit 47 is reserved by upstream normalisation.
+// ===============================================================================
 module GEMM_accumulator (
     input logic clk,
     input logic rst_n,
