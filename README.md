@@ -292,7 +292,7 @@ Full phase-by-phase plan, decision points, compute budget, and Year 2
 | pccx v002 re-parameterization (1 DSP = 2 MAC)    | **In progress** |
 | uXC driver (AXI-Lite HAL)                        | Skeleton       |
 | Gemma 3N E4B application (`sw/gemma3NE4B/`)      | Planned (v0.2.0) — not yet in tree |
-| Simulation / trace-driven verification           | Not started    |
+| Simulation / trace-driven verification           | xsim smoke suite active |
 | Vivado synthesis + timing closure                | Not started    |
 
 > The current `hw/rtl/` tree reflects the v001 parameterization
@@ -332,27 +332,34 @@ GitHub Pages site.
 ## Verification workflow
 
 The repo ships a minimal xsim harness at `hw/sim/` that every testbench
-under `hw/tb/tb_*.sv` plugs into. One command runs the full suite and
+listed in `hw/sim/run_verification.sh` plugs into. One command runs the full suite and
 emits a `.pccx` trace per bench for [pccx-lab][pccx-lab] to visualise:
 
 ```bash
 hw/sim/run_verification.sh
 ```
 
+See [docs/SIMULATION.md](docs/SIMULATION.md) for generated log paths,
+PASS verdict rules, and the evidence checklist.
+
 ### Current testbench matrix
 
-| Testbench | Module(s) under test | Cycles |
-|-----------|-----------------------|-------:|
+| Testbench | Module(s) under test | Verdict count |
+|-----------|-----------------------|--------------:|
+| `tb_shape_const_ram`                | `shape_const_ram` (reset / write / read contract)        |   15 |
 | `tb_GEMM_dsp_packer_sign_recovery` | `GEMM_dsp_packer` + `GEMM_sign_recovery` (W4A8 dual-MAC) | 1024 |
+| `tb_GEMM_fmap_staggered_delay`     | `GEMM_fmap_staggered_dispatch` (column stagger)          |   65 |
 | `tb_GEMM_weight_dispatcher`        | `GEMM_weight_dispatcher` (upper / lower AND-valid)      |  128 |
 | `tb_mat_result_normalizer`         | `mat_result_normalizer` (48 b 2sC → BF16 4-stage)       |  256 |
 | `tb_FROM_mat_result_packer`        | `FROM_gemm_result_packer` (32 lanes → 4×128 b FSM)      |    4 |
 | `tb_barrel_shifter_BF16`           | `barrel_shifter_BF16` (BF16 → 27 b fixed-point)         |  512 |
 | `tb_ctrl_npu_decoder`              | `ctrl_npu_decoder` (4-bit opcode → one-hot valid)       |    6 |
+| `tb_mem_u_operation_queue`         | `mem_u_operation_queue` (queue push / pop smoke)         |   32 |
 
-Every bench emits the canonical `PASS: <N> cycles, …` line that
+Every bench emits the canonical `PASS:` line that
 [pccx-lab][pccx-lab]'s `from_xsim_log` converter recognises — the
-glob-based runner picks up any new tb that follows the convention.
+deterministic runner fails nonzero on a missing verdict or explicit
+non-PASS verdict.
 
 ### Adding a new testbench
 
