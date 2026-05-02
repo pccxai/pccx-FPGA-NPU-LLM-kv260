@@ -67,8 +67,6 @@ rtl/PREPROCESS/fmap_cache.sv
 rtl/PREPROCESS/preprocess_fmap.sv
 
 # ===| MEM_control |===========================================================
-rtl/MEM_control/memory/Constant_Memory/fmap_array_shape.sv
-rtl/MEM_control/memory/Constant_Memory/weight_array_shape.sv
 rtl/MEM_control/memory/mem_BUFFER.sv
 rtl/MEM_control/memory/mem_GLOBAL_cache.sv
 rtl/MEM_control/IO/mem_u_operation_queue.sv
