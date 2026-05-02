@@ -46,6 +46,24 @@ cd hw
 | Device-tree overlay | 🔴 not written yet |
 | Driver smoke test on board | 🔴 not attempted yet |
 
+## Timing evidence
+
+Generated Vivado evidence lands under `hw/build/reports/` and is ignored
+by git unless a future curated-evidence policy says otherwise. Record the
+summary values in PRs or release notes instead of committing full build
+directories.
+
+Minimum report set:
+
+| Stage | Reports |
+|-------|---------|
+| Post-synthesis | `utilization_post_synth.rpt`, `clocks_post_synth.rpt`, `clock_interaction_post_synth.rpt`, `timing_summary_post_synth.rpt`, `drc_post_synth.rpt` |
+| Post-implementation | `utilization_post_impl.rpt`, `clock_interaction_post_impl.rpt`, `timing_summary_post_impl.rpt`, `drc_post_impl.rpt`, `power_post_impl.rpt` |
+
+See [`../../docs/TIMING_EVIDENCE.md`](../../docs/TIMING_EVIDENCE.md) for
+the review checklist and wording rules. A generated timing report is
+evidence, not a timing-closure claim.
+
 ## Next steps to reach a running board
 
 1. **Synth clean** — resolve whatever `synth.tcl` turns up in

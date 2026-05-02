@@ -55,6 +55,7 @@ open_run synth_1 -name synth_1
 # ----------------------------------------------------------------------------
 report_utilization -hierarchical -file $REPORTS/utilization_post_synth.rpt
 report_clocks       -file                 $REPORTS/clocks_post_synth.rpt
+report_clock_interaction -file            $REPORTS/clock_interaction_post_synth.rpt
 report_timing_summary -delay_type min_max -report_unconstrained \
                       -check_timing_verbose -max_paths 10 \
                       -input_pins -routable_nets \

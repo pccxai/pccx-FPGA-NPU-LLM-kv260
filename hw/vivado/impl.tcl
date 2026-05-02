@@ -40,6 +40,7 @@ if {[get_property PROGRESS [get_runs impl_1]] ne "100%"} {
 open_run impl_1
 
 report_utilization -hierarchical -file $REPORTS/utilization_post_impl.rpt
+report_clock_interaction -file $REPORTS/clock_interaction_post_impl.rpt
 report_timing_summary -delay_type min_max -report_unconstrained \
                       -check_timing_verbose -max_paths 20 \
                       -file                $REPORTS/timing_summary_post_impl.rpt

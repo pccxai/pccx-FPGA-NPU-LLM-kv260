@@ -83,16 +83,21 @@ module mem_dispatcher #() (
   logic [16:0] fmap_arr_shape_X;
   logic [16:0] fmap_arr_shape_Y;
   logic [16:0] fmap_arr_shape_Z;
+  shape_xyz_t  fmap_shape_wr_xyz;
+  shape_xyz_t  fmap_shape_rd_xyz;
   logic [16:0] fmap_read_arr_shape_X;
   logic [16:0] fmap_read_arr_shape_Y;
   logic [16:0] fmap_read_arr_shape_Z;
 
   // ===| Shape Constant RAM — Weight |===========================================
   logic        weight_write_enable;
-  logic [ 5:0] weight_shape_read_address;
+  logic [ 5:0] weight_shape_wr_addr;
+  logic [ 5:0] weight_shape_rd_addr;
   logic [16:0] weight_arr_shape_X;
   logic [16:0] weight_arr_shape_Y;
   logic [16:0] weight_arr_shape_Z;
+  shape_xyz_t  weight_shape_wr_xyz;
+  shape_xyz_t  weight_shape_rd_xyz;
   logic [16:0] weight_read_arr_shape_X;
   logic [16:0] weight_read_arr_shape_Y;
   logic [16:0] weight_read_arr_shape_Z;
@@ -102,6 +107,14 @@ module mem_dispatcher #() (
     if (!rst_n_core) begin
       fmap_write_enable   <= 1'b0;
       weight_write_enable <= 1'b0;
+      fmap_shape_wr_addr  <= '0;
+      weight_shape_wr_addr <= '0;
+      fmap_arr_shape_X    <= '0;
+      fmap_arr_shape_Y    <= '0;
+      fmap_arr_shape_Z    <= '0;
+      weight_arr_shape_X  <= '0;
+      weight_arr_shape_Y  <= '0;
+      weight_arr_shape_Z  <= '0;
     end else begin
       fmap_write_enable   <= 1'b0;
       weight_write_enable <= 1'b0;
@@ -116,11 +129,11 @@ module mem_dispatcher #() (
         end
 
         data_to_weight_shape: begin
-          weight_shape_read_address <= IN_mem_set_uop.dest_addr;
-          weight_arr_shape_X        <= IN_mem_set_uop.a_value;
-          weight_arr_shape_Y        <= IN_mem_set_uop.b_value;
-          weight_arr_shape_Z        <= IN_mem_set_uop.c_value;
-          weight_write_enable       <= 1'b1;
+          weight_shape_wr_addr <= IN_mem_set_uop.dest_addr;
+          weight_arr_shape_X   <= IN_mem_set_uop.a_value;
+          weight_arr_shape_Y   <= IN_mem_set_uop.b_value;
+          weight_arr_shape_Z   <= IN_mem_set_uop.c_value;
+          weight_write_enable  <= 1'b1;
         end
 
         default: ;
@@ -128,32 +141,46 @@ module mem_dispatcher #() (
     end
   end
 
-  fmap_array_shape u_fmap_shape (
+  // Shape RAM reads are combinational. Keep read pointers on the current
+  // consumer input so a one-cycle LOAD uses its own shape_ptr_addr rather
+  // than the previous MEMSET/LOAD address.
+  always_comb begin
+    fmap_shape_rd_addr   = IN_LOAD_uop.shape_ptr_addr;
+    weight_shape_rd_addr = IN_mem_set_uop.dest_addr;
+  end
+
+  assign fmap_shape_wr_xyz.x = fmap_arr_shape_X;
+  assign fmap_shape_wr_xyz.y = fmap_arr_shape_Y;
+  assign fmap_shape_wr_xyz.z = fmap_arr_shape_Z;
+  assign fmap_read_arr_shape_X = fmap_shape_rd_xyz.x;
+  assign fmap_read_arr_shape_Y = fmap_shape_rd_xyz.y;
+  assign fmap_read_arr_shape_Z = fmap_shape_rd_xyz.z;
+
+  shape_const_ram u_fmap_shape (
       .clk   (clk_core),
       .rst_n (rst_n_core),
       .wr_en (fmap_write_enable),
       .wr_addr(fmap_shape_wr_addr),
-      .wr_val0(fmap_arr_shape_X),
-      .wr_val1(fmap_arr_shape_Y),
-      .wr_val2(fmap_arr_shape_Z),
+      .wr_xyz(fmap_shape_wr_xyz),
       .rd_addr(fmap_shape_rd_addr),
-      .rd_val0(fmap_read_arr_shape_X),
-      .rd_val1(fmap_read_arr_shape_Y),
-      .rd_val2(fmap_read_arr_shape_Z)
+      .rd_xyz(fmap_shape_rd_xyz)
   );
 
-  weight_array_shape u_weight_shape (
+  assign weight_shape_wr_xyz.x = weight_arr_shape_X;
+  assign weight_shape_wr_xyz.y = weight_arr_shape_Y;
+  assign weight_shape_wr_xyz.z = weight_arr_shape_Z;
+  assign weight_read_arr_shape_X = weight_shape_rd_xyz.x;
+  assign weight_read_arr_shape_Y = weight_shape_rd_xyz.y;
+  assign weight_read_arr_shape_Z = weight_shape_rd_xyz.z;
+
+  shape_const_ram u_weight_shape (
       .clk   (clk_core),
       .rst_n (rst_n_core),
       .wr_en (weight_write_enable),
-      .wr_addr(weight_shape_read_address),
-      .wr_val0(weight_arr_shape_X),
-      .wr_val1(weight_arr_shape_Y),
-      .wr_val2(weight_arr_shape_Z),
-      .rd_addr(weight_shape_read_address),
-      .rd_val0(weight_read_arr_shape_X),
-      .rd_val1(weight_read_arr_shape_Y),
-      .rd_val2(weight_read_arr_shape_Z)
+      .wr_addr(weight_shape_wr_addr),
+      .wr_xyz(weight_shape_wr_xyz),
+      .rd_addr(weight_shape_rd_addr),
+      .rd_xyz(weight_shape_rd_xyz)
   );
 
   // ===| Shape totals (word counts for DMA) |====================================
@@ -195,7 +222,6 @@ module mem_dispatcher #() (
           };
           acp_rx_start <= 1'b1;
           IN_acp_rdy   <= 1'b1;
-          fmap_shape_rd_addr <= IN_LOAD_uop.shape_ptr_addr;
         end
 
         // L2 → host DDR4 (result DMA out)
@@ -207,7 +233,6 @@ module mem_dispatcher #() (
           };
           acp_rx_start <= 1'b1;
           IN_acp_rdy   <= 1'b1;
-          fmap_shape_rd_addr <= IN_LOAD_uop.shape_ptr_addr;
         end
 
         // L2 → GEMM fmap broadcast
@@ -219,7 +244,6 @@ module mem_dispatcher #() (
           };
           npu_rx_start <= 1'b1;
           IN_npu_rdy   <= 1'b1;
-          fmap_shape_rd_addr <= IN_LOAD_uop.shape_ptr_addr;
         end
 
         // L2 → GEMV fmap broadcast
@@ -231,7 +255,6 @@ module mem_dispatcher #() (
           };
           npu_rx_start <= 1'b1;
           IN_npu_rdy   <= 1'b1;
-          fmap_shape_rd_addr <= IN_LOAD_uop.shape_ptr_addr;
         end
 
         // L2 → CVO input (handled by mem_CVO_stream_bridge below)
