@@ -2,12 +2,28 @@
 `timescale 1ns / 1ps
 `include "GEMM_Array.svh"
 
-/**
- * Module: FROM_gemm_result_packer
- * Description:
- *   Collects 32 staggered 16-bit results and packs them into 128-bit DMA words.
- *   Uses an internal FSM to sequentially scan and pack results from all columns.
- */
+// ===| Module: FROM_gemm_result_packer — 32×BF16 → 128b AXIS packer |===========
+// Purpose      : Capture the staggered 16-bit normalised results from all
+//                ARRAY_SIZE columns, then pack 8-element groups into 128-bit
+//                DMA words for the result AXIS bus.
+// Spec ref     : pccx v002 §2.2.7 (result pack), §5.6 (result writeback).
+// Clock        : clk @ 400 MHz.
+// Reset        : rst_n active-low.
+// FSM          : IDLE → CHECK_VALID → SEND_DATA → (next group | IDLE).
+// Latency      : One group (= 8 columns) ready when capture_valid[idx +: 8]
+//                all set; pack happens in SEND_DATA when packed_ready high.
+// Throughput   : 4 packed 128-bit words per ARRAY_SIZE = 32 normaliser
+//                completions (8 BF16 lanes × 16 bit = 128 bit).
+// Handshake    : Standard valid/ready on packed_*. packed_valid is held
+//                high while waiting for packed_ready.
+// Reset state  : capture_valid = 0; capture_reg = 0; state = IDLE.
+// Counters     : o_busy reflects (|capture_valid) || (state != IDLE).
+// Errors       : none.
+// Assertions   : (Stage C) send_idx ≤ ARRAY_SIZE - 8.
+// Notes        : Because rows produce results staggered, capture_reg[i]
+//                holds row i's BF16 until consumed by the SEND_DATA arm
+//                that clears its capture_valid bit.
+// ===============================================================================
 
 module FROM_gemm_result_packer #(
     parameter ARRAY_SIZE = 32
@@ -27,6 +43,15 @@ module FROM_gemm_result_packer #(
     // =| Status |=
     output logic o_busy
 );
+
+  // ===| Pack Geometry |==========================================================
+  // BeatsPerWord  : how many BF16 lanes fit in one AXIS word
+  //                 (= AXI_STREAM_WIDTH / BF16_WIDTH = 8 today).
+  // LastSendIdx   : the highest send_idx that still leaves a full group inside
+  //                 the capture register (= ARRAY_SIZE - BeatsPerWord). Once
+  //                 send_idx reaches it, the FSM returns to IDLE.
+  localparam int BeatsPerWord = `AXI_STREAM_WIDTH / `BF16_WIDTH;
+  localparam int LastSendIdx  = ARRAY_SIZE - BeatsPerWord;
 
   // ===| Internal Buffer to Hold Results |=======
   // Since systolic array results are staggered, we need to capture them.
@@ -60,7 +85,7 @@ module FROM_gemm_result_packer #(
 
       // Clear valid bits once they are consumed (handled by FSM below)
       if (state == SEND_DATA && packed_ready) begin
-        for (int i = 0; i < 8; i++) begin
+        for (int i = 0; i < BeatsPerWord; i++) begin
           capture_valid[send_idx+i] <= 1'b0;
         end
       end
@@ -84,33 +109,29 @@ module FROM_gemm_result_packer #(
         end
 
         CHECK_VALID: begin
-          // We need 8 results to form a 128-bit word (16*8=128)
-          // In a real systolic array, they might not arrive all at once,
-          // but for simplicity, let's wait until we have a chunk of 8.
-          if (&capture_valid[send_idx+:8]) begin
+          // Wait until BeatsPerWord adjacent rows have produced a valid result
+          // (one 128-bit word = 8 BF16 lanes today).
+          if (&capture_valid[send_idx+:BeatsPerWord]) begin
             state <= SEND_DATA;
           end
         end
 
         SEND_DATA: begin
           if (packed_ready) begin
-            packed_data <= {
-              capture_reg[send_idx+7],
-              capture_reg[send_idx+6],
-              capture_reg[send_idx+5],
-              capture_reg[send_idx+4],
-              capture_reg[send_idx+3],
-              capture_reg[send_idx+2],
-              capture_reg[send_idx+1],
-              capture_reg[send_idx+0]
-            };
+            // Lane b of the BeatsPerWord-wide group lands in the
+            // [b*BF16_WIDTH +: BF16_WIDTH] slice — same byte order as
+            // the original 8-lane concat, but tracks BeatsPerWord so
+            // changes to AXI_STREAM_WIDTH or BF16_WIDTH stay in sync.
+            for (int b = 0; b < BeatsPerWord; b++) begin
+              packed_data[b*`BF16_WIDTH +: `BF16_WIDTH] <= capture_reg[send_idx+b];
+            end
             packed_valid <= 1'b1;
 
-            if (send_idx >= 24) begin
+            if (send_idx >= LastSendIdx) begin
               state    <= IDLE;
               send_idx <= 0;
             end else begin
-              send_idx <= send_idx + 8;
+              send_idx <= send_idx + BeatsPerWord;
               state    <= CHECK_VALID;
             end
           end else begin

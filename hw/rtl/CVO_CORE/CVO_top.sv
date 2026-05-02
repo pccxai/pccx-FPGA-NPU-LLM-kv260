@@ -4,24 +4,38 @@
 import isa_pkg::*;
 import bf16_math_pkg::*;
 
-// ===| CVO Top |=================================================================
-// Wraps CVO_sfu_unit (EXP/SQRT/GELU/RECIP/SCALE/REDUCE_SUM) and
-// CVO_cordic_unit (SIN/COS) behind a unified streaming interface.
-//
-// Data flow:
-//   Host issues OP_CVO via AXI-Lite → Global_Scheduler produces cvo_control_uop_t
-//   → CVO_top latches uop, processes IN_length BF16 elements from L2 stream,
-//     writes results back via output stream.
-//
-// FLAG_SUB_EMAX: subtract IN_e_max from each input before the function.
-//   Implements exp(x - e_max) for numerically stable softmax.
-// FLAG_ACCM: accumulate output into dst (add OUT_result to prior value).
-//   Handled externally by the mem subsystem; CVO_top only signals it via OUT_accm.
-//
-// FSM states:
-//   IDLE    : waiting for valid uop
-//   RUNNING : streaming IN_length elements through the chosen unit
-//   DONE    : pulse OUT_done for one cycle, return to IDLE
+// ===| Module: CVO_top — scalar function unit (SFU + CORDIC) wrapper |==========
+// Purpose      : Run BF16 element-wise non-linear ops (EXP/SQRT/GELU/RECIP/
+//                SCALE/REDUCE_SUM) and trig ops (SIN/COS) behind a unified
+//                streaming interface; provides numerically stable softmax via
+//                FLAG_SUB_EMAX (x - e_max).
+// Spec ref     : pccx v002 §2.4 (CVO core), §3.5 (CVO uop), §5.3 (bridge).
+// Clock        : clk @ 400 MHz.
+// Reset        : rst_n active-low; i_clear synchronous soft-clear.
+// Topology     : Op routing decided by uop_func at IDLE→RUNNING transition:
+//                  CVO_SIN/CVO_COS → CVO_cordic_unit
+//                  others          → CVO_sfu_unit
+// Sub-units    : CVO_sfu_unit (BF16 scalar pipeline), CVO_cordic_unit (rotation
+//                CORDIC for sin/cos pair).
+// Data flow    : Host issues OP_CVO via AXI-Lite → Global_Scheduler produces
+//                cvo_control_uop_t → CVO_top latches uop, processes IN_length
+//                BF16 elements from the L2 stream, writes results back via
+//                the output stream.
+// FLAG_SUB_EMAX: Subtract IN_e_max from each input before the function.
+//                Implements exp(x − e_max) for numerically stable softmax.
+// FLAG_ACCM    : Accumulate output into dst (add OUT_result to prior value).
+//                Handled externally by the mem subsystem; CVO_top only
+//                surfaces it via OUT_accm.
+// FSM states   : IDLE → RUNNING → DONE → IDLE.
+// Latency      : Sub-unit latency (see CVO_sfu_unit / CVO_cordic_unit
+//                contracts) + 1 output register cycle.
+// Throughput   : 1 result per cycle in steady state for non-CORDIC ops.
+// Backpressure : OUT_data_ready ANDs sub-unit ready with (state == RUNNING).
+// Reset state  : ST_IDLE, OUT_result = 0, OUT_result_valid = 0, OUT_done = 0.
+// Errors       : Unknown uop_func falls back to ST_IDLE on default arm.
+// Counters     : none.
+// Assertions   : (Stage C) IN_data_valid && OUT_data_ready only during RUNNING;
+//                OUT_done is one-cycle pulse only.
 // ===============================================================================
 
 module CVO_top (

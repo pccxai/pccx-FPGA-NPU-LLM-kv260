@@ -2,12 +2,28 @@
 `timescale 1ns / 1ps
 `include "GEMM_Array.svh"
 
-/**
- * Module: gemm_result_normalizer
- * Description:
- *   Converts 48-bit 2's complement to Normalized Format (BF16-like).
- *   Pipeline: [1] Sign-Mag -> [2] LOD -> [3] Barrel Shift -> [4] Exp Adj
- */
+// ===| Module: gemm_result_normalizer — INT48 → BF16 4-stage pipeline |=========
+// Purpose      : Convert one column's 48-bit accumulated 2's-complement
+//                result into a BF16 word, re-using the column's delayed
+//                e_max for exponent alignment.
+// Spec ref     : pccx v002 §2.2.6 (output normalisation).
+// Clock        : clk @ 400 MHz.
+// Reset        : rst_n active-low.
+// Pipeline     : 4 stages, fully registered.
+//                  S1 — sign-magnitude (2's comp → |abs|, sign bit).
+//                  S2 — leading-one detect (LOD, priority encoder).
+//                  S3 — barrel shift mantissa + exp adjust (e_max + LOD - 26).
+//                  S4 — pack {sign[1], exp[8], mantissa[7]} = BF16.
+// Latency      : 4 cycles.
+// Throughput   : 1 BF16 word per cycle in steady state.
+// Handshake    : Push-only (valid_in propagates through registered valid).
+// Reset state  : All stage valids = 0; pipeline registers zeroed.
+// Errors       : Zero input → exp = 0, mantissa = 0 (denormal-flush style).
+// Counters     : none.
+// Notes        : ExpAlignBias is sourced from dtype_pkg::FixedMantWidth-1 so
+//                the S3 exponent fix-up tracks the upstream fixed-point
+//                mantissa width automatically.
+// ===============================================================================
 module gemm_result_normalizer (
     input logic clk,
     input logic rst_n,
@@ -19,6 +35,13 @@ module gemm_result_normalizer (
     output logic [15:0] data_out,  // 1:Sign, 8:Exp, 7:Mantissa (BF16 format)
     output logic        valid_out
 );
+
+  // ===| Exponent alignment bias |================================================
+  // The fixed-point mantissa carries the implicit-1 at bit (FixedMantWidth - 1).
+  // Stage S3 must subtract that position from the original e_max so the BF16
+  // exponent reflects the true magnitude of the leading-one. Tying the bias to
+  // dtype_pkg keeps this in lock-step with FixedMantWidth changes.
+  localparam logic [7:0] ExpAlignBias = 8'(dtype_pkg::FixedMantWidth - 1);
 
   // ===| Stage 1: Sign-Magnitude Conversion |=======
   // Converting from 2's complement to absolute value (Sign + Magnitude)
@@ -98,10 +121,10 @@ module gemm_result_normalizer (
         s3_new_exp  <= 8'd0;
         s3_mantissa <= 7'd0;
       end else begin
-        // Update exponent: original e_max + current bit position offset
-        // Example bias: Assume our fixed-point format implies the 1.0 bit is at position 26.
-        // Depending on your actual Shifter logic, this offset (26) should be matched.
-        s3_new_exp <= s2_emax + s2_first_one_pos - 8'd26;
+        // Update exponent: original e_max + current bit position - alignment bias.
+        // ExpAlignBias = dtype_pkg::FixedMantWidth - 1; one place to update if
+        // the upstream fixed-point format ever widens.
+        s3_new_exp <= s2_emax + s2_first_one_pos - ExpAlignBias;
 
         // Align mantissa to BF16 (7 bits of fraction)
         if (s2_first_one_pos >= 7)

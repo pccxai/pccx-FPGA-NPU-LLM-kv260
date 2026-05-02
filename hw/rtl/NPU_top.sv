@@ -8,21 +8,35 @@ import isa_pkg::*;
 import vec_core_pkg::*;
 import bf16_math_pkg::*;
 
-// ===| NPU Top |=================================================================
-// Target: Kria KV260 @ 400 MHz
+// ===| Module: NPU_top — pccx v002 SoC integration wrapper |====================
+// Purpose      : Top-level integration of all v002 NPU subsystems on KV260.
+// Spec ref     : pccx v002 §1 (architecture overview), §6 (KV260 target).
+// Target       : Xilinx Kria KV260 (xck26-sfvc784-2LV-c), ZU5EV.
+// Clock        : clk_core @ 400 MHz (compute), clk_axi @ 250 MHz (HP/AXIL).
+// Reset        : rst_n_core / rst_axi_n active-low. Synchronous release.
+// Soft-clear   : i_clear (active-high, sync) — combined with reset wherever
+//                state is latched. See CLAUDE.md §3 reset convention.
+// Throughput   : Steady-state, dual-lane W4A8 systolic = 32 × 32 × 2 MAC/clk.
+// Backpressure : HP weight FIFOs (mem_HP_buffer) provide CDC + skid; ACP fmap
+//                FIFO (preprocess_fmap) holds at boundary when broadcast stalls.
 //
 // Architecture V2 (SystemVerilog Interface Version):
-//   HPC0 / HPC1  : 256-bit Feature Map caching bus (ACP port).
-//   HP0  ~ HP3   : High-throughput Weight streaming (128-bit each).
-//   HPM  (MMIO)  : Centralised control & VLIW instruction issuing (AXI-Lite).
-//   ACP           : Coherent Result Output.
+//   HPC0 / HPC1 : 256-bit Feature Map caching bus (ACP port).
+//   HP0  ~ HP3  : High-throughput Weight streaming (128-bit each).
+//   HPM  (MMIO) : Centralised control & VLIW instruction issuing (AXI-Lite).
+//   ACP         : Coherent Result Output.
 //
-// Data paths:
+// Data paths (one active per ISA opcode at a time):
 //   OP_GEMM  : ACP_FMAP → preprocess_fmap → systolic → normalizer → packer → ACP_RESULT
 //   OP_GEMV  : ACP_FMAP → preprocess_fmap → GEMV_top (HP2/3 weights)
 //   OP_MEMCPY: ACP DDR4 ↔ L2 (mem_dispatcher via ACP)
 //   OP_MEMSET: Shape constant RAM write (mem_dispatcher)
 //   OP_CVO   : L2 → CVO_top → L2 (mem_dispatcher ↔ CVO stream bridge)
+//
+// Status word (mmio_npu_stat[31:0], surfaced to AXIL_STAT_OUT):
+//   bit 0 : BUSY  = fifo_full | cvo_busy | cvo_disp_busy
+//   bit 1 : DONE  = CVO operation complete pulse (one cycle)
+//   bit 31:2 reserved.
 // ===============================================================================
 
 module NPU_top (
@@ -199,7 +213,7 @@ module NPU_top (
   // ===| v002 dual-lane weight unpack |=========================================
   // HP0 / HP1 each carry a 128-bit AXIS word that holds 32 INT4 weights.
   // Slice each into a 32-element INT4 array for the systolic engine.
-  localparam int WEIGHT_CNT = `HP_PORT_SINGLE_WIDTH / `INT4_WIDTH;  // 32
+  localparam int WEIGHT_CNT = `HP_SINGLE_WIDTH / `INT4_WIDTH;  // 32
   logic [`INT4_WIDTH-1:0] hp0_weight_int4 [0:WEIGHT_CNT-1];
   logic [`INT4_WIDTH-1:0] hp1_weight_int4 [0:WEIGHT_CNT-1];
   genvar wi;

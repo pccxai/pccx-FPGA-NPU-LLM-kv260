@@ -3,8 +3,34 @@
 `include "GEMV_Vec_Matrix_MUL.svh"
 `include "GLOBAL_CONST.svh"
 
-// weight size = 4bit
-// feature_map size =  bf16
+// ===| Module: GEMV_top — Vector Core (4 parallel muV-Core lanes) |==============
+// Purpose      : INT4 weight × BF16 fmap GEMV for transformer decode tokens.
+//                Each of A/B/C/D lanes runs an independent reduction branch
+//                sharing the broadcast fmap LUT generator.
+// Spec ref     : pccx v002 §2.3 (Vector Core), §3.2 (GEMV uop).
+// Clock        : clk @ 400 MHz.
+// Reset        : rst_n active-low.
+// Topology     : 1× GEMV_generate_lut (BF16 fmap → fixed-point LUT, shared)
+//              + 4× GEMV_reduction_branch (per-lane MAC + reduction tree).
+// Data widths  : INT4 weight (param.weight_width), fixed-point mantissa
+//                (param.fixed_mant_width), output 1+2+mant width = signed
+//                fixed-point (fixed_mant_width + 3 bits).
+// Latency      : LUT + reduction tree depth (see GEMV_reduction_branch contract).
+// Throughput   : 1 result/cycle per active lane in steady state, after the
+//                first num_recur cycles of fmap accumulation.
+// Handshake    : Per-lane weight valid+ready; activation gated by
+//                IN_activated_lane[lane] so disabled lanes hold weight stream.
+// Backpressure : OUT_weight_ready_* asserts only while reduction branch is
+//                ready to consume the next weight cycle; upstream (HP2/HP3
+//                CDC FIFO) must respect.
+// Reset state  : All output result valid = 0; result vectors registered to 0.
+// Errors       : none.
+// Counters     : none. (Stage D: lane_active_cycles, weight_handshakes.)
+// Assertions   : (Stage C) OUT_weight_ready_* never asserted while
+//                IN_weight_valid_* low; OUT_result_valid_* one-hot per cycle
+//                across activated lanes.
+// ===============================================================================
+// weight size = 4bit, feature_map size = BF16 (converted to fixed-point upstream).
 module GEMV_top
   import vec_core_pkg::*;
 #(

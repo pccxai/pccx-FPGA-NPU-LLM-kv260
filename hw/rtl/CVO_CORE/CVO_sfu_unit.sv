@@ -4,19 +4,28 @@
 import isa_pkg::*;
 import bf16_math_pkg::*;
 
-// ===| CVO Special Function Unit |===============================================
-// Streaming BF16 SFU for: EXP, SQRT, GELU, RECIP, SCALE, REDUCE_SUM.
-// One element per cycle throughput once the pipeline is filled.
-//
-// Pipeline latencies (IN_valid to OUT_result_valid):
+// ===| Module: CVO_sfu_unit — streaming BF16 special-function unit |============
+// Purpose      : Element-wise BF16 non-linear operators routed by IN_func:
+//                EXP, SQRT, GELU, RECIP, SCALE, REDUCE_SUM.
+// Spec ref     : pccx v002 §2.4.1 (CVO SFU datapath), §3.5 (CVO uop).
+// Clock        : clk @ 400 MHz.
+// Reset        : rst_n active-low; i_clear synchronous soft-clear.
+// BF16 layout  : {sign[15], exp[14:7], mant[6:0]}.
+// Pipelines    : Independent per-op pipelines, multiplexed at the output:
 //   EXP        :  4 cycles
 //   SQRT       :  3 cycles
-//   RECIP      :  4 cycles
+//   RECIP      :  4 cycles  (Newton-Raphson, 1 step)
 //   SCALE      :  3 cycles  (first input word = scalar, rest = data)
 //   REDUCE_SUM :  variable  (accumulates for IN_length cycles, then emits scalar)
-//   GELU       : 12 cycles  (MUL + EXP + ADD + RECIP + MUL chain)
-//
-// BF16 raw format: {sign[15], exp[14:7], mant[6:0]}
+//   GELU       : 12 cycles  (MUL + NEG + EXP + ADD + RECIP + MUL chain)
+// Throughput   : 1 result/cycle for streaming ops; REDUCE_SUM emits 1 scalar
+//                per IN_length elements.
+// Handshake    : OUT_data_ready tied 1'b1 — combinational ready (sub-units
+//                are non-blocking pipelines).
+// Reset state  : All per-op pipeline registers cleared; output mux silent.
+// Errors       : EXP overflow saturates to +inf (16'h7F80); EXP underflow → 0.
+// Counters     : none.
+// Protected    : Internals untouched (CLAUDE.md §6.2 — LUT math user-owned).
 // ===============================================================================
 
 module CVO_sfu_unit (

@@ -3,10 +3,25 @@
 
 import isa_pkg::*;
 
-// ===| NPU Opcode Decoder |======================================================
-// Receives raw 64-bit VLIW instructions from the frontend FIFO.
-// Strips the 4-bit opcode, asserts the matching valid pulse for one cycle,
-// and forwards the 60-bit body to the Global Scheduler.
+// ===| Module: ctrl_npu_decoder — VLIW opcode → engine valid demux |============
+// Purpose      : Receive raw 64-bit VLIW instructions from the frontend FIFO,
+//                strip the 4-bit opcode, assert exactly one matching valid
+//                pulse for one cycle, and forward the 60-bit body to the
+//                Global Scheduler.
+// Spec ref     : pccx v002 §3 (ISA), §3.1 (opcode encoding).
+// Clock        : clk @ 400 MHz.
+// Reset        : rst_n active-low.
+// Latency      : 1-cycle registered (raw_instruction_pop_valid → OUT_*_valid).
+// Throughput   : 1 instruction/cycle (decoder is purely combinational save
+//                for the output register).
+// Handshake    : OUT_fetch_PC_ready asserted unconditionally — frontend FIFO
+//                provides buffering, decoder is single-cycle.
+// Reset state  : All OUT_*_op_x64_valid = 0; OUT_op_x64 = 0.
+// Errors       : Unknown opcodes are silently dropped (no valid asserted).
+// Assertions   : (Stage C) one-hot of OUT_*_op_x64_valid; valid pulses
+//                are exactly one cycle wide.
+// Notes        : OP_CVO uses a separate FF (cvo_valid_ff) outside the
+//                4-bit OUT_valid bus because it is the 5th opcode.
 // ===============================================================================
 
 module ctrl_npu_decoder (

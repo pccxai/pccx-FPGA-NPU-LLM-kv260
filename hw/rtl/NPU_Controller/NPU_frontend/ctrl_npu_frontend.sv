@@ -3,6 +3,24 @@
 `include "npu_interfaces.svh"
 `include "GLOBAL_CONST.svh"
 
+// ===| Module: ctrl_npu_frontend — AXIL command/status frontend |===============
+// Purpose      : Bridge AXI-Lite control plane to internal raw-instruction
+//                bus and surface status words back to the host.
+// Spec ref     : pccx v002 §4 (control plane), §3 (ISA).
+// Clock        : clk @ 400 MHz.
+// Reset        : rst_n active-low; IN_clear synchronous soft-clear.
+// Submodules   : AXIL_CMD_IN  (FIFO_DEPTH=8) — write-channel command path.
+//                AXIL_STAT_OUT (FIFO_DEPTH=8) — read-channel status path.
+// Latency      : 1 AXIL handshake → cmd FIFO push → 1 cycle to OUT_RAW_instruction
+//                while OUT_kick = (cmd_valid & IN_fetch_ready).
+// Throughput   : Up to 1 AXIL transaction/cycle limited by AXIL bresp.
+// Handshake    : OUT_kick is single-cycle pulse — downstream decoder must
+//                latch on rising edge.
+// Reset state  : OUT_RAW_instruction = 0; OUT_kick = 0.
+// Errors       : AXIL bresp/rresp surface 2'b00 (OKAY) only — error mapping
+//                deferred to the FSM stat encoder.
+// Counters     : none.
+// ===============================================================================
 module ctrl_npu_frontend (
     input logic clk,
     input logic rst_n,

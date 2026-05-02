@@ -3,15 +3,25 @@
 
 import bf16_math_pkg::*;
 
-// ===| CVO CORDIC Unit |=========================================================
-// Computes sin(θ) and cos(θ) for a BF16 input angle (radians) using a 14-stage
-// pipelined CORDIC algorithm (rotation mode).
-//
-// Internal format : Q4.12 signed fixed-point (16-bit)
-//   1.0 = 0x1000 = 4096,  π ≈ 0x3244 = 12868
-//
-// CORDIC gain K (14 iterations) ≈ 0.60725, pre-baked into x0 = K * 4096 = 0x09B8.
-// Pipeline latency : 16 clocks  (1 convert-in + 14 CORDIC + 1 convert-out)
+// ===| Module: CVO_cordic_unit — pipelined BF16 sin/cos CORDIC |================
+// Purpose      : Rotation-mode CORDIC computing sin(θ) and cos(θ) for a
+//                BF16 input angle (radians).
+// Spec ref     : pccx v002 §2.4.2 (CVO CORDIC datapath).
+// Clock        : clk @ 400 MHz.
+// Reset        : rst_n active-low.
+// Internal fmt : Q4.12 signed fixed-point (16-bit). 1.0 = 0x1000 = 4096,
+//                π ≈ 0x3244 = 12868.
+// CORDIC gain K: 14 iterations ≈ 0.60725. Pre-baked into x0 = K * 4096 = 0x09B8.
+// Pipeline     : 16 clocks  (1 convert-in + 14 CORDIC + 1 convert-out).
+// Latency      : 16 cycles total.
+// Throughput   : 1 sin/cos pair per cycle in steady state.
+// Handshake    : Push-only; OUT_valid mirrors the input pipeline.
+// Reset state  : All pipeline registers cleared; OUT_valid = 0.
+// Errors       : Overflow saturates to 0x7FFF; underflow rounds to 0;
+//                zero/denormal exp_raw treated as 0.
+// Counters     : none.
+// Protected    : Internals untouched (CLAUDE.md §6.2 — CORDIC math is
+//                user-owned).
 // ===============================================================================
 
 module CVO_cordic_unit (

@@ -21,6 +21,12 @@ rtl/Constants/compilePriority_Order/C_type_pkg/mem_pkg.sv
 # ===| D: vector-core configuration package (depends on B+C) |=================
 rtl/Constants/compilePriority_Order/D_pipeline_pkg/vec_core_pkg.sv
 
+# ===| E: observability counter package (depends on int only) |================
+# Vocabulary-only at Stage C: PerfCountersEnableDefault, counter widths, and
+# the handshake_counter_t struct. No module imports it yet; opt-in counter
+# wiring will arrive as a separate Stage D MVP commit.
+rtl/Constants/compilePriority_Order/E_obs_pkg/perf_counter_pkg.sv
+
 # ===| Library packages and interfaces |=======================================
 rtl/Library/Algorithms/BF16_math.sv
 rtl/Library/Algorithms/Algorithms.sv
@@ -72,8 +78,6 @@ rtl/MEM_control/top/mem_dispatcher.sv
 
 # ===| NPU_Controller |========================================================
 rtl/NPU_Controller/NPU_Control_Unit/ctrl_npu_decoder.sv
-rtl/NPU_Controller/NPU_Control_Unit/ctrl_npu_dispatcher.sv
-rtl/NPU_Controller/NPU_frontend/ctrl_npu_interface.sv
 rtl/NPU_Controller/NPU_frontend/AXIL_CMD_IN.sv
 rtl/NPU_Controller/NPU_frontend/AXIL_STAT_OUT.sv
 rtl/NPU_Controller/NPU_frontend/ctrl_npu_frontend.sv

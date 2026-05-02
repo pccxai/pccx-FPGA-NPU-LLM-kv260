@@ -1,15 +1,32 @@
 `timescale 1ns / 1ps
 
-// ===| ISA Package |=============================================================
-// Master type package for the uCA (micro Compute Architecture) ISA.
-// All consumers do `import isa_pkg::*;` — no `include` needed downstream.
-//
-// Rules:
-//   - No `include inside this package (Vivado compilation-order constraint).
-//   - All `define macros that are also needed as port widths live in npu_arch.svh.
-//   - isa_x32.svh / isa_memctrl.svh / isa_x64.svh are LEGACY — types here supersede them.
-//
-// Compilation order: after A_const_svh (npu_arch.svh must be included first).
+// ===| Package: isa_pkg — pccx v002 ISA master type vocabulary |================
+// Purpose      : Master type package for the uCA (micro Compute Architecture)
+//                ISA. Provides every type used to describe instructions,
+//                routes, flags, and per-engine micro-ops. The architectural
+//                vocabulary that every other module imports.
+// Spec ref     : pccx v002 §3 (ISA encoding) — pccx/docs/v002/Architecture/.
+// Dependencies : A_const_svh (npu_arch.svh `defines must be included first
+//                outside this file; package itself avoids `include).
+// Provides
+//   Address types : dest_addr_t / src_addr_t / addr_t / ptr_addr_t / parallel_lane_t
+//   Value types   : a_value_t / b_value_t / c_value_t / length_t
+//   Shape types   : shape_dim_t / shape_xyz_t (preparatory; no consumers yet)
+//   Direction enums: from_device_e, to_device_e, async_e, dest_cache_e
+//   Flag structs   : flags_t (GEMV/GEMM), cvo_flags_t
+//   Opcode enum    : opcode_e (5 ops: GEMV / GEMM / MEMCPY / MEMSET / CVO)
+//   CVO function   : cvo_func_e (8 ops: EXP / SQRT / GELU / SIN / COS /
+//                                       REDUCE_SUM / SCALE / RECIP)
+//   Routing enum   : data_route_e (8 routes: host↔L2, L2↔L1_GEMM/GEMV/CVO,
+//                                            engine_res→L2)
+//   Instruction layouts: GEMV_op_x64_t, GEMM_op_x64_t, memcpy_op_x64_t,
+//                        memset_op_x64_t, cvo_op_x64_t.
+//   Micro-op structs   : gemm_control_uop_t, GEMV_control_uop_t,
+//                        memory_control_uop_t, memory_set_uop_t,
+//                        cvo_control_uop_t, acp_uop_t, npu_uop_t.
+// Constants    : MemoryUopWidth (= 49 bits).
+// Legacy       : isa_x32.svh / isa_memctrl.svh / isa_x64.svh are LEGACY —
+//                types here supersede them. Do not extend the .svh files.
 // ===============================================================================
 
 package isa_pkg;
@@ -28,6 +45,30 @@ package isa_pkg;
 
   // CVO length (16-bit element count)
   typedef logic [15:0] length_t;
+
+  // ===| Shape Types (preparatory vocabulary, no consumers yet) |================
+  // Both fmap_array_shape and weight_array_shape today expose three flat
+  // 17-bit ports per access (wr_val0/1/2 and rd_val0/1/2) for the X / Y / Z
+  // axes of the constant shape RAM. Naming the dimension and the triplet
+  // makes future code clearer:
+  //
+  //   shape_dim_t : single-axis size (17-bit, matches the address-space
+  //                 dimension used by dest_addr_t / src_addr_t).
+  //   shape_xyz_t : a 3-axis bundle (Z is most-significant in packed order
+  //                 so { Z, Y, X } maps to a familiar memory layout).
+  //
+  // These are added now so the deferred shape-RAM consolidation
+  // (`shape_const_ram` per docs/internal/dead_module_inventory.md §3 and
+  // KELLER §6.3.1) and any new shape-aware module can adopt them
+  // immediately. No existing module imports these typedefs in this batch,
+  // so xvlog and the existing TBs are unaffected.
+  typedef logic [16:0] shape_dim_t;
+
+  typedef struct packed {
+    shape_dim_t z;
+    shape_dim_t y;
+    shape_dim_t x;
+  } shape_xyz_t;
 
   // ===| Device Direction Enums |=================================================
   typedef enum logic {

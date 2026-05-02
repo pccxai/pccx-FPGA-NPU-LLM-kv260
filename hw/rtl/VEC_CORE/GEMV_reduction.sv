@@ -3,6 +3,25 @@
 `include "GEMV_Vec_Matrix_MUL.svh"
 `include "GLOBAL_CONST.svh"
 
+// ===| Module: GEMV_reduction — 32 → 1 LUT-indexed signed adder tree |==========
+// Purpose      : For one lane and one cycle, look up
+//                  fmap_LUT[lane][weight[lane]]  (32 lookups)
+//                and sum them with a 5-stage adder tree to produce one
+//                per-lane partial sum.
+// Spec ref     : pccx v002 §2.3.3 (reduction tree).
+// Clock        : clk @ 400 MHz.
+// Reset        : rst_n active-low.
+// Topology     : Stage 1 — 16 × DSP48E2 (USE_SIMD = "ONE48"): 32 → 16.
+//                Stages 2-5 — LUT-based pipelined adders: 16 → 8 → 4 → 2 → 1.
+// Latency      : REDUCTION_LATENCY = 5 cycles (one per stage).
+// Throughput   : 1 reduction per cycle in steady state.
+// Handshake    : Push-only; IN_valid is OR'd with IN_is_lane_active to
+//                gate the pipeline.
+// Reset state  : valid_pipe = 0; OUT_reduction_result = 0.
+// Counters     : none.
+// Protected    : Internals untouched (CLAUDE.md §6.2 — reduction math is
+//                user-owned).
+// ===============================================================================
 module GEMV_reduction
   import vec_core_pkg::*;
 #(

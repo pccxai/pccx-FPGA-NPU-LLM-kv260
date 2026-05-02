@@ -1,13 +1,26 @@
 `timescale 1ns / 1ps
 
-// ============================================================
-//  shape_ram
-//  - Depth : 64 entries  (6-bit address)
-//  - Width : 51 bits     (17-bit × 3 fields)
-//
-//  [write]  wr_en=1, wr_addr, wr_val{0,1,2} → next clk
-//  [ read]  rd_addr → at same clk rd_val{0,1,2} out (comb logic)
-// ============================================================
+// ===| Module: fmap_array_shape — fmap shape constant RAM (FF-based) |==========
+// Purpose      : 64-entry × (3 × 17-bit) shape constant RAM for feature-map
+//                tensor shape descriptors. MEMSET uops write triples
+//                (X, Y, Z) here; LOAD uops read them by 6-bit pointer.
+// Spec ref     : pccx v002 §3.3 (MEMSET), §5.4 (shape pointer routing).
+// Clock        : clk @ 400 MHz.
+// Reset        : rst_n active-low (synchronous clear of all 64 entries).
+// Geometry     : 64 entries × 51 bits (= 3 × 17, see isa_pkg::shape_xyz_t
+//                for the typed name; this module keeps the legacy three
+//                17-bit ports for compile-time stability).
+// Latency      : Write — 1 cycle. Read — 0 cycles (combinational).
+// Throughput   : 1 write + 1 read per cycle.
+// Reset state  : All entries cleared to 0.
+// Notes        : Byte-for-byte duplicate of `weight_array_shape`. The
+//                parameterised replacement
+//                `MEM_control/memory/Constant_Memory/shape_const_ram.sv`
+//                has been authored (not yet wired) and supersedes this
+//                module once `mem_dispatcher.sv` migrates the two
+//                instantiations. See Stage E analysis (REFACTOR_NOTES
+//                §6.3.1) for the consolidation rationale.
+// ===============================================================================
 
 module fmap_array_shape
   import isa_pkg::*;

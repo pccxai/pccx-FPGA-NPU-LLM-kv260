@@ -1,6 +1,21 @@
 `timescale 1ns / 1ps
 // algorithms_pkg is compiled from Algorithms.sv; just import the symbols.
 
+// ===| Module: QUEUE — owner of an IF_queue interface (push/pop logic) |========
+// Purpose      : Drive the push/pop handshake of an IF_queue interface.
+//                The producer/consumer sit on the other side of the
+//                interface; this module is the FIFO controller.
+// Spec ref     : pccx v002 §4 (control plane primitives).
+// Clock        : interface-supplied (q.clk). Single-clock FIFO.
+// Reset        : interface-supplied (q.rst_n) active-low. Clears wr/rd ptrs.
+// Latency      : 1 cycle (push_en → mem write); pop_data is combinational
+//                (`pop_data = mem[rd_ptr]`).
+// Throughput   : 1 push and 1 pop per cycle.
+// Reset state  : wr_ptr = rd_ptr = 0.
+// Errors       : Push when full or pop when empty are silently ignored.
+//                (Stage C candidate: SVA on push&full / pop&empty.)
+// Counters     : none.
+// ===============================================================================
 module QUEUE (
     IF_queue.owner q
 );

@@ -24,7 +24,7 @@
 module tb_GEMM_weight_dispatcher;
 
   localparam int WEIGHT_SIZE = `INT4_WIDTH;
-  localparam int WEIGHT_CNT  = `HP_PORT_SINGLE_WIDTH / `INT4_WIDTH;
+  localparam int WEIGHT_CNT  = `HP_SINGLE_WIDTH / `INT4_WIDTH;
   localparam int N_FRAMES    = 128;
 
   // ===| Clock + reset |=========================================================

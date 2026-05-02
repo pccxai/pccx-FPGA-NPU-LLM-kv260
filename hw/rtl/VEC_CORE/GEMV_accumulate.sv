@@ -3,25 +3,29 @@
 `include "GEMV_Vec_Matrix_MUL.svh"
 `include "GLOBAL_CONST.svh"
 
-// GEMV Operation
-//
-// [Shape]
-// vector (1, N)
-// dot Matrix (N, M)
-// result (1, M)
-//
-// calc/per clk: Vec(1,32) dot Mat(32,32) = 32
-// gemv_cycle: 512 clk
-// Throughput/per clk: 1
-// Throughput/per-GEMV: 512 (1p/clk * 512clk)
-// GEMV-PIPE-CNT: 4
-// 512 * 4 = 2048
-// GEMV Throughput per [cycle]: (1, 2048)
-//
-// ===| Warning |===
-// Before we send result to ACP
-// results must type-casted FP32 to BF16(2Byte)
-// and find e-Max and align by 32Groups
+// ===| Module: GEMV_accumulate — recurrent per-lane batch accumulator |=========
+// Purpose      : Walk a 512-element GEMV result vector, summing the
+//                per-cycle reduction tree output into the appropriate
+//                slot, then signal completion when num_recur drains.
+// Spec ref     : pccx v002 §2.3.4 (GEMV accumulate / recurrence loop).
+// Clock        : clk @ 400 MHz.
+// Reset        : rst_n active-low; init pulses begin a new GEMV invocation.
+// Geometry     :
+//   vector (1, N) dot Matrix (N, M) -> result (1, M)
+//   calc/per clk         : Vec(1,32) dot Mat(32,32) = 32
+//   gemv_cycle           : 512 clk
+//   throughput/clk/lane  : 1
+//   GEMV-PIPE-CNT        : 4 lanes
+//   total throughput/clk : (1, 2048) = 4 × 512
+// Latency      : Output asserted when num_recur counts down to 0.
+// Reset state  : OUT_acc_valid = 0; res_vec_idx = 0; vector zeroed.
+// Counters     : none.
+// Protected    : Internals untouched (CLAUDE.md §6.2 — reduction math is
+//                user-owned).
+// Notes        : Before results are sent to ACP, the writeback path must
+//                cast FP32 → BF16, find e_max, and align by 32-element
+//                groups (see mat_result_normalizer for an analogous flow).
+// ===============================================================================
 
 
 

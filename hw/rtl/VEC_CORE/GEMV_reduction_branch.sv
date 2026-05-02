@@ -3,6 +3,26 @@
 `include "GEMV_Vec_Matrix_MUL.svh"
 `include "GLOBAL_CONST.svh"
 
+// ===| Module: GEMV_reduction_branch — single muV-Core lane wrapper |===========
+// Purpose      : One independent lane of the 4-lane Vector Core. Pairs the
+//                weight-indexed reduction stage with the per-lane recurrent
+//                accumulator that walks the GEMV inner-product schedule.
+// Spec ref     : pccx v002 §2.3.2 (per-lane MAC + reduction tree).
+// Clock        : clk @ 400 MHz.
+// Reset        : rst_n active-low.
+// Sub-units    : GEMV_reduction (5-stage 32 → 1 reduction tree)
+//                GEMV_accumulate (recurrent batch accumulator).
+// Latency      : reduction = 5 cycles + accumulate scheduling per recur.
+// Throughput   : 1 partial sum per cycle while IN_weight_valid &
+//                IN_activated_lane both high.
+// Handshake    : IN_weight_valid + IN_activated_lane gate the reduction
+//                tree; init = fmap_ready opens a new GEMV batch.
+// Backpressure : None — push-only lane; upstream HP CDC FIFO must pace.
+// Reset state  : All output result valid = 0; result vector zeroed.
+// Counters     : none.
+// Protected    : Internals untouched (CLAUDE.md §6.2 — reduction math is
+//                user-owned).
+// ===============================================================================
 module GEMV_reduction_branch
   import vec_core_pkg::*;
 #(

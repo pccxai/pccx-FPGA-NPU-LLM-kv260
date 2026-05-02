@@ -1,24 +1,32 @@
 `timescale 1ns / 1ps
 
-// ===============================================================================
-// Module: GEMM_systolic_array
-// Phase : pccx v002 (W4A8, 1 DSP = 2 MAC)
-//
-// Role
-// ----
-//   32 × 32 physical PE grid with a cascade break at row 16 (= logical
-//   "32 × 16 × 2" split). Each PE is a GEMM_dsp_unit that packs two INT4
-//   weights into the DSP A-port and multiplies them against an INT8
-//   activation flowing down the column via B-port cascade.
-//
+// ===| Module: GEMM_systolic_array — 32×32 W4A8 PE grid |========================
+// Purpose      : Physical instantiation of the systolic PE grid; owns the
+//                cascade break at row 16, the fabric activation delay line,
+//                and the final-row accumulator strip.
+// Spec ref     : pccx v002 §2.2.1 (PE topology), §2.2.4 (cascade break).
+// Phase        : pccx v002 (W4A8, 1 DSP = 2 MAC).
+// Clock        : clk @ 400 MHz.
+// Reset        : rst_n active-low; i_clear soft-clear (propagated to every PE).
+// Geometry     : array_horizontal × array_vertical PE grid (default 32×32).
+// Topology
 //   Row 0 : GEMM_dsp_unit with IS_TOP_ROW = 1. Activation sourced from
 //           V_in[col] fabric input.
 //   Row 16: GEMM_dsp_unit with BREAK_CASCADE = 1. Activation re-injected
 //           from the fabric delay line, partial sum takes the C-port
 //           instead of PCIN.
-//   Row 31: GEMM_dsp_unit_last_ROW. Exposes 48-bit P as `V_ACC_out[col]`.
+//   Row 31: GEMM_dsp_unit_last_ROW. Exposes 48-bit P as V_ACC_out[col]
+//           (after the GEMM_accumulator strip).
 //   Others: GEMM_dsp_unit normal row. Activation via BCIN cascade,
 //           partial sum via PCIN cascade.
+// Latency      : SYSTOLIC_TOTAL_LATENCY cycles (top of array → V_ACC_out).
+// Throughput   : 32 dual-MAC ops per row per cycle once the array is filled.
+// Backpressure : None — push-only PE grid; upstream is responsible for
+//                pacing fmap and weight valids consistently.
+// Reset state  : All cascade wires zeroed via per-PE reset.
+// Counters     : none.
+// Notes        : The fabric delay line gemm_in_V_fabric carries V_in down
+//                the column for the row-16 break re-injection.
 // ===============================================================================
 
 `include "GLOBAL_CONST.svh"

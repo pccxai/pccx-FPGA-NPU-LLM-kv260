@@ -3,8 +3,25 @@
 `include "GEMV_Vec_Matrix_MUL.svh"
 `include "GLOBAL_CONST.svh"
 
-// Descending order
-
+// ===| Module: GEMV_generate_lut — INT4 weight × fmap product LUT |=============
+// Purpose      : For each fmap lane, pre-multiply the broadcast fmap by all
+//                16 possible signed INT4 weight values (-8..7) to form a LUT
+//                that the per-lane reduction stage can index by weight.
+//                Trades 16 multipliers per fmap lane for an O(1) lookup
+//                inside the reduction tree.
+// Spec ref     : pccx v002 §2.3.1 (GEMV LUT generation).
+// Clock        : combinational (no register).
+// Reset        : N/A.
+// Geometry     : param.fmap_cache_out_cnt fmap lanes × 16 weight values.
+//                Each LUT entry is signed (param.fixed_mant_width + 3) bits.
+// Latency      : 0 cycles (pure combinational).
+// Throughput   : 1 LUT update per IN_fmap_broadcast_valid cycle.
+// Reset state  : N/A.
+// Notes        : F is sign-extended to 30-bit signed before the multiply
+//                with (w − 8); INT4 range is [-8, 7] so the offset places
+//                the LUT index at [0, 15].
+// ===============================================================================
+// LUT entry order: descending (w = 0 .. 15 maps to weight = -8 .. 7).
 module GEMV_generate_lut
   import vec_core_pkg::*;
 #(

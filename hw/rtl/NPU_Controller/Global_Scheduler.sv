@@ -4,16 +4,30 @@
 
 import isa_pkg::*;
 
-// ===| Global Scheduler |========================================================
-// Translates decoded VLIW instructions into engine micro-ops.
-//
-// Single always_ff drives each output to avoid multiple-driver conflicts.
-// Priority for OUT_LOAD_uop: GEMM > GEMV > MEMCPY > CVO (one active per cycle).
-//
-// OUT_STORE_uop  : registered at issue time; mem_dispatcher uses it to initiate
-//                  result writeback after the engine signals completion.
-// OUT_sram_rd_start : one-cycle pulse when a GEMM or GEMV load is dispatched,
-//                     triggering preprocess_fmap to begin broadcasting from cache.
+// ===| Module: Global_Scheduler — VLIW → engine micro-op translator |============
+// Purpose      : Decode 60-bit VLIW body and emit per-engine uops for
+//                GEMM / GEMV / MEMCPY / MEMSET / CVO with deterministic
+//                priority.
+// Spec ref     : pccx v002 §3 (ISA decode), §4.2 (uop semantics).
+// Clock        : clk_core @ 400 MHz.
+// Reset        : rst_n_core active-low.
+// Latency      : 1-cycle registered uop output after IN_*_op_x64_valid pulse.
+// Throughput   : 1 uop/cycle per output channel; channels are mutually
+//                exclusive in time per ISA serial-issue semantics.
+// Priority     : OUT_LOAD_uop arbitration order:
+//                  GEMM > GEMV > MEMCPY > CVO  (single-driver always_ff).
+// Outputs      :
+//   OUT_GEMM_uop / OUT_GEMV_uop / OUT_CVO_uop / OUT_mem_set_uop
+//                  : registered at issue cycle, hold until next valid.
+//   OUT_STORE_uop  : registered at issue; mem_dispatcher uses it to initiate
+//                    result writeback after engine completion handshake.
+//   OUT_sram_rd_start : one-cycle pulse on GEMM/GEMV LOAD dispatch — starts
+//                       preprocess_fmap broadcast from L1 cache.
+// Reset state  : all uops zeroed; OUT_sram_rd_start = 0.
+// Errors       : none surfaced (out-of-range fields wrap to MEMCPY default).
+// Counters     : none.
+// Assertions   : (Stage C) exactly-zero-or-one IN_*_op_x64_valid per cycle;
+//                OUT_sram_rd_start is one-cycle pulse only.
 // ===============================================================================
 
 module Global_Scheduler #() (

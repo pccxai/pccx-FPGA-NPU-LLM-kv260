@@ -5,17 +5,33 @@
 
 import isa_pkg::*;
 
-// ===| Memory Dispatcher |=======================================================
-// Translates engine uops into L2 cache commands and routes data streams.
-//
-// Responsibilities:
-//   - Shape constant RAM (MEMSET: fmap / weight array shapes)
-//   - ACP DMA path   : host DDR4 ↔ L2 (MEMCPY host↔NPU)
-//   - NPU burst path : L2 → GEMM fmap / GEMV fmap broadcast
+// ===| Module: mem_dispatcher — L2/ACP/CVO data-movement boundary |==============
+// Purpose      : Hide the L2 cache + ACP DMA + CVO stream bridge behind a
+//                single uop-driven contract. NPU_top sees only command-level
+//                inputs and busy/full status outputs.
+// Spec ref     : pccx v002 §5 (memory hierarchy), §5.3 (CVO bridge).
+// Clock        : Dual-clock — clk_core (uop side) + clk_axi (ACP / DMA side).
+//                CDC handled inside mem_GLOBAL_cache and child FIFOs.
+// Reset        : rst_n_core / rst_axi_n active-low.
+// Responsibilities (Keller "deep module" boundary):
+//   - Shape constant RAM (MEMSET: fmap / weight array shapes).
+//   - ACP DMA path   : host DDR4 ↔ L2 (MEMCPY host↔NPU).
+//   - NPU burst path : L2 → GEMM fmap / GEMV fmap broadcast.
 //   - CVO stream     : L2 → CVO engine input; CVO output → L2
-//                      (via mem_CVO_stream_bridge)
-//
-// Address convention for L2: 128-bit word units (word N = bytes [16N..16N+15]).
+//                      (via mem_CVO_stream_bridge — port-B arbitration:
+//                       CVO bridge wins while OUT_cvo_busy is asserted).
+// L2 addressing : 128-bit word units (word N = bytes [16N .. 16N+15]).
+// L2 port-B arb : final_npu_* mux selects CVO bridge while busy, else NPU DMA.
+// Throughput   : One ACP descriptor + one NPU descriptor in flight at a time
+//                (FIFO-gated by mem_u_operation_queue).
+// Backpressure : OUT_fifo_full asserts upstream when either operation queue
+//                cannot accept a new descriptor.
+// Errors       : none — illegal LOAD_uop.data_dest values fall through default.
+// Counters     : none. (Stage D candidates: ACP_in_words, NPU_burst_words,
+//                CVO_bridge_busy_cycles, queue_full_cycles).
+// Assertions   : (Stage C) acp_rx_start and npu_rx_start are one-cycle pulses;
+//                cvo_bridge_busy and npu_rx_start mutually exclusive on
+//                final_npu_we.
 // ===============================================================================
 
 module mem_dispatcher #() (
