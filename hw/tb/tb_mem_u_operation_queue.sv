@@ -75,7 +75,6 @@ module tb_mem_u_operation_queue;
 
   // ===| Scoreboard |============================================================
   localparam int NPush         = 32;
-  localparam int NDrop         = 4;   // forced over-push events
   localparam int OutCountFloor = NPush - 8;  // std-mode FIFO read pipeline slack
   // counters_errors is the only failure surface; pop ordering is intentionally
   // not checked here (see the file header for the rationale).
