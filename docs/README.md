@@ -12,6 +12,8 @@ Pages, bilingual EN / KO).
   [KV260_BRINGUP.md](KV260_BRINGUP.md)
 - Repo-local Gemma 3N handoff boundary:
   [GEMMA3N_HANDOFF.md](GEMMA3N_HANDOFF.md)
+- Repo-local W4A8 golden-vector gate:
+  [W4A8_GOLDEN_VECTOR_GATE.md](W4A8_GOLDEN_VECTOR_GATE.md)
 - Repo-local xsim evidence workflow:
   [SIMULATION.md](SIMULATION.md)
 - Repo-local Vivado timing evidence checklist:
