@@ -8,15 +8,8 @@ Kria KV260.
 </p>
 
 <p align="center">
-  <strong>Current status:</strong> RTL alpha. Verification and bring-up are active; timing-closed bitstream and full runtime integration are in progress.
+  <strong>Current status:</strong> RTL alpha · timing closure and full runtime bring-up in progress.
 </p>
-
-![Architecture](https://img.shields.io/badge/Architecture-pccx_v002-purple)
-![RTL](https://img.shields.io/badge/RTL-SystemVerilog-green)
-![Target](https://img.shields.io/badge/Target-Kria_KV260-orange)
-![Precision](https://img.shields.io/badge/Precision-W4A8_(1_DSP_%3D_2_MAC)-green)
-![Clock](https://img.shields.io/badge/Core-400_MHz-blue)
-![Goal](https://img.shields.io/badge/Gemma_3N_E4B-20_tok%2Fs-yellow)
 
 This repo is the **bare-metal Kria KV260 implementation** of the
 **pccx v002** NPU architecture. It hosts an early SystemVerilog RTL and
