@@ -24,13 +24,14 @@ and [`CHANGELOG.md`](../CHANGELOG.md) for the version under preparation.
 
 For each testbench run include the following.  Current TB inventory:
 `tb_barrel_shifter_BF16`, `tb_ctrl_npu_decoder`, `tb_FROM_mat_result_packer`,
+`tb_GEMM_fmap_staggered_delay`,
 `tb_GEMM_dsp_packer_sign_recovery`, `tb_GEMM_weight_dispatcher`,
-`tb_mat_result_normalizer`, `tb_GEMM_fmap_staggered_delay` (currently FAIL
-— tracked in [#28](https://github.com/pccxai/pccx-FPGA-NPU-LLM-kv260/issues/28)).
+`tb_mat_result_normalizer`, `tb_mem_u_operation_queue`,
+`tb_shape_const_ram`.
 
 - [ ] Command used to run: `cd hw/sim && bash run_verification.sh`
 - [ ] Vivado / xsim version recorded (currently: Vivado v2025.2)
-- [ ] Per-TB pass/fail summary (current: 6/7 PASS, 1 known FAIL)
+- [ ] Per-TB pass/fail summary from the deterministic runner
 - [ ] Known warnings or elaboration errors documented
 - [ ] `.pccx` trace artifacts retained in `hw/sim/work/<tb>/`
 - [ ] Waveform snapshots (`.wdb`) retained for failed TBs
@@ -44,7 +45,8 @@ For each testbench run include the following.  Current TB inventory:
 Existing post-synthesis reports: `hw/build/reports/` (tool: Vivado v2025.2,
 date: 2026-04-20, design: NPU_top, device: xck26-sfvc784-2LV-c).
 
-- [x] Synthesis run and reports committed (utilization, timing, DRC, clocks)
+- [x] Synthesis run completed and summary recorded (utilization, timing,
+      DRC, clocks)
 - [x] Vivado version recorded in report headers
 - [ ] Target clock and achieved slack documented in release notes
   - Current post-synth: `core_clk` WNS = **−9.792 ns** (NOT MET, 4194 failing
@@ -54,6 +56,7 @@ date: 2026-04-20, design: NPU_top, device: xck26-sfvc784-2LV-c).
     56 URAM, 4 DSP (GEMM systolic array not yet fully instantiated).
 - [ ] DRC critical violations resolved or documented
 - [ ] Constraints file (`hw/constraints/`) referenced in release notes
+- [ ] Clock interaction report reviewed for `core_clk` / `axi_clk`
 
 ---
 
@@ -68,6 +71,7 @@ date: 2026-04-20, design: NPU_top, device: xck26-sfvc784-2LV-c).
 - [ ] Timing constraints met for both `core_clk` (target 400 MHz) and
       `axi_clk` (target 250 MHz)
 - [ ] Utilization post-implementation recorded
+- [ ] Clock interaction post-implementation recorded
 - [ ] Critical path summary noted in release notes
 - [ ] Bitstream generated (`.bit` not committed to git — attach to GitHub
       Release or record SHA + generation command)
