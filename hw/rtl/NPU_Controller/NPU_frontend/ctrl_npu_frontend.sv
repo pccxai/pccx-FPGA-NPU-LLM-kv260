@@ -37,8 +37,8 @@ module ctrl_npu_frontend (
     output logic                  OUT_kick,
 
     // Status <- Encoder / FSM
-    input logic [`ISA_WIDTH:0] IN_enc_stat,
-    input logic                IN_enc_valid, // FIXED: Added missing comma
+    input logic [`ISA_WIDTH-1:0] IN_enc_stat,
+    input logic                  IN_enc_valid,
 
     input logic IN_fetch_ready  // FIXED: Removed illegal semicolon
 );
@@ -68,9 +68,11 @@ module ctrl_npu_frontend (
 
       // AXI4-Lite Write channels directly routed from the interface
       .s_awaddr (S_AXIL_CTRL.awaddr),
+      .s_awprot (S_AXIL_CTRL.awprot),
       .s_awvalid(S_AXIL_CTRL.awvalid),
       .s_awready(S_AXIL_CTRL.awready),
       .s_wdata  (S_AXIL_CTRL.wdata),
+      .s_wstrb  (S_AXIL_CTRL.wstrb),
       .s_wvalid (S_AXIL_CTRL.wvalid),
       .s_wready (S_AXIL_CTRL.wready),
       .s_bresp  (S_AXIL_CTRL.bresp),

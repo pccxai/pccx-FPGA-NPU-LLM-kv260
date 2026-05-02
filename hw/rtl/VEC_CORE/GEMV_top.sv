@@ -80,7 +80,7 @@ module GEMV_top
     output logic OUT_result_valid_D
 );
 
-  logic signed [param.fixed_mant_width+2:0] fmap_LUT_wire[0:param.fmap_cache_out_cnt-1][0:param.weight_width-1];
+  logic signed [param.fixed_mant_width+2:0] fmap_LUT_wire[0:param.fmap_cache_out_cnt-1][0:(1<<param.weight_width)-1];
 
   logic fmap_ready_wire;
 
