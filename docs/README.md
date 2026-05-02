@@ -12,6 +12,8 @@ Pages, bilingual EN / KO).
   [KV260_BRINGUP.md](KV260_BRINGUP.md)
 - Repo-local Gemma 3N handoff boundary:
   [GEMMA3N_HANDOFF.md](GEMMA3N_HANDOFF.md)
+- Repo-local W4A8 golden-vector gate:
+  [W4A8_GOLDEN_VECTOR_GATE.md](W4A8_GOLDEN_VECTOR_GATE.md)
 - Documentation root (language picker):
   <https://pccxai.github.io/pccx/en/index.html>
 - pccx source repository:
