@@ -19,6 +19,14 @@ in this Stage C pass; the rest stays for later batches per the
 it for legacy convention; only a small number actually reference one
 of the legacy aliases. Splitting consumers by which alias they use:
 
+> **Companion shim**: `hw/rtl/Constants/compilePriority_Order/A_const_svh/DEVICE_INFO.svh`
+> is a second deprecated header in the same directory, declaring two
+> legacy aliases (`DEVICE_HP_SINGLE_LANE_MAX_IN_BIT`, `DEVICE_HP_CNT`)
+> over `kv260_device.svh`. As of the Stage C audit, both
+> `\`include "DEVICE_INFO.svh"` and the two aliases have **zero active
+> consumers** anywhere in `hw/rtl/`. The file is removed outright in
+> the Stage C batch — see the companion deletion commit.
+
 ### 1.1 `\`TRUE` / `\`FALSE`
 
 ```
