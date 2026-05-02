@@ -10,6 +10,8 @@ Pages, bilingual EN / KO).
   <https://pccxai.github.io/pccx/en/docs/v002/index.html>
 - Repo-local KV260 bring-up checklist:
   [KV260_BRINGUP.md](KV260_BRINGUP.md)
+- Repo-local Gemma 3N handoff boundary:
+  [GEMMA3N_HANDOFF.md](GEMMA3N_HANDOFF.md)
 - Documentation root (language picker):
   <https://pccxai.github.io/pccx/en/index.html>
 - pccx source repository:
