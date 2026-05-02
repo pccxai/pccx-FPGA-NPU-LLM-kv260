@@ -2,6 +2,21 @@
 `ifndef BF16_MATH_SV
 `define BF16_MATH_SV
 
+// ===| Package: bf16_math_pkg — BF16 arithmetic primitives |====================
+// Purpose      : Reusable BF16 helpers for the CVO data path and any other
+//                module that needs a soft (non-pipelined) BF16 add or
+//                exponent-aligned mantissa.
+// Spec ref     : pccx v002 §2.4 (CVO numerics).
+// Provides
+//   typedef bf16_t          : packed {sign, exp[8], mantissa[7]} = 16-bit.
+//   typedef bf16_aligned_t  : 8-bit emax + 24-bit signed mantissa.
+//   function to_bf16        : raw[15:0] → bf16_t.
+//   function align_to_emax  : BF16 → 24-bit 2's-complement aligned to emax.
+//   function bf16_add       : signed BF16 add (no NaN/Inf/denormal handling).
+// Notes        : First-pass implementation; softmax decode path operates on
+//                normalized BF16 only, so corner cases are not exercised.
+//                For pipelined throughput, see CVO_sfu_unit's local helpers.
+// ===============================================================================
 package bf16_math_pkg;
 
   /*─────────────────────────────────────────────

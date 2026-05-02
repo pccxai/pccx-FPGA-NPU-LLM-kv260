@@ -1,8 +1,23 @@
-// fifo_if.sv
-// Encapsulates all FIFO signals — acts like a FIFO "object"
-// DATA_WIDTH, DEPTH are the "constructor parameters"
-
-
+// ===| Interface: IF_queue — FIFO "object" with producer/consumer modports |====
+// Purpose      : Encapsulate FIFO storage + handshake plumbing behind a
+//                single interface so producers and consumers don't have to
+//                wire individual signals. Resembles an OOP "object" with
+//                push() / pop() / clear() task methods.
+// Spec ref     : pccx v002 §4 (control plane primitives).
+// Parameters   : DATA_WIDTH (default 32), DEPTH (default 8).
+// Geometry     : memory mem[0..DEPTH-1] × DATA_WIDTH bits. wr/rd pointers
+//                are PTR_W+1 bits wide (extra bit distinguishes empty/full).
+// Modports
+//   producer : import push, output {push_data, push_en}, input {empty, full,
+//              clk, rst_n}.  The producer never sees rd/wr pointers.
+//   consumer : import pop,  output {pop_en}, input {empty, full, pop_data,
+//              clk, rst_n}.
+//   owner    : the FIFO module itself (`QUEUE`). Reads handshake signals,
+//              updates pointers and `mem`. Has `ref` access to mem.
+// Reset state  : push_en / pop_en cleared by clear() task.
+// Notes        : modports cannot export parameters in SV2012, so `QUEUE`
+//                re-derives PTR_W locally from $size(q.mem).
+// ===============================================================================
 interface IF_queue #(
     parameter DATA_WIDTH = 32,
     parameter DEPTH      = 8
