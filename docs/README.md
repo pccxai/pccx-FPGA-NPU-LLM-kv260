@@ -14,6 +14,12 @@ Pages, bilingual EN / KO).
   [GEMMA3N_HANDOFF.md](GEMMA3N_HANDOFF.md)
 - Repo-local W4A8 golden-vector gate:
   [W4A8_GOLDEN_VECTOR_GATE.md](W4A8_GOLDEN_VECTOR_GATE.md)
+- Repo-local xsim evidence workflow:
+  [SIMULATION.md](SIMULATION.md)
+- Repo-local Vivado timing evidence checklist:
+  [TIMING_EVIDENCE.md](TIMING_EVIDENCE.md)
+- Repo-local release evidence checklist:
+  [RELEASE_EVIDENCE_CHECKLIST.md](RELEASE_EVIDENCE_CHECKLIST.md)
 - Documentation root (language picker):
   <https://pccxai.github.io/pccx/en/index.html>
 - pccx source repository:

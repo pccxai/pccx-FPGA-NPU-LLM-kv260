@@ -11,7 +11,7 @@
 // Provides
 //   Address types : dest_addr_t / src_addr_t / addr_t / ptr_addr_t / parallel_lane_t
 //   Value types   : a_value_t / b_value_t / c_value_t / length_t
-//   Shape types   : shape_dim_t / shape_xyz_t (preparatory; no consumers yet)
+//   Shape types   : shape_dim_t / shape_xyz_t (shape constant RAM contract)
 //   Direction enums: from_device_e, to_device_e, async_e, dest_cache_e
 //   Flag structs   : flags_t (GEMV/GEMM), cvo_flags_t
 //   Opcode enum    : opcode_e (5 ops: GEMV / GEMM / MEMCPY / MEMSET / CVO)
@@ -46,7 +46,7 @@ package isa_pkg;
   // CVO length (16-bit element count)
   typedef logic [15:0] length_t;
 
-  // ===| Shape Types (preparatory vocabulary, no consumers yet) |================
+  // ===| Shape Types (shape constant RAM contract) |=============================
   // Both fmap_array_shape and weight_array_shape today expose three flat
   // 17-bit ports per access (wr_val0/1/2 and rd_val0/1/2) for the X / Y / Z
   // axes of the constant shape RAM. Naming the dimension and the triplet
@@ -57,11 +57,8 @@ package isa_pkg;
   //   shape_xyz_t : a 3-axis bundle (Z is most-significant in packed order
   //                 so { Z, Y, X } maps to a familiar memory layout).
   //
-  // These are added now so the deferred shape-RAM consolidation
-  // (`shape_const_ram` per docs/internal/dead_module_inventory.md §3 and
-  // KELLER §6.3.1) and any new shape-aware module can adopt them
-  // immediately. No existing module imports these typedefs in this batch,
-  // so xvlog and the existing TBs are unaffected.
+  // These types back the parameterised shape_const_ram used by mem_dispatcher
+  // for fmap and weight shape lookup.
   typedef logic [16:0] shape_dim_t;
 
   typedef struct packed {
