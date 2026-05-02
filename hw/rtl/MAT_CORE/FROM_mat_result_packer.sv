@@ -118,16 +118,13 @@ module FROM_gemm_result_packer #(
 
         SEND_DATA: begin
           if (packed_ready) begin
-            packed_data <= {
-              capture_reg[send_idx+7],
-              capture_reg[send_idx+6],
-              capture_reg[send_idx+5],
-              capture_reg[send_idx+4],
-              capture_reg[send_idx+3],
-              capture_reg[send_idx+2],
-              capture_reg[send_idx+1],
-              capture_reg[send_idx+0]
-            };
+            // Lane b of the BeatsPerWord-wide group lands in the
+            // [b*BF16_WIDTH +: BF16_WIDTH] slice — same byte order as
+            // the original 8-lane concat, but tracks BeatsPerWord so
+            // changes to AXI_STREAM_WIDTH or BF16_WIDTH stay in sync.
+            for (int b = 0; b < BeatsPerWord; b++) begin
+              packed_data[b*`BF16_WIDTH +: `BF16_WIDTH] <= capture_reg[send_idx+b];
+            end
             packed_valid <= 1'b1;
 
             if (send_idx >= LastSendIdx) begin
