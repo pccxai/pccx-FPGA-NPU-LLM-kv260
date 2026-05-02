@@ -19,6 +19,16 @@ without contacting the board:
 scripts/kv260/run_gemma3n_e4b_smoke.sh --dry-run
 ```
 
+Provide a generated runtime handoff artifact to validate the MMIO handoff
+contract:
+
+```bash
+scripts/kv260/run_gemma3n_e4b_smoke.sh --dry-run --handoff <runtime_smoke/handoff/handoff.json>
+# or
+PCCX_RUNTIME_HANDOFF_JSON=runtime_smoke/handoff/handoff.json \
+scripts/kv260/run_gemma3n_e4b_smoke.sh --dry-run
+```
+
 The script is explicit by default: without the required environment it
 exits with a `BLOCKED_*` status and writes a blocker summary under
 `docs/evidence/kv260-gemma3n-e4b/<run_id>/`.
@@ -46,6 +56,7 @@ Optional controls:
 | `PCCX_SKIP_BITSTREAM_LOAD=1` | Skip programming when the intended image is already loaded |
 | `PCCX_REMOTE_RUN_CMD` | Override the board-side NPU runtime command |
 | `PCCX_RUN_ID` | Force a stable evidence directory name |
+| `PCCX_RUNTIME_HANDOFF_JSON` | Path to a runtime handoff artifact to validate in dry-run |
 
 Recognized aliases for runtime handoff manifests:
 
@@ -81,6 +92,8 @@ Recognized aliases for runtime handoff manifests:
 | `BLOCKED_BITSTREAM` | Bitstream path, copy, or programming failed |
 | `BLOCKED_RUNTIME` | Runtime wrapper, output, or metrics are missing |
 | `BLOCKED_RTL` | The runtime identified an RTL/Vivado readiness blocker |
+| `READY_FOR_BOARD_INPUTS` | Dry-run validated a handoff artifact; board inputs can be supplied in non-dry-run mode |
+| `BLOCKED_BOARD_INPUTS` | Dry-run missing/invalid handoff shape or missing board-input-ready artifacts for this lane |
 
 Only `PASS_KV260_NPU` with the captured logs, bitstream hash, commit SHA,
 and runtime output should be treated as KV260 NPU smoke evidence.

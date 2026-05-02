@@ -15,7 +15,16 @@ NO_VIVADO=0
 DO_VIVADO_COMPILE="auto"
 DO_TOP_ELAB="auto"
 DO_RUNTIME_DRY_RUN="auto"
+DO_RUNTIME_HANDOFF="auto"
+HANDOFF_ONLY=0
 RUN_ID="${PCCX_RUN_ID:-}"
+RUNTIME_HANDOFF_STATUS="disabled"
+RUNTIME_HANDOFF_MODE="not_run"
+RUNTIME_HANDOFF_PATH="none"
+RUNTIME_HANDOFF_BOARD_CONTACTED="no"
+RUNTIME_HANDOFF_BOARD_INPUTS="none"
+RUNTIME_HANDOFF_UNSUPPORTED="none"
+RUNTIME_HANDOFF_COMMAND_COUNT="none"
 
 usage() {
     cat <<'USAGE'
@@ -29,6 +38,9 @@ Options:
   --with-vivado-compile     include Vivado filelist compile when tools exist
   --with-top-elab           include npu_core_wrapper elaboration when tools exist
   --with-runtime-dry-run    include generated runtime smoke program dry-run
+  --with-runtime-handoff    generate runtime handoff artifact (default)
+  --no-runtime-handoff     skip runtime handoff generation
+  --handoff-only            only run runtime artifact generation
   --run-id <id>             use a deterministic evidence directory suffix
   -h, --help                print this help
 USAGE
@@ -41,6 +53,8 @@ available checks:
   tool_summary
   runtime_smoke_generate
   runtime_smoke_json
+  runtime_handoff_generate
+  runtime_handoff_json
   xsim_list
   xsim_shape_const_ram
   xsim_mem_dispatcher_shape_lookup
@@ -54,6 +68,8 @@ quick mode:
   bash_syntax
   runtime_smoke_generate
   runtime_smoke_json
+  runtime_handoff_generate
+  runtime_handoff_json
   xsim_list
   xsim_shape_const_ram
   xsim_mem_dispatcher_shape_lookup
@@ -103,6 +119,20 @@ while (($#)); do
             RUN_ID="$2"
             shift 2
             ;;
+        --with-runtime-handoff)
+            DO_RUNTIME_HANDOFF=1
+            shift
+            ;;
+        --no-runtime-handoff)
+            DO_RUNTIME_HANDOFF=0
+            shift
+            ;;
+        --handoff-only)
+            HANDOFF_ONLY=1
+            DO_RUNTIME_DRY_RUN=1
+            DO_RUNTIME_HANDOFF=1
+            shift
+            ;;
         -h|--help)
             usage
             exit 0
@@ -122,6 +152,9 @@ fi
 
 if [[ "$DO_RUNTIME_DRY_RUN" == "auto" ]]; then
     DO_RUNTIME_DRY_RUN=1
+fi
+if [[ "$DO_RUNTIME_HANDOFF" == "auto" ]]; then
+    DO_RUNTIME_HANDOFF=1
 fi
 if [[ "$DO_VIVADO_COMPILE" == "auto" ]]; then
     [[ "$MODE" == "full" ]] && DO_VIVADO_COMPILE=1 || DO_VIVADO_COMPILE=0
@@ -260,6 +293,13 @@ run_runtime_dry_run() {
     if (( ! DO_RUNTIME_DRY_RUN )); then
         log_summary "==> runtime_smoke_generate"
         log_summary "result: SKIP, runtime dry-run disabled"
+        RUNTIME_HANDOFF_STATUS="disabled"
+        RUNTIME_HANDOFF_MODE="disabled"
+        RUNTIME_HANDOFF_PATH="none"
+        RUNTIME_HANDOFF_BOARD_CONTACTED="no"
+        RUNTIME_HANDOFF_BOARD_INPUTS="not_applicable"
+        RUNTIME_HANDOFF_UNSUPPORTED="not_applicable"
+        RUNTIME_HANDOFF_COMMAND_COUNT="none"
         return 0
     fi
 
@@ -277,6 +317,62 @@ run_runtime_dry_run() {
 
     log_summary "runtime_smoke_program=$out_dir/program.json"
     log_summary "runtime_smoke_memh=$out_dir/program.memh"
+    if (( ! DO_RUNTIME_HANDOFF )); then
+        RUNTIME_HANDOFF_STATUS="disabled"
+        RUNTIME_HANDOFF_MODE="not_run"
+        RUNTIME_HANDOFF_PATH="none"
+        RUNTIME_HANDOFF_BOARD_INPUTS="none"
+        RUNTIME_HANDOFF_UNSUPPORTED="not_applicable"
+        RUNTIME_HANDOFF_COMMAND_COUNT="none"
+        RUNTIME_HANDOFF_BOARD_CONTACTED="no"
+        return 0
+    fi
+
+    local handoff_out="$out_dir/handoff/handoff.json"
+    mkdir -p "$out_dir/handoff"
+    RUNTIME_HANDOFF_MODE="dry-run"
+    RUNTIME_HANDOFF_STATUS="running"
+    run_logged runtime_handoff_generate \
+        python3 "$ROOT_DIR/tools/v002/generate_driver_handoff.py" \
+            --program-json "$out_dir/program.json" \
+            --memh "$out_dir/program.memh" \
+            --run-id "$RUN_ID" \
+            --mode "$RUNTIME_HANDOFF_MODE" \
+            --out "$handoff_out" || return $?
+    run_logged runtime_handoff_json \
+        python3 "$ROOT_DIR/tools/v002/generate_driver_handoff.py" \
+            --validate-handoff "$handoff_out" \
+            --mode "$RUNTIME_HANDOFF_MODE" \
+            --out "$out_dir/handoff/validation.json" || return $?
+
+    RUNTIME_HANDOFF_STATUS="generated"
+    RUNTIME_HANDOFF_PATH="$handoff_out"
+    RUNTIME_HANDOFF_BOARD_CONTACTED="no"
+    RUNTIME_HANDOFF_COMMAND_COUNT="$(awk 'NR>0 {count++} END {print count+0}' "$out_dir/program.memh")"
+
+    local unsupported_claims board_inputs
+    unsupported_claims="$(python3 - "$handoff_out" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+payload = json.loads(open(path, "r", encoding="utf-8").read())
+unsupported = payload.get("unsupportedClaims", {})
+active = [name for name, value in unsupported.items() if value]
+print(",".join(active) if active else "none")
+print(",".join(payload.get("boardInputsRequired", [])) or "none")
+PY
+)"
+    RUNTIME_HANDOFF_UNSUPPORTED="$(printf '%s' "${unsupported_claims%%$'\n'*}")"
+    RUNTIME_HANDOFF_BOARD_INPUTS="$(printf '%s' "${unsupported_claims#*$'\n'}")"
+    log_summary "runtime_handoff_json=$out_dir/handoff/validation.json"
+    log_summary "runtime_handoff_artifact=$handoff_out"
+
+    if [[ "$RUNTIME_HANDOFF_UNSUPPORTED" == "none" ]]; then
+        RUNTIME_HANDOFF_STATUS="ready"
+    else
+        RUNTIME_HANDOFF_STATUS="unsupported_claims"
+    fi
 }
 
 run_optional_vivado_compile() {
@@ -392,6 +488,14 @@ write_footer() {
     log_summary "  tokens_per_second_achieved_claim: no"
     log_summary "  timing_closure_claim: no"
     log_summary ""
+    log_summary "runtime_handoff_status: ${RUNTIME_HANDOFF_STATUS}"
+    log_summary "runtime_handoff_path: ${RUNTIME_HANDOFF_PATH}"
+    log_summary "runtime_handoff_mode: ${RUNTIME_HANDOFF_MODE}"
+    log_summary "runtime_handoff_board_inputs_required: ${RUNTIME_HANDOFF_BOARD_INPUTS}"
+    log_summary "runtime_handoff_board_contacted: ${RUNTIME_HANDOFF_BOARD_CONTACTED}"
+    log_summary "runtime_handoff_unsupported_claims: ${RUNTIME_HANDOFF_UNSUPPORTED}"
+    log_summary "runtime_handoff_command_count: ${RUNTIME_HANDOFF_COMMAND_COUNT}"
+    log_summary ""
     log_summary "LOCAL-RUNNABLE-CANDIDATE checks completed."
 }
 
@@ -411,6 +515,15 @@ syntax_files=(
 
 write_header
 tool_summary
+
+if (( HANDOFF_ONLY )); then
+    run_step runtime_dry_run run_runtime_dry_run
+    write_footer
+    if ((${#FAILED_STEPS[@]})); then
+        exit 1
+    fi
+    exit 0
+fi
 
 run_step bash_syntax run_logged bash_syntax bash -n "${syntax_files[@]}"
 run_step runtime_dry_run run_runtime_dry_run

@@ -53,6 +53,40 @@ Example shape:
 Do not commit a manifest containing private host paths, model cache
 directories, credentials, tokens, or proprietary/generated model blobs.
 
+## Runtime smoke handoff contract
+
+The v002 runtime smoke generator produces deterministic artifacts that are
+usable by the board handoff lane:
+
+```bash
+scripts/v002/run-local-candidate.sh --quick --run-id <run-id>
+```
+
+This writes:
+
+- `hw/build/v002-local-candidate/<run-id>/runtime_smoke/program.json`
+- `hw/build/v002-local-candidate/<run-id>/runtime_smoke/program.memh`
+- `hw/build/v002-local-candidate/<run-id>/runtime_smoke/handoff/handoff.json`
+
+The handoff artifact includes:
+
+- `mode` and `transport`
+- `registerWrites` with AXI-Lite command and kick words
+- `commandWords` (64-bit instruction sequence)
+- `boardInputsRequired`
+- `unsupportedClaims`
+- hashes and deterministic evidence paths
+
+Use the handoff path as input to KV260 dry-run:
+
+```bash
+PCCX_RUNTIME_HANDOFF_JSON=hw/build/v002-local-candidate/<run-id>/runtime_smoke/handoff/handoff.json \
+scripts/kv260/run_gemma3n_e4b_smoke.sh --dry-run
+```
+
+Dry-run with a valid handoff artifact must report a
+`READY_FOR_BOARD_INPUTS` status and should never connect to the board.
+
 ## Readiness Contract
 
 Use readiness states instead of success claims:
