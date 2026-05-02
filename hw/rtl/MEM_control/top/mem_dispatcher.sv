@@ -73,8 +73,13 @@ module mem_dispatcher #() (
   assign OUT_cvo_busy  = cvo_bridge_busy;
 
   // ===| Shape Constant RAM — FMap |=============================================
+  // Split write- and read-side pointers so the MEMSET handler (write side)
+  // and the LOAD-uop handler (read side) drive independent flops; sharing a
+  // single signal across two always_ff blocks tripped xelab's
+  // multi-driver check.
   logic        fmap_write_enable;
-  logic [ 5:0] fmap_shape_read_address;
+  logic [ 5:0] fmap_shape_wr_addr;
+  logic [ 5:0] fmap_shape_rd_addr;
   logic [16:0] fmap_arr_shape_X;
   logic [16:0] fmap_arr_shape_Y;
   logic [16:0] fmap_arr_shape_Z;
@@ -107,11 +112,11 @@ module mem_dispatcher #() (
 
       case (IN_mem_set_uop.dest_cache)
         data_to_fmap_shape: begin
-          fmap_shape_read_address <= IN_mem_set_uop.dest_addr;
-          fmap_arr_shape_X        <= IN_mem_set_uop.a_value;
-          fmap_arr_shape_Y        <= IN_mem_set_uop.b_value;
-          fmap_arr_shape_Z        <= IN_mem_set_uop.c_value;
-          fmap_write_enable       <= 1'b1;
+          fmap_shape_wr_addr <= IN_mem_set_uop.dest_addr;
+          fmap_arr_shape_X   <= IN_mem_set_uop.a_value;
+          fmap_arr_shape_Y   <= IN_mem_set_uop.b_value;
+          fmap_arr_shape_Z   <= IN_mem_set_uop.c_value;
+          fmap_write_enable  <= 1'b1;
         end
 
         data_to_weight_shape: begin
@@ -138,9 +143,9 @@ module mem_dispatcher #() (
       .clk   (clk_core),
       .rst_n (rst_n_core),
       .wr_en (fmap_write_enable),
-      .wr_addr(fmap_shape_read_address),
+      .wr_addr(fmap_shape_wr_addr),
       .wr_xyz(fmap_shape_wr_xyz),
-      .rd_addr(fmap_shape_read_address),
+      .rd_addr(fmap_shape_rd_addr),
       .rd_xyz(fmap_shape_rd_xyz)
   );
 
@@ -200,7 +205,7 @@ module mem_dispatcher #() (
           };
           acp_rx_start <= 1'b1;
           IN_acp_rdy   <= 1'b1;
-          fmap_shape_read_address <= IN_LOAD_uop.shape_ptr_addr;
+          fmap_shape_rd_addr <= IN_LOAD_uop.shape_ptr_addr;
         end
 
         // L2 → host DDR4 (result DMA out)
@@ -212,7 +217,7 @@ module mem_dispatcher #() (
           };
           acp_rx_start <= 1'b1;
           IN_acp_rdy   <= 1'b1;
-          fmap_shape_read_address <= IN_LOAD_uop.shape_ptr_addr;
+          fmap_shape_rd_addr <= IN_LOAD_uop.shape_ptr_addr;
         end
 
         // L2 → GEMM fmap broadcast
@@ -224,7 +229,7 @@ module mem_dispatcher #() (
           };
           npu_rx_start <= 1'b1;
           IN_npu_rdy   <= 1'b1;
-          fmap_shape_read_address <= IN_LOAD_uop.shape_ptr_addr;
+          fmap_shape_rd_addr <= IN_LOAD_uop.shape_ptr_addr;
         end
 
         // L2 → GEMV fmap broadcast
@@ -236,7 +241,7 @@ module mem_dispatcher #() (
           };
           npu_rx_start <= 1'b1;
           IN_npu_rdy   <= 1'b1;
-          fmap_shape_read_address <= IN_LOAD_uop.shape_ptr_addr;
+          fmap_shape_rd_addr <= IN_LOAD_uop.shape_ptr_addr;
         end
 
         // L2 → CVO input (handled by mem_CVO_stream_bridge below)
