@@ -6,13 +6,18 @@
 // Spec ref     : pccx v002 §3.3 (MEMSET), §5.4 (shape pointer routing).
 // Clock        : clk @ 400 MHz.
 // Reset        : rst_n active-low (synchronous clear of all 64 entries).
-// Geometry     : 64 × 51 bit FF array (mem[0:63]).
+// Geometry     : 64 × 51 bit FF array (mem[0:63]; see isa_pkg::shape_xyz_t
+//                for the typed name).
 // Latency      : Write — 1 cycle. Read — 0 cycles (combinational).
 // Throughput   : 1 write + 1 read per cycle.
 // Reset state  : All entries cleared to 0.
-// Notes        : Identical to fmap_array_shape — see Stage E analysis
-//                (REFACTOR_NOTES) for the parameterised-shape-RAM
-//                consolidation candidate.
+// Notes        : Byte-for-byte duplicate of `fmap_array_shape`. The
+//                parameterised replacement
+//                `MEM_control/memory/Constant_Memory/shape_const_ram.sv`
+//                has been authored (not yet wired) and supersedes this
+//                module once `mem_dispatcher.sv` migrates the two
+//                instantiations. See Stage E analysis (REFACTOR_NOTES
+//                §6.3.1) for the consolidation rationale.
 // ===============================================================================
 
 module weight_array_shape

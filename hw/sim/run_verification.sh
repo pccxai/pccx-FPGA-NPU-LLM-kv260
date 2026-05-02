@@ -28,7 +28,7 @@ fi
 # Each entry lists the .sv modules xvlog must pick up, relative to hw/rtl/.
 declare -A TB_DEPS=(
     [tb_GEMM_dsp_packer_sign_recovery]="MAT_CORE/GEMM_dsp_packer.sv MAT_CORE/GEMM_sign_recovery.sv"
-    [tb_mat_result_normalizer]="MAT_CORE/mat_result_normalizer.sv"
+    [tb_mat_result_normalizer]="Constants/compilePriority_Order/C_type_pkg/dtype_pkg.sv MAT_CORE/mat_result_normalizer.sv"
     [tb_GEMM_weight_dispatcher]="MAT_CORE/GEMM_weight_dispatcher.sv"
     [tb_FROM_mat_result_packer]="MAT_CORE/FROM_mat_result_packer.sv"
     [tb_barrel_shifter_BF16]="barrel_shifter_BF16.sv"

@@ -18,7 +18,8 @@ import isa_pkg::*;
 //                    → write to L2[dst_addr..dst_addr+N_words-1].
 // L2 addr unit : 128-bit words. base_addr N ↔ bytes [16*N .. 16*N+15].
 // L2 read lat  : 3 clocks (URAM READ_LATENCY_B = 3) — tracked via rd_lat_pipe.
-// Max vec len  : 2048 elements × 16-bit = 32 KB (1 BRAM36 instance).
+// Max vec len  : ResultFifoDepth × 16-bit = 32 KB (1 BRAM36 instance) — the
+//                FIFO depth caps the longest CVO op vector.
 // Handshake    : OUT_cvo_valid asserts during READ phase only;
 //                OUT_cvo_result_ready asserts during READ phase only when
 //                the result FIFO is not full.
@@ -56,6 +57,13 @@ module mem_CVO_stream_bridge (
     input  logic        IN_cvo_result_valid,
     output logic        OUT_cvo_result_ready
 );
+
+  // ===| Bridge Sizing |=========================================================
+  // ResultFifoDepth : depth of the on-chip BF16 result FIFO (1 BRAM36 = 2048 ×
+  //                   16-bit = 32 KB). Also caps the longest CVO op vector
+  //                   that can sit in the FIFO between READ and WRITE phases
+  //                   without overrunning the buffer.
+  localparam int ResultFifoDepth = 2048;
 
   // ===| State Machine |=========================================================
   typedef enum logic [1:0] {
@@ -105,7 +113,7 @@ module mem_CVO_stream_bridge (
   assign OUT_cvo_result_ready = ~fifo_full && (state == ST_READ);
 
   xpm_fifo_sync #(
-      .FIFO_WRITE_DEPTH(2048),
+      .FIFO_WRITE_DEPTH(ResultFifoDepth),
       .WRITE_DATA_WIDTH(16),
       .READ_DATA_WIDTH (16),
       .FIFO_MEMORY_TYPE("block"),

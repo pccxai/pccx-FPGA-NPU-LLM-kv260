@@ -20,9 +20,9 @@
 // Reset state  : All stage valids = 0; pipeline registers zeroed.
 // Errors       : Zero input → exp = 0, mantissa = 0 (denormal-flush style).
 // Counters     : none.
-// Notes        : The "26" subtraction in S3 assumes the upstream fixed-point
-//                shifter places the implicit-1 at bit 26 (FixedMantWidth−1).
-//                If FixedMantWidth changes, this constant must move with it.
+// Notes        : ExpAlignBias is sourced from dtype_pkg::FixedMantWidth-1 so
+//                the S3 exponent fix-up tracks the upstream fixed-point
+//                mantissa width automatically.
 // ===============================================================================
 module gemm_result_normalizer (
     input logic clk,
@@ -35,6 +35,13 @@ module gemm_result_normalizer (
     output logic [15:0] data_out,  // 1:Sign, 8:Exp, 7:Mantissa (BF16 format)
     output logic        valid_out
 );
+
+  // ===| Exponent alignment bias |================================================
+  // The fixed-point mantissa carries the implicit-1 at bit (FixedMantWidth - 1).
+  // Stage S3 must subtract that position from the original e_max so the BF16
+  // exponent reflects the true magnitude of the leading-one. Tying the bias to
+  // dtype_pkg keeps this in lock-step with FixedMantWidth changes.
+  localparam logic [7:0] ExpAlignBias = 8'(dtype_pkg::FixedMantWidth - 1);
 
   // ===| Stage 1: Sign-Magnitude Conversion |=======
   // Converting from 2's complement to absolute value (Sign + Magnitude)
@@ -114,10 +121,10 @@ module gemm_result_normalizer (
         s3_new_exp  <= 8'd0;
         s3_mantissa <= 7'd0;
       end else begin
-        // Update exponent: original e_max + current bit position offset
-        // Example bias: Assume our fixed-point format implies the 1.0 bit is at position 26.
-        // Depending on your actual Shifter logic, this offset (26) should be matched.
-        s3_new_exp <= s2_emax + s2_first_one_pos - 8'd26;
+        // Update exponent: original e_max + current bit position - alignment bias.
+        // ExpAlignBias = dtype_pkg::FixedMantWidth - 1; one place to update if
+        // the upstream fixed-point format ever widens.
+        s3_new_exp <= s2_emax + s2_first_one_pos - ExpAlignBias;
 
         // Align mantissa to BF16 (7 bits of fraction)
         if (s2_first_one_pos >= 7)

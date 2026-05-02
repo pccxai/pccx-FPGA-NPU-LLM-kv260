@@ -44,6 +44,15 @@ module FROM_gemm_result_packer #(
     output logic o_busy
 );
 
+  // ===| Pack Geometry |==========================================================
+  // BeatsPerWord  : how many BF16 lanes fit in one AXIS word
+  //                 (= AXI_STREAM_WIDTH / BF16_WIDTH = 8 today).
+  // LastSendIdx   : the highest send_idx that still leaves a full group inside
+  //                 the capture register (= ARRAY_SIZE - BeatsPerWord). Once
+  //                 send_idx reaches it, the FSM returns to IDLE.
+  localparam int BeatsPerWord = `AXI_STREAM_WIDTH / `BF16_WIDTH;
+  localparam int LastSendIdx  = ARRAY_SIZE - BeatsPerWord;
+
   // ===| Internal Buffer to Hold Results |=======
   // Since systolic array results are staggered, we need to capture them.
   logic [`BF16_WIDTH-1:0] capture_reg[0:ARRAY_SIZE-1];
@@ -76,7 +85,7 @@ module FROM_gemm_result_packer #(
 
       // Clear valid bits once they are consumed (handled by FSM below)
       if (state == SEND_DATA && packed_ready) begin
-        for (int i = 0; i < 8; i++) begin
+        for (int i = 0; i < BeatsPerWord; i++) begin
           capture_valid[send_idx+i] <= 1'b0;
         end
       end
@@ -100,10 +109,9 @@ module FROM_gemm_result_packer #(
         end
 
         CHECK_VALID: begin
-          // We need 8 results to form a 128-bit word (16*8=128)
-          // In a real systolic array, they might not arrive all at once,
-          // but for simplicity, let's wait until we have a chunk of 8.
-          if (&capture_valid[send_idx+:8]) begin
+          // Wait until BeatsPerWord adjacent rows have produced a valid result
+          // (one 128-bit word = 8 BF16 lanes today).
+          if (&capture_valid[send_idx+:BeatsPerWord]) begin
             state <= SEND_DATA;
           end
         end
@@ -122,11 +130,11 @@ module FROM_gemm_result_packer #(
             };
             packed_valid <= 1'b1;
 
-            if (send_idx >= 24) begin
+            if (send_idx >= LastSendIdx) begin
               state    <= IDLE;
               send_idx <= 0;
             end else begin
-              send_idx <= send_idx + 8;
+              send_idx <= send_idx + BeatsPerWord;
               state    <= CHECK_VALID;
             end
           end else begin
