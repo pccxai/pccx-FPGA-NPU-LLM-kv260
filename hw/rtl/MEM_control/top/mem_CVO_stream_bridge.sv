@@ -3,19 +3,30 @@
 
 import isa_pkg::*;
 
-// ===| CVO L2 Stream Bridge |====================================================
-// Bridges the 128-bit L2 port B to the 16-bit BF16 streaming interface of CVO_top.
-//
+// ===| Module: mem_CVO_stream_bridge — L2 ↔ CVO 16b/128b serdes bridge |========
+// Purpose      : Convert between 128-bit L2 port-B bursts and 16-bit BF16
+//                stream consumed/produced by CVO_top. Owns the per-op FSM
+//                that walks src→dst regions.
+// Spec ref     : pccx v002 §5.3 (CVO stream bridge), §3.5 (CVO uop).
+// Clock        : clk @ 400 MHz.
+// Reset        : rst_n active-low.
 // Operation flow:
 //   Phase 1 — READ : sequential 128-bit bursts from L2[src_addr..src_addr+N_words-1]
-//                    → deserialise 8 x 16-bit per word → stream to CVO engine.
-//                    CVO results are buffered in an internal XPM FIFO.
-//   Phase 2 — WRITE: drain FIFO → serialise 8 x 16-bit → 128-bit bursts
+//                    → deserialise 8 × 16-bit per word → stream to CVO engine.
+//                    CVO results are buffered in an internal 2048-deep XPM FIFO.
+//   Phase 2 — WRITE: drain FIFO → serialise 8 × 16-bit → 128-bit bursts
 //                    → write to L2[dst_addr..dst_addr+N_words-1].
-//
-// L2 address unit  : 128-bit words.  base_addr N ↔ bytes [16*N .. 16*N+15].
-// L2 read latency  : 3 clocks (URAM READ_LATENCY_B = 3).
-// Max vector length: 2048 elements (16-bit each = 32 KB → fits in 1 BRAM36).
+// L2 addr unit : 128-bit words. base_addr N ↔ bytes [16*N .. 16*N+15].
+// L2 read lat  : 3 clocks (URAM READ_LATENCY_B = 3) — tracked via rd_lat_pipe.
+// Max vec len  : 2048 elements × 16-bit = 32 KB (1 BRAM36 instance).
+// Handshake    : OUT_cvo_valid asserts during READ phase only;
+//                OUT_cvo_result_ready asserts during READ phase only when
+//                the result FIFO is not full.
+// L2 port-B mux: Write priority during ST_WRITE; otherwise read addr.
+// Reset state  : ST_IDLE, all counters/buffers zeroed, OUT_done = 0.
+// Counters     : none.
+// Assertions   : (Stage C) wr_word_cnt ≤ total_words; FIFO never overflows
+//                (OUT_cvo_result_ready guarded by ~fifo_full).
 // ===============================================================================
 
 module mem_CVO_stream_bridge (

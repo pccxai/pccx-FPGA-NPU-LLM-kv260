@@ -5,14 +5,28 @@
 
 import isa_pkg::*;
 
-// ===| Global L2 Cache Controller |==============================================
-// Wraps mem_L2_cache_fmap (URAM) and provides two access controllers:
-//
-//   Port A — ACP DMA  : host DDR4 ↔ L2 via AXI-Stream (with CDC FIFO via mem_BUFFER)
-//   Port B — NPU      : compute engines (GEMM / GEMV / CVO) streaming R/W
-//
-// Arbitration: Port B is driven externally via IN_npu_* signals.
-// Address unit: 128-bit words (address 0 = first 128-bit line).
+// ===| Module: mem_GLOBAL_cache — L2 cache controller (URAM + ACP/NPU FSMs) |==
+// Purpose      : Wrap mem_L2_cache_fmap (URAM) with the ACP DMA state machine
+//                and the NPU compute access state machine, plus the ACP CDC
+//                bridge (mem_BUFFER). Hides URAM port-A/port-B handshaking
+//                from upstream. (Keller "deep module" boundary.)
+// Spec ref     : pccx v002 §5.1, §5.4 (port arbitration), §5.5 (CDC).
+// Clocks       : Dual-clock — clk_core (URAM, NPU FSM) + clk_axi (ACP-side
+//                AXIS). CDC isolated to mem_BUFFER.
+// Resets       : rst_n_core / rst_axi_n active-low.
+//   Port A — ACP DMA : host DDR4 ↔ L2 via AXI-Stream (CDC via mem_BUFFER).
+//   Port B — NPU     : compute engines (GEMM / GEMV / CVO) streaming R/W.
+// Arbitration  : Port B is driven externally via IN_npu_* signals; the
+//                upstream mem_dispatcher mux (final_npu_*) decides which
+//                producer (NPU FSM vs CVO bridge) wins port B per cycle.
+// Latency      : ACP read = URAM_LATENCY (3) cycles after acp_is_busy & ~we;
+//                tracked via acp_rd_valid_pipe.
+// Throughput   : 1 ACP transaction + 1 NPU transaction in flight in parallel.
+// Address unit : 128-bit words (address 0 = first 128-bit line).
+// Reset state  : both FSMs ST_IDLE-equivalent (acp_is_busy = 0, npu_is_busy = 0).
+// Counters     : none.
+// Assertions   : (Stage C) acp_ptr never exceeds acp_end_addr; the same for
+//                npu_ptr / npu_end_addr.
 // ===============================================================================
 
 module mem_GLOBAL_cache (

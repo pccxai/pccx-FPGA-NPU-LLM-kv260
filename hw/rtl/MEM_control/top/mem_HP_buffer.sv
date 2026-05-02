@@ -2,6 +2,27 @@
 `include "GEMM_Array.svh"
 `include "GLOBAL_CONST.svh"
 
+// ===| Module: mem_HP_buffer — HP weight CDC FIFO bank (URAM-backed) |===========
+// Purpose      : Cross-clock-domain weight buffering between AXI HP ports
+//                (clk_axi, 250 MHz) and the compute core (clk_core, 400 MHz),
+//                providing an elastic boundary for weight streaming.
+// Spec ref     : pccx v002 §6 (KV260 SoC), §5.4 (HP weight path).
+// Clocks       : clk_axi (S-side), clk_core (M-side), independent_clock CDC.
+// Resets       : rst_axi_n / rst_n_core, both active-low — applied to their
+//                respective clock domains by xpm_fifo_axis.
+// Topology     : 4 × xpm_fifo_axis, 128-bit wide × URAM_FIFO_DEPTH (= 4096)
+//                deep — uses 2 URAM blocks per FIFO (64 KB each, 256 KB total).
+// Latency      : Per-FIFO read latency tracked internally by xpm_fifo_axis;
+//                gray-code pointer sync ≈ 2-3 destination clocks.
+// Backpressure : tready propagates back through standard AXI4-Stream rules.
+//                Source side stalls when FIFO is full; sink stalls when empty.
+// Reset state  : All FIFOs cleared; tvalid/tready = 0.
+// Errors       : none surfaced (FIFO over/underflow asserts inside XPM).
+// Counters     : none.
+// Notes        : Weight order:
+//                  HP0/HP1 → MAT_CORE (GEMM upper/lower INT4 lanes)
+//                  HP2/HP3 → VEC_CORE (GEMV lanes A/B; C/D currently tied 0).
+// ===============================================================================
 module mem_HP_buffer #(
 ) (
     // ===| Clock & Reset |======================================

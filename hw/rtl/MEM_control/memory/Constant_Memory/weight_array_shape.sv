@@ -1,13 +1,19 @@
 `timescale 1ns / 1ps
 
-// ============================================================
-//  shape_ram
-//  - Depth : 64 entries  (6-bit address)
-//  - Width : 51 bits     (17-bit × 3 fields)
-//
-//  [write]  wr_en=1, wr_addr, wr_val{0,1,2} → next clk
-//  [ read]  rd_addr → at same clk rd_val{0,1,2} out (comb logic)
-// ============================================================
+// ===| Module: weight_array_shape — weight shape constant RAM (FF-based) |======
+// Purpose      : 64-entry × (3 × 17-bit) shape constant RAM for weight
+//                tensor shape descriptors (mirror of fmap_array_shape).
+// Spec ref     : pccx v002 §3.3 (MEMSET), §5.4 (shape pointer routing).
+// Clock        : clk @ 400 MHz.
+// Reset        : rst_n active-low (synchronous clear of all 64 entries).
+// Geometry     : 64 × 51 bit FF array (mem[0:63]).
+// Latency      : Write — 1 cycle. Read — 0 cycles (combinational).
+// Throughput   : 1 write + 1 read per cycle.
+// Reset state  : All entries cleared to 0.
+// Notes        : Identical to fmap_array_shape — see Stage E analysis
+//                (REFACTOR_NOTES) for the parameterised-shape-RAM
+//                consolidation candidate.
+// ===============================================================================
 
 module weight_array_shape
   import isa_pkg::*;

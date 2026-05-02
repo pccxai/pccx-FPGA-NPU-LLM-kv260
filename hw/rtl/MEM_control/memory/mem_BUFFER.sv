@@ -2,6 +2,23 @@
 `include "GEMM_Array.svh"
 `include "GLOBAL_CONST.svh"
 
+// ===| Module: mem_BUFFER — ACP CDC FIFO pair (RX/TX) |=========================
+// Purpose      : Tiny BRAM CDC FIFOs that decouple the AXI clock domain
+//                (250 MHz, ACP) from the core clock domain (400 MHz).
+//                Bulk fmap storage lives in the L2 URAM cache, so these
+//                CDC FIFOs are intentionally TINY (BRAM_FIFO_DEPTH = 32).
+// Spec ref     : pccx v002 §5.5 (ACP CDC), §6 (KV260 SoC).
+// Clocks       : clk_core (M-side RX, S-side TX) + clk_axi (S-side RX,
+//                M-side TX). Independent_clock CDC.
+// Resets       : rst_n_core / rst_axi_n active-low — applied to their
+//                respective clock domains by xpm_fifo_axis.
+// Topology     : 2 × xpm_fifo_axis @ 128-bit, depth 32, BRAM-backed.
+// Latency      : Gray-code pointer sync ≈ 2-3 destination clocks.
+// Backpressure : Standard AXI4-Stream tvalid/tready propagation.
+// Reset state  : Both FIFOs cleared.
+// Counters     : none.
+// Assertions   : (Stage C) — handled inside xpm_fifo_axis (no over/underflow).
+// ===============================================================================
 module mem_BUFFER (
     // ===| Clock & Reset |======================================
     input logic clk_core,  // 400MHz

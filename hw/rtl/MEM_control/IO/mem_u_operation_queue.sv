@@ -4,12 +4,27 @@
 
 import isa_pkg::*;
 
-// ===| Memory Operation Queue |==================================================
-// Decouples the scheduler from the L2 cache controller.
-// Two independent FIFO channels: ACP (host DMA) and NPU (internal compute).
-//
-// acp_uop_t / npu_uop_t are both 35-bit packed structs:
-//   {write_en[0], base_addr[16:0], end_addr[16:0]} = 1+17+17 = 35 bits
+// ===| Module: mem_u_operation_queue — scheduler↔L2 decoupling FIFOs |==========
+// Purpose      : Decouple Global_Scheduler issuing rate from L2 cache
+//                controller throughput. Provides two independent FIFO
+//                channels (ACP and NPU) so neither blocks the other.
+// Spec ref     : pccx v002 §5.4 (op queue), §4.2 (uop semantics).
+// Clock        : clk_core @ 400 MHz.
+// Reset        : rst_n_core active-low.
+// Topology     : 2 × xpm_fifo_sync, depth 128, width 35, BRAM-backed,
+//                prog_full threshold 100 (gives the scheduler 28 entries
+//                of grace before back-pressuring upstream).
+// Uop layout   : acp_uop_t / npu_uop_t are 35-bit packed structs:
+//                  {write_en[0], base_addr[16:0], end_addr[16:0]} = 1+17+17 = 35.
+// Latency      : 1 BRAM cycle from wr_en → dout (READ_MODE = "std").
+// Throughput   : 1 push + 1 pop per channel per cycle (independent channels).
+// Handshake    : OUT_*_cmd_valid asserts when (~busy && ~empty); pop fires
+//                continuously while consumer is idle.
+// Backpressure : OUT_*_cmd_fifo_full asserts at PROG_FULL_THRESH; upstream
+//                stops issuing.
+// Reset state  : Both FIFOs cleared.
+// Counters     : none. (Stage D candidate: max_acp_depth, max_npu_depth.)
+// Assertions   : (Stage C) — fifo over/underflow guarded by xpm_fifo_sync.
 // ===============================================================================
 
 module mem_u_operation_queue #() (

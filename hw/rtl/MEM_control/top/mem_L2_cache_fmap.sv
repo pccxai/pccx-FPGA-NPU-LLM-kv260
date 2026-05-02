@@ -1,15 +1,27 @@
 `timescale 1ns / 1ps
 `include "GLOBAL_CONST.svh"
 
-// ===| L2 Feature Map & KV Cache (URAM) |========================================
-// True dual-port URAM: Depth x 128-bit wide.
-//   Default Depth = 114688 entries = 1.75 MB
-//
-// Port A — ACP DMA path  (host DDR4 ↔ L2 via ACP)
-// Port B — NPU compute   (GEMM / GEMV / CVO streaming R/W)
-//
-// READ_LATENCY = 3 (URAM registered output, meets 400 MHz timing)
-// WRITE_MODE   = write_first (read-before-write on same address is undefined)
+// ===| Module: mem_L2_cache_fmap — central L2 fmap/KV URAM (TDP) |==============
+// Purpose      : Dual-port URAM bank holding fmap + KV cache for the entire
+//                NPU. Single source of truth for activations between engines.
+// Spec ref     : pccx v002 §5.1 (L2 cache geometry), §5.4 (port arbitration).
+// Clock        : clk_core (common-clock TDP). Port A and B share clk_core.
+// Reset        : rst_n_core active-low (mapped to xpm_memory_tdpram async rst).
+// Geometry     : Depth × 128-bit (default 114,688 × 128b = 1.75 MB).
+// Ports        :
+//   Port A — ACP DMA path (host DDR4 ↔ L2 via ACP)
+//   Port B — NPU compute  (GEMM / GEMV / CVO streaming R/W)
+// Latency      : READ_LATENCY = 3 cycles (URAM registered output, 400 MHz).
+// Throughput   : 1 read + 1 write per port per cycle (true dual-port).
+// Write policy : WRITE_MODE = no_change on both ports (URAM TDP requirement);
+//                read-then-write on the SAME address in the SAME cycle is
+//                undefined per Xilinx UG573.
+// Reset state  : URAM contents undefined (no MEMORY_INIT_PARAM); read data
+//                garbage until first write.
+// Errors       : ECC disabled; no error reporting.
+// Counters     : none.
+// Assertions   : (Stage C) Port A & B addr never collide on the same word in
+//                the same cycle when both wea/web are high.
 // ===============================================================================
 
 module mem_L2_cache_fmap #(
