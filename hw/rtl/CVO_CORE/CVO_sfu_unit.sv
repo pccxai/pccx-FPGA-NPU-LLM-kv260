@@ -16,7 +16,7 @@ import bf16_math_pkg::*;
 // Pipelines    : Independent per-op pipelines, multiplexed at the output:
 //   EXP        :  7 cycles
 //   SQRT       :  3 cycles
-//   RECIP      :  6 cycles  (Newton-Raphson, 1 step)
+//   RECIP      :  7 cycles  (Newton-Raphson, 1 step)
 //   SCALE      :  4 cycles  (first input word = scalar, rest = data)
 //   REDUCE_SUM :  variable  (ready-gated BF16 add pipeline, emits scalar)
 //   GELU       : 19 cycles  (MUL + NEG + EXP + ADD + RECIP + MUL chain)
@@ -335,7 +335,7 @@ module CVO_sfu_unit (
     end
   end
 
-  // ===| RECIP Pipeline (6 stages) |=============================================
+  // ===| RECIP Pipeline (7 stages) |=============================================
   // 1/x via 1 Newton-Raphson step: r1 = r0 * (2 - x*r0)
   // Initial estimate: exp flipped around 254, mantissa roughly inverted.
 
@@ -363,6 +363,47 @@ module CVO_sfu_unit (
     end
   end
 
+  logic        recip_s2a_valid;
+  logic        recip_s2a_zero;
+  logic        recip_s2a_sign;
+  logic [ 8:0] recip_s2a_esum;
+  logic [15:0] recip_s2a_mp;
+  logic [15:0] recip_s2a_r0;
+  logic        recip_s2a_out_sign;
+
+  logic [ 7:0] recip_s2a_er_wire;
+  logic [ 6:0] recip_s2a_mr_wire;
+
+  always_ff @(posedge clk) begin
+    if (!rst_n || i_clear) begin
+      recip_s2a_valid    <= 1'b0;
+      recip_s2a_zero     <= 1'b1;
+      recip_s2a_sign     <= 1'b0;
+      recip_s2a_esum     <= 9'd0;
+      recip_s2a_mp       <= 16'd0;
+      recip_s2a_r0       <= 16'd0;
+      recip_s2a_out_sign <= 1'b0;
+    end else begin
+      recip_s2a_valid    <= recip_s1_valid;
+      recip_s2a_zero     <= (recip_s1_x[14:0] == 15'd0) || (recip_s1_r0[14:0] == 15'd0);
+      recip_s2a_sign     <= recip_s1_x[15] ^ recip_s1_r0[15];
+      recip_s2a_esum     <= {1'b0, recip_s1_x[14:7]} + {1'b0, recip_s1_r0[14:7]};
+      recip_s2a_mp       <= {1'b1, recip_s1_x[6:0]} * {1'b1, recip_s1_r0[6:0]};
+      recip_s2a_r0       <= recip_s1_r0;
+      recip_s2a_out_sign <= recip_s1_sign;
+    end
+  end
+
+  always_comb begin : comb_recip_xr0_pack
+    if (recip_s2a_mp[15]) begin
+      recip_s2a_er_wire = 8'(recip_s2a_esum - 9'd127 + 9'd1);
+      recip_s2a_mr_wire = recip_s2a_mp[14:8];
+    end else begin
+      recip_s2a_er_wire = 8'(recip_s2a_esum - 9'd127);
+      recip_s2a_mr_wire = recip_s2a_mp[13:7];
+    end
+  end
+
   logic        recip_s2_valid;
   logic [15:0] recip_s2_xr0;
   logic [15:0] recip_s2_r0;
@@ -371,11 +412,14 @@ module CVO_sfu_unit (
   always_ff @(posedge clk) begin
     if (!rst_n || i_clear) begin
       recip_s2_valid <= 1'b0;
+      recip_s2_xr0   <= 16'd0;
+      recip_s2_r0    <= 16'd0;
+      recip_s2_sign  <= 1'b0;
     end else begin
-      recip_s2_valid <= recip_s1_valid;
-      recip_s2_xr0   <= bf16_mul(recip_s1_x, recip_s1_r0);
-      recip_s2_r0    <= recip_s1_r0;
-      recip_s2_sign  <= recip_s1_sign;
+      recip_s2_valid <= recip_s2a_valid;
+      recip_s2_xr0   <= recip_s2a_zero ? 16'd0 : {recip_s2a_sign, recip_s2a_er_wire, recip_s2a_mr_wire};
+      recip_s2_r0    <= recip_s2a_r0;
+      recip_s2_sign  <= recip_s2a_out_sign;
     end
   end
 
