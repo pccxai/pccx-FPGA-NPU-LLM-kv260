@@ -55,7 +55,7 @@ module tb_CVO_sfu_reduce_sum;
   int errors = 0;
   bit observed_backpressure = 1'b0;
 
-  function automatic logic [15:0] model_bf16_add(input logic [15:0] a, input logic [15:0] b);
+	  function automatic logic [15:0] model_bf16_add(input logic [15:0] a, input logic [15:0] b);
     logic [7:0] ea, eb, elarge;
     logic [7:0] diff;
     logic [8:0] ma, mb;
@@ -99,7 +99,27 @@ module tb_CVO_sfu_reduce_sum;
       eout = elarge - 8'd1;
       mout = sum[7:1];
     end
-    return {sout, eout, mout};
+	    return {sout, eout, mout};
+	  endfunction
+
+  function automatic logic [15:0] model_bf16_mul(input logic [15:0] a, input logic [15:0] b);
+    logic        s;
+    logic [ 8:0] esum;
+    logic [15:0] mp;
+    logic [ 7:0] er;
+    logic [ 6:0] mr;
+    if (a[14:0] == 0 || b[14:0] == 0) return 16'd0;
+    s    = a[15] ^ b[15];
+    esum = {1'b0, a[14:7]} + {1'b0, b[14:7]};
+    mp   = {1'b1, a[6:0]} * {1'b1, b[6:0]};
+    if (mp[15]) begin
+      er = 8'(esum - 9'd127 + 9'd1);
+      mr = mp[14:8];
+    end else begin
+      er = 8'(esum - 9'd127);
+      mr = mp[13:7];
+    end
+    return {s, er, mr};
   endfunction
 
   task automatic push_word(input logic [15:0] word);
@@ -127,9 +147,15 @@ module tb_CVO_sfu_reduce_sum;
 
   initial begin
     logic [15:0] expected;
-    bit          reduce_seen;
-    bit          gelu_seen;
-    bit          exp_seen;
+	    bit          reduce_seen;
+	    bit          gelu_seen;
+	    bit          exp_seen;
+    bit          recip_seen;
+    logic [15:0] recip_input;
+    logic [15:0] recip_seed;
+    logic [15:0] recip_xr0;
+    logic [15:0] recip_corr;
+    logic [15:0] recip_expected;
 
     rst_n     = 1'b0;
     i_clear   = 1'b0;
@@ -222,13 +248,47 @@ module tb_CVO_sfu_reduce_sum;
       end
     end
 
-    if (!exp_seen) begin
-      errors++;
-      $display("FAIL: timeout waiting for EXP(0) output.");
+	    if (!exp_seen) begin
+	      errors++;
+	      $display("FAIL: timeout waiting for EXP(0) output.");
+	    end
+
+    recip_input    = 16'h4000;  // 2.0
+    recip_seed     = {1'b0,
+                      8'(8'd254 - recip_input[14:7]),
+                      7'(7'd127 - {1'b0, recip_input[6:1]})};
+    recip_xr0      = model_bf16_mul({1'b0, recip_input[14:0]}, recip_seed);
+    recip_corr     = model_bf16_add(16'h4000, {1'b1, recip_xr0[14:0]});
+    recip_expected = {recip_input[15], model_bf16_mul(recip_seed, recip_corr)[14:0]};
+
+    @(negedge clk);
+    IN_func  = CVO_RECIP;
+    IN_data  = recip_input;
+    IN_valid = 1'b1;
+    @(negedge clk);
+    IN_valid = 1'b0;
+    IN_data  = 16'd0;
+
+    recip_seen = 1'b0;
+    for (int cycle = 0; cycle < 96; cycle++) begin
+      @(posedge clk); #1;
+      if (OUT_result_valid) begin
+        recip_seen = 1'b1;
+        if (OUT_result !== recip_expected) begin
+          errors++;
+          $display("[%0t] RECIP smoke mismatch: got=%h exp=%h", $time, OUT_result, recip_expected);
+        end
+        break;
+      end
     end
 
-    if (errors == 0) begin
-      $display("PASS: %0d cycles, CVO SFU reduce sum, GELU, and EXP smoke match golden.", N_WORDS);
+    if (!recip_seen) begin
+      errors++;
+      $display("FAIL: timeout waiting for RECIP output.");
+    end
+
+	    if (errors == 0) begin
+	      $display("PASS: %0d cycles, CVO SFU reduce sum, GELU, EXP, and RECIP smoke match golden.", N_WORDS);
     end else begin
       $display("FAIL: %0d mismatches over CVO SFU smoke.", errors);
     end

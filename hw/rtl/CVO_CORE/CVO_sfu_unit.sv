@@ -16,7 +16,7 @@ import bf16_math_pkg::*;
 // Pipelines    : Independent per-op pipelines, multiplexed at the output:
 //   EXP        :  7 cycles
 //   SQRT       :  3 cycles
-//   RECIP      :  4 cycles  (Newton-Raphson, 1 step)
+//   RECIP      :  5 cycles  (Newton-Raphson, 1 step)
 //   SCALE      :  3 cycles  (first input word = scalar, rest = data)
 //   REDUCE_SUM :  variable  (ready-gated BF16 add pipeline, emits scalar)
 //   GELU       : 18 cycles  (MUL + NEG + EXP + ADD + RECIP + MUL chain)
@@ -335,7 +335,7 @@ module CVO_sfu_unit (
     end
   end
 
-  // ===| RECIP Pipeline (4 stages) |=============================================
+  // ===| RECIP Pipeline (5 stages) |=============================================
   // 1/x via 1 Newton-Raphson step: r1 = r0 * (2 - x*r0)
   // Initial estimate: exp flipped around 254, mantissa roughly inverted.
 
@@ -379,19 +379,103 @@ module CVO_sfu_unit (
     end
   end
 
+  logic        recip_s3a_valid;
+  logic        recip_s3a_bypass;
+  logic [15:0] recip_s3a_bypass_value;
+  logic [ 7:0] recip_s3a_elarge;
+  logic [ 8:0] recip_s3a_ma;
+  logic [ 8:0] recip_s3a_mb;
+  logic [15:0] recip_s3a_r0;
+  logic        recip_s3a_sign;
+
+  logic [ 7:0] recip_corr_elarge_wire;
+  logic [ 8:0] recip_corr_ma_wire;
+  logic [ 8:0] recip_corr_mb_wire;
+
+  always_comb begin : comb_recip_corr_align
+    if (8'd128 >= recip_s2_xr0[14:7]) begin
+      recip_corr_elarge_wire = 8'd128;
+      recip_corr_ma_wire     = {1'b0, 1'b1, 7'd0};
+      recip_corr_mb_wire     = 9'({1'b0, 1'b1, recip_s2_xr0[6:0]} >>
+                                   (8'd128 - recip_s2_xr0[14:7]));
+    end else begin
+      recip_corr_elarge_wire = recip_s2_xr0[14:7];
+      recip_corr_ma_wire     = 9'({1'b0, 1'b1, 7'd0} >>
+                                   (recip_s2_xr0[14:7] - 8'd128));
+      recip_corr_mb_wire     = {1'b0, 1'b1, recip_s2_xr0[6:0]};
+    end
+  end
+
+  always_ff @(posedge clk) begin
+    if (!rst_n || i_clear) begin
+      recip_s3a_valid        <= 1'b0;
+      recip_s3a_bypass       <= 1'b0;
+      recip_s3a_bypass_value <= 16'd0;
+      recip_s3a_elarge       <= 8'd0;
+      recip_s3a_ma           <= 9'd0;
+      recip_s3a_mb           <= 9'd0;
+      recip_s3a_r0           <= 16'd0;
+      recip_s3a_sign         <= 1'b0;
+    end else begin
+      recip_s3a_valid        <= recip_s2_valid;
+      recip_s3a_bypass       <= (recip_s2_xr0[14:0] == 15'd0);
+      recip_s3a_bypass_value <= Bf16Two;
+      recip_s3a_elarge       <= recip_corr_elarge_wire;
+      recip_s3a_ma           <= recip_corr_ma_wire;
+      recip_s3a_mb           <= recip_corr_mb_wire;
+      recip_s3a_r0           <= recip_s2_r0;
+      recip_s3a_sign         <= recip_s2_sign;
+    end
+  end
+
   logic        recip_s3_valid;
   logic [15:0] recip_s3_corr;
   logic [15:0] recip_s3_r0;
   logic        recip_s3_sign;
 
+  logic [15:0] recip_corr_packed_wire;
+  logic        recip_corr_sout_wire;
+  logic [ 9:0] recip_corr_sum_wire;
+
+  always_comb begin : comb_recip_corr_pack
+    if (recip_s3a_ma >= recip_s3a_mb) begin
+      recip_corr_sout_wire = 1'b0;
+      recip_corr_sum_wire  = {1'b0, recip_s3a_ma} - {1'b0, recip_s3a_mb};
+    end else begin
+      recip_corr_sout_wire = 1'b1;
+      recip_corr_sum_wire  = {1'b0, recip_s3a_mb} - {1'b0, recip_s3a_ma};
+    end
+
+    if (recip_s3a_bypass) begin
+      recip_corr_packed_wire = recip_s3a_bypass_value;
+    end else if (recip_corr_sum_wire == 10'd0) begin
+      recip_corr_packed_wire = 16'd0;
+    end else if (recip_corr_sum_wire[9]) begin
+      recip_corr_packed_wire = {recip_corr_sout_wire,
+                                8'(recip_s3a_elarge + 8'd1),
+                                recip_corr_sum_wire[9:3]};
+    end else if (recip_corr_sum_wire[8]) begin
+      recip_corr_packed_wire = {recip_corr_sout_wire,
+                                recip_s3a_elarge,
+                                recip_corr_sum_wire[8:2]};
+    end else begin
+      recip_corr_packed_wire = {recip_corr_sout_wire,
+                                8'(recip_s3a_elarge - 8'd1),
+                                recip_corr_sum_wire[7:1]};
+    end
+  end
+
   always_ff @(posedge clk) begin
     if (!rst_n || i_clear) begin
       recip_s3_valid <= 1'b0;
+      recip_s3_corr  <= 16'd0;
+      recip_s3_r0    <= 16'd0;
+      recip_s3_sign  <= 1'b0;
     end else begin
-      recip_s3_valid <= recip_s2_valid;
-      recip_s3_corr  <= bf16_add(Bf16Two, {1'b1, recip_s2_xr0[14:0]});
-      recip_s3_r0    <= recip_s2_r0;
-      recip_s3_sign  <= recip_s2_sign;
+      recip_s3_valid <= recip_s3a_valid;
+      recip_s3_corr  <= recip_corr_packed_wire;
+      recip_s3_r0    <= recip_s3a_r0;
+      recip_s3_sign  <= recip_s3a_sign;
     end
   end
 
