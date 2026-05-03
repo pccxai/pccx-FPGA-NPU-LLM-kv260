@@ -19,7 +19,7 @@ import bf16_math_pkg::*;
 //   RECIP      :  4 cycles  (Newton-Raphson, 1 step)
 //   SCALE      :  3 cycles  (first input word = scalar, rest = data)
 //   REDUCE_SUM :  variable  (ready-gated BF16 add pipeline, emits scalar)
-//   GELU       : 14 cycles  (MUL + NEG + EXP + ADD + RECIP + MUL chain)
+//   GELU       : 16 cycles  (MUL + NEG + EXP + ADD + RECIP + MUL chain)
 // Throughput   : 1 result/cycle for streaming ops; REDUCE_SUM emits 1 scalar
 //                per IN_length elements.
 // Handshake    : OUT_data_ready is 1'b1 for streaming ops; REDUCE_SUM applies
@@ -575,14 +575,14 @@ module CVO_sfu_unit (
     end
   end
 
-  // ===| GELU Pipeline (14 stages) |=============================================
+  // ===| GELU Pipeline (16 stages) |=============================================
   // GELU(x) ≈ x * sigmoid(1.702*x),  sigmoid(y) = 1/(1+exp(-y))
-  // Chain: MUL(1.702)[1] -> NEG[0] -> EXP[3] -> ADD(1)[1] ->
-  // RECIP seed/Newton[4] -> MUL(x)[1]. The Newton correction and
-  // multiply are separated to keep the 400 MHz core timing boundary real.
-  // x is preserved in a 12-cycle delay chain.
+  // Chain: MUL(1.702)[1] -> NEG[0] -> EXP convert[3] -> EXP lut[2] ->
+  // ADD(1)[1] -> RECIP seed/Newton[4] -> MUL(x)[1]. The BF16-to-fixed
+  // conversion and Newton correction are split to keep 400 MHz boundaries real.
+  // x is preserved in a 14-cycle delay chain.
 
-  localparam int GeluDelay = 12;
+  localparam int GeluDelay = 14;
 
   logic [15:0] gelu_x_pipe   [GeluDelay];
 
@@ -615,35 +615,71 @@ module CVO_sfu_unit (
     end
   end
 
-  // Stages g3-g6: EXP(-y) — split BF16->fixed conversion from log2(e) multiply
+  // Stages g3-g8: EXP(-y) — classify, shift, sign, then log2(e) multiply
   logic               gelu_e1_valid;
   logic        [ 8:0] gelu_e1_n;
   logic        [ 6:0] gelu_e1_frac;
 
+  logic        gelu_e0a_valid;
+  logic        gelu_e0a_sign;
+  logic        gelu_e0a_zero;
+  logic        gelu_e0a_sat;
+  logic        gelu_e0a_shift_left;
+  logic [ 4:0] gelu_e0a_shift_amt;
+  logic [15:0] gelu_e0a_mant_ext;
+
+  logic        gelu_e0b_valid;
+  logic        gelu_e0b_sign;
+  logic [15:0] gelu_e0b_mag;
+
   logic               gelu_e0_valid;
   logic signed [15:0] gelu_e0_xf;
-  logic signed [15:0] gelu_g2_xf_wire;
   logic signed [23:0] gelu_e0_y_wire;
-
-  always_comb begin : comb_gelu_exp_convert
-    logic [15:0] mag;
-    int          sh;
-    sh  = int'(gelu_g2_neg_y[14:7]) - 127;
-    mag = 16'd0;
-    if (gelu_g2_neg_y[14:7] == 8'd0) mag = 16'd0;
-    else if (sh >= 8) mag = 16'h7FFF;
-    else if (sh >= -7) mag = 16'({1'b1, gelu_g2_neg_y[6:0], 7'b0} << (sh + 7));
-    else mag = 16'({1'b1, gelu_g2_neg_y[6:0], 7'b0} >> -(sh + 7));
-    gelu_g2_xf_wire = gelu_g2_neg_y[15] ? -$signed({1'b0, mag}) : $signed({1'b0, mag});
-  end
 
   always_ff @(posedge clk) begin
     if (!rst_n || i_clear) begin
-      gelu_e0_valid <= 1'b0;
-      gelu_e0_xf    <= '0;
+      gelu_e0a_valid      <= 1'b0;
+      gelu_e0a_sign       <= 1'b0;
+      gelu_e0a_zero       <= 1'b0;
+      gelu_e0a_sat        <= 1'b0;
+      gelu_e0a_shift_left <= 1'b0;
+      gelu_e0a_shift_amt  <= 5'd0;
+      gelu_e0a_mant_ext   <= 16'd0;
+      gelu_e0b_valid      <= 1'b0;
+      gelu_e0b_sign       <= 1'b0;
+      gelu_e0b_mag        <= 16'd0;
+      gelu_e0_valid       <= 1'b0;
+      gelu_e0_xf          <= '0;
     end else begin
-      gelu_e0_valid <= gelu_g2_valid;
-      gelu_e0_xf    <= gelu_g2_xf_wire;
+      // Stage e0a: classify the BF16 exponent and register shift controls.
+      automatic int sh;
+      sh = int'(gelu_g2_neg_y[14:7]) - 127;
+      gelu_e0a_valid      <= gelu_g2_valid;
+      gelu_e0a_sign       <= gelu_g2_neg_y[15];
+      gelu_e0a_mant_ext   <= {1'b0, 1'b1, gelu_g2_neg_y[6:0], 7'b0};
+      gelu_e0a_zero       <= (gelu_g2_neg_y[14:7] == 8'd0) || (sh <= -23);
+      gelu_e0a_sat        <= (sh >= 8);
+      gelu_e0a_shift_left <= (sh >= -7);
+      if (sh >= -7) gelu_e0a_shift_amt <= 5'(sh + 7);
+      else gelu_e0a_shift_amt <= 5'(-(sh + 7));
+
+      // Stage e0b: perform only the variable shift / saturation.
+      gelu_e0b_valid <= gelu_e0a_valid;
+      gelu_e0b_sign  <= gelu_e0a_sign;
+      if (gelu_e0a_zero) begin
+        gelu_e0b_mag <= 16'd0;
+      end else if (gelu_e0a_sat) begin
+        gelu_e0b_mag <= 16'h7FFF;
+      end else if (gelu_e0a_shift_left) begin
+        gelu_e0b_mag <= 16'(gelu_e0a_mant_ext << gelu_e0a_shift_amt);
+      end else begin
+        gelu_e0b_mag <= 16'(gelu_e0a_mant_ext >> gelu_e0a_shift_amt);
+      end
+
+      // Stage e0c: apply sign before the DSP multiply input boundary.
+      gelu_e0_valid <= gelu_e0b_valid;
+      gelu_e0_xf    <= gelu_e0b_sign ? -$signed({1'b0, gelu_e0b_mag}) :
+                                      $signed({1'b0, gelu_e0b_mag});
     end
   end
 

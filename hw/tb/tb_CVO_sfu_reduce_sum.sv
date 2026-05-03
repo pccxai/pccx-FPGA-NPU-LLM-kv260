@@ -127,6 +127,8 @@ module tb_CVO_sfu_reduce_sum;
 
   initial begin
     logic [15:0] expected;
+    bit          reduce_seen;
+    bit          gelu_seen;
 
     rst_n     = 1'b0;
     i_clear   = 1'b0;
@@ -148,10 +150,12 @@ module tb_CVO_sfu_reduce_sum;
     expected = 16'd0;
     for (int i = 0; i < N_WORDS; i++) expected = model_bf16_add(expected, 16'h3F80);
 
+    reduce_seen = 1'b0;
     for (int cycle = 0; cycle < 80; cycle++) begin
       @(posedge clk); #1;
       if (OUT_data_ready !== 1'b1) observed_backpressure = 1'b1;
       if (OUT_result_valid) begin
+        reduce_seen = 1'b1;
         if (OUT_result !== expected) begin
           errors++;
           $display("[%0t] reduce sum mismatch: got=%h exp=%h", $time, OUT_result, expected);
@@ -160,17 +164,47 @@ module tb_CVO_sfu_reduce_sum;
           errors++;
           $display("[%0t] reduce sum did not apply expected local backpressure", $time);
         end
-        if (errors == 0) begin
-          $display("PASS: %0d cycles, CVO SFU reduce sum matches golden.", N_WORDS);
-        end else begin
-          $display("FAIL: %0d mismatches over %0d cycles.", errors, N_WORDS);
-        end
-        $finish;
+        break;
       end
     end
 
-    errors++;
-    $display("FAIL: timeout waiting for reduce sum output.");
+    if (!reduce_seen) begin
+      errors++;
+      $display("FAIL: timeout waiting for reduce sum output.");
+      $finish;
+    end
+
+    @(negedge clk);
+    IN_func  = CVO_GELU;
+    IN_data  = 16'd0;
+    IN_valid = 1'b1;
+    @(negedge clk);
+    IN_valid = 1'b0;
+    IN_data  = 16'd0;
+
+    gelu_seen = 1'b0;
+    for (int cycle = 0; cycle < 96; cycle++) begin
+      @(posedge clk); #1;
+      if (OUT_result_valid) begin
+        gelu_seen = 1'b1;
+        if (OUT_result !== 16'd0) begin
+          errors++;
+          $display("[%0t] GELU(0) mismatch: got=%h exp=0000", $time, OUT_result);
+        end
+        break;
+      end
+    end
+
+    if (!gelu_seen) begin
+      errors++;
+      $display("FAIL: timeout waiting for GELU(0) output.");
+    end
+
+    if (errors == 0) begin
+      $display("PASS: %0d cycles, CVO SFU reduce sum and GELU smoke match golden.", N_WORDS);
+    end else begin
+      $display("FAIL: %0d mismatches over CVO SFU smoke.", errors);
+    end
     $finish;
   end
 
