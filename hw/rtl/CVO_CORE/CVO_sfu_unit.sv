@@ -675,6 +675,7 @@ module CVO_sfu_unit (
 
   logic [15:0] rsum_count;
   logic [15:0] rsum_accum;
+  logic        rsum_active;
   logic        rsum_out_valid;
   logic [15:0] rsum_out;
 
@@ -728,6 +729,7 @@ module CVO_sfu_unit (
     if (!rst_n || i_clear) begin
       rsum_count     <= 16'd0;
       rsum_accum     <= 16'd0;
+      rsum_active    <= 1'b0;
       rsum_out_valid <= 1'b0;
       rsum_out       <= 16'd0;
       rsum_in_valid  <= 1'b0;
@@ -760,13 +762,20 @@ module CVO_sfu_unit (
       if (IN_valid && (IN_func == CVO_REDUCE_SUM) && rsum_data_ready) begin
         rsum_in_valid <= 1'b1;
         rsum_in_data  <= IN_data;
-        rsum_in_last  <= (rsum_count == IN_length - 16'd1);
-        rsum_count    <= (rsum_count == IN_length - 16'd1) ? 16'd0 : rsum_count + 16'd1;
+        if (!rsum_active) begin
+          rsum_in_last <= (IN_length <= 16'd1);
+          rsum_count   <= (IN_length <= 16'd1) ? 16'd0 : (IN_length - 16'd1);
+          rsum_active  <= (IN_length > 16'd1);
+        end else begin
+          rsum_in_last <= (rsum_count == 16'd1);
+          rsum_count   <= rsum_count - 16'd1;
+          rsum_active  <= (rsum_count != 16'd1);
+        end
       end else begin
         rsum_in_valid <= 1'b0;
         if ((IN_func != CVO_REDUCE_SUM) && rsum_data_ready) begin
-          rsum_count <= 16'd0;
-          rsum_accum <= 16'd0;
+          rsum_active <= 1'b0;
+          rsum_accum  <= 16'd0;
         end
       end
 
