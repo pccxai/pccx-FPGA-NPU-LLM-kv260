@@ -16,7 +16,7 @@ import bf16_math_pkg::*;
 // Pipelines    : Independent per-op pipelines, multiplexed at the output:
 //   EXP        :  7 cycles
 //   SQRT       :  3 cycles
-//   RECIP      :  7 cycles  (Newton-Raphson, 1 step)
+//   RECIP      :  8 cycles  (Newton-Raphson, 1 step)
 //   SCALE      :  4 cycles  (first input word = scalar, rest = data)
 //   REDUCE_SUM :  variable  (ready-gated BF16 add pipeline, emits scalar)
 //   GELU       : 21 cycles  (MUL + NEG + EXP + ADD + RECIP + MUL chain)
@@ -335,7 +335,7 @@ module CVO_sfu_unit (
     end
   end
 
-  // ===| RECIP Pipeline (7 stages) |=============================================
+  // ===| RECIP Pipeline (8 stages) |=============================================
   // 1/x via 1 Newton-Raphson step: r1 = r0 * (2 - x*r0)
   // Initial estimate: exp flipped around 254, mantissa roughly inverted.
 
@@ -480,6 +480,14 @@ module CVO_sfu_unit (
   logic [15:0] recip_corr_packed_wire;
   logic        recip_corr_sout_wire;
   logic [ 9:0] recip_corr_sum_wire;
+  logic        recip_s3b_valid;
+  logic        recip_s3b_bypass;
+  logic [15:0] recip_s3b_bypass_value;
+  logic [ 7:0] recip_s3b_elarge;
+  logic        recip_s3b_sout;
+  logic [ 9:0] recip_s3b_sum;
+  logic [15:0] recip_s3b_r0;
+  logic        recip_s3b_sign;
 
   always_comb begin : comb_recip_corr_pack
     if (recip_s3a_ma >= recip_s3a_mb) begin
@@ -490,22 +498,44 @@ module CVO_sfu_unit (
       recip_corr_sum_wire  = {1'b0, recip_s3a_mb} - {1'b0, recip_s3a_ma};
     end
 
-    if (recip_s3a_bypass) begin
-      recip_corr_packed_wire = recip_s3a_bypass_value;
-    end else if (recip_corr_sum_wire == 10'd0) begin
+    if (recip_s3b_bypass) begin
+      recip_corr_packed_wire = recip_s3b_bypass_value;
+    end else if (recip_s3b_sum == 10'd0) begin
       recip_corr_packed_wire = 16'd0;
-    end else if (recip_corr_sum_wire[9]) begin
-      recip_corr_packed_wire = {recip_corr_sout_wire,
-                                8'(recip_s3a_elarge + 8'd1),
-                                recip_corr_sum_wire[9:3]};
-    end else if (recip_corr_sum_wire[8]) begin
-      recip_corr_packed_wire = {recip_corr_sout_wire,
-                                recip_s3a_elarge,
-                                recip_corr_sum_wire[8:2]};
+    end else if (recip_s3b_sum[9]) begin
+      recip_corr_packed_wire = {recip_s3b_sout,
+                                8'(recip_s3b_elarge + 8'd1),
+                                recip_s3b_sum[9:3]};
+    end else if (recip_s3b_sum[8]) begin
+      recip_corr_packed_wire = {recip_s3b_sout,
+                                recip_s3b_elarge,
+                                recip_s3b_sum[8:2]};
     end else begin
-      recip_corr_packed_wire = {recip_corr_sout_wire,
-                                8'(recip_s3a_elarge - 8'd1),
-                                recip_corr_sum_wire[7:1]};
+      recip_corr_packed_wire = {recip_s3b_sout,
+                                8'(recip_s3b_elarge - 8'd1),
+                                recip_s3b_sum[7:1]};
+    end
+  end
+
+  always_ff @(posedge clk) begin
+    if (!rst_n || i_clear) begin
+      recip_s3b_valid        <= 1'b0;
+      recip_s3b_bypass       <= 1'b0;
+      recip_s3b_bypass_value <= 16'd0;
+      recip_s3b_elarge       <= 8'd0;
+      recip_s3b_sout         <= 1'b0;
+      recip_s3b_sum          <= 10'd0;
+      recip_s3b_r0           <= 16'd0;
+      recip_s3b_sign         <= 1'b0;
+    end else begin
+      recip_s3b_valid        <= recip_s3a_valid;
+      recip_s3b_bypass       <= recip_s3a_bypass;
+      recip_s3b_bypass_value <= recip_s3a_bypass_value;
+      recip_s3b_elarge       <= recip_s3a_elarge;
+      recip_s3b_sout         <= recip_corr_sout_wire;
+      recip_s3b_sum          <= recip_corr_sum_wire;
+      recip_s3b_r0           <= recip_s3a_r0;
+      recip_s3b_sign         <= recip_s3a_sign;
     end
   end
 
@@ -516,10 +546,10 @@ module CVO_sfu_unit (
       recip_s3_r0    <= 16'd0;
       recip_s3_sign  <= 1'b0;
     end else begin
-      recip_s3_valid <= recip_s3a_valid;
+      recip_s3_valid <= recip_s3b_valid;
       recip_s3_corr  <= recip_corr_packed_wire;
-      recip_s3_r0    <= recip_s3a_r0;
-      recip_s3_sign  <= recip_s3a_sign;
+      recip_s3_r0    <= recip_s3b_r0;
+      recip_s3_sign  <= recip_s3b_sign;
     end
   end
 
