@@ -19,7 +19,7 @@ import bf16_math_pkg::*;
 //   RECIP      :  4 cycles  (Newton-Raphson, 1 step)
 //   SCALE      :  3 cycles  (first input word = scalar, rest = data)
 //   REDUCE_SUM :  variable  (ready-gated BF16 add pipeline, emits scalar)
-//   GELU       : 16 cycles  (MUL + NEG + EXP + ADD + RECIP + MUL chain)
+//   GELU       : 17 cycles  (MUL + NEG + EXP + ADD + RECIP + MUL chain)
 // Throughput   : 1 result/cycle for streaming ops; REDUCE_SUM emits 1 scalar
 //                per IN_length elements.
 // Handshake    : OUT_data_ready is 1'b1 for streaming ops; REDUCE_SUM applies
@@ -623,7 +623,7 @@ module CVO_sfu_unit (
     end
   end
 
-  // ===| GELU Pipeline (16 stages) |=============================================
+  // ===| GELU Pipeline (17 stages) |=============================================
   // GELU(x) ≈ x * sigmoid(1.702*x),  sigmoid(y) = 1/(1+exp(-y))
   // Chain: MUL(1.702)[1] -> NEG[0] -> EXP convert[3] -> EXP lut[2] ->
   // ADD(1)[1] -> RECIP seed/Newton[4] -> MUL(x)[1]. The BF16-to-fixed
@@ -839,7 +839,34 @@ module CVO_sfu_unit (
     end
   end
 
-  // Stage g10: x * sigmoid = GELU(x)
+  // Stages g10a-g10b: x * sigmoid = GELU(x)
+  logic        gelu_m1_valid;
+  logic        gelu_m1_zero;
+  logic        gelu_m1_sign;
+  logic [ 8:0] gelu_m1_esum;
+  logic [15:0] gelu_m1_mp;
+
+  always_ff @(posedge clk) begin
+    if (!rst_n || i_clear) begin
+      gelu_m1_valid <= 1'b0;
+      gelu_m1_zero  <= 1'b0;
+      gelu_m1_sign  <= 1'b0;
+      gelu_m1_esum  <= 9'd0;
+      gelu_m1_mp    <= 16'd0;
+    end else begin
+      gelu_m1_valid <= gelu_r3_valid;
+      if (gelu_r3_valid) begin
+        gelu_m1_zero <= (gelu_x_pipe[GeluDelay-1][14:0] == 15'd0) ||
+                        (gelu_r3_sigmoid[14:0] == 15'd0);
+        gelu_m1_sign <= gelu_x_pipe[GeluDelay-1][15] ^ gelu_r3_sigmoid[15];
+        gelu_m1_esum <= {1'b0, gelu_x_pipe[GeluDelay-1][14:7]} +
+                        {1'b0, gelu_r3_sigmoid[14:7]};
+        gelu_m1_mp   <= {1'b1, gelu_x_pipe[GeluDelay-1][6:0]} *
+                        {1'b1, gelu_r3_sigmoid[6:0]};
+      end
+    end
+  end
+
   logic        gelu_out_valid;
   logic [15:0] gelu_out;
 
@@ -847,8 +874,16 @@ module CVO_sfu_unit (
     if (!rst_n || i_clear) begin
       gelu_out_valid <= 1'b0;
     end else begin
-      gelu_out_valid <= gelu_r3_valid;
-      gelu_out       <= bf16_mul(gelu_x_pipe[GeluDelay-1], gelu_r3_sigmoid);
+      gelu_out_valid <= gelu_m1_valid;
+      if (gelu_m1_valid) begin
+        if (gelu_m1_zero) begin
+          gelu_out <= 16'd0;
+        end else if (gelu_m1_mp[15]) begin
+          gelu_out <= {gelu_m1_sign, 8'(gelu_m1_esum - 9'd127 + 9'd1), gelu_m1_mp[14:8]};
+        end else begin
+          gelu_out <= {gelu_m1_sign, 8'(gelu_m1_esum - 9'd127), gelu_m1_mp[13:7]};
+        end
+      end
     end
   end
 
