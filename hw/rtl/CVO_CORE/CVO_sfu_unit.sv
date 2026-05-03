@@ -19,7 +19,7 @@ import bf16_math_pkg::*;
 //   RECIP      :  4 cycles  (Newton-Raphson, 1 step)
 //   SCALE      :  3 cycles  (first input word = scalar, rest = data)
 //   REDUCE_SUM :  variable  (ready-gated BF16 add pipeline, emits scalar)
-//   GELU       : 17 cycles  (MUL + NEG + EXP + ADD + RECIP + MUL chain)
+//   GELU       : 18 cycles  (MUL + NEG + EXP + ADD + RECIP + MUL chain)
 // Throughput   : 1 result/cycle for streaming ops; REDUCE_SUM emits 1 scalar
 //                per IN_length elements.
 // Handshake    : OUT_data_ready is 1'b1 for streaming ops; REDUCE_SUM applies
@@ -623,14 +623,14 @@ module CVO_sfu_unit (
     end
   end
 
-  // ===| GELU Pipeline (17 stages) |=============================================
+  // ===| GELU Pipeline (18 stages) |=============================================
   // GELU(x) ≈ x * sigmoid(1.702*x),  sigmoid(y) = 1/(1+exp(-y))
   // Chain: MUL(1.702)[1] -> NEG[0] -> EXP convert[3] -> EXP lut[2] ->
   // ADD(1)[1] -> RECIP seed/Newton[4] -> MUL(x)[1]. The BF16-to-fixed
   // conversion and Newton correction are split to keep 400 MHz boundaries real.
   // x is preserved in a 14-cycle delay chain.
 
-  localparam int GeluDelay = 14;
+  localparam int GeluDelay = 15;
 
   logic [15:0] gelu_x_pipe   [GeluDelay];
 
@@ -775,7 +775,7 @@ module CVO_sfu_unit (
     end
   end
 
-  // Stages g7-g9: RECIP(1 + exp(-y)) = sigmoid
+  // Stages g7-g10: RECIP(1 + exp(-y)) = sigmoid
   logic        gelu_r1_valid;
   logic [15:0] gelu_r1_r0;
   logic [15:0] gelu_r1_x;
@@ -829,13 +829,47 @@ module CVO_sfu_unit (
 
   logic        gelu_r3_valid;
   logic [15:0] gelu_r3_sigmoid;
+  logic        gelu_r3m_valid;
+  logic        gelu_r3m_zero;
+  logic        gelu_r3m_sign;
+  logic [ 8:0] gelu_r3m_esum;
+  logic [15:0] gelu_r3m_mp;
+
+  always_ff @(posedge clk) begin
+    if (!rst_n || i_clear) begin
+      gelu_r3m_valid <= 1'b0;
+      gelu_r3m_zero  <= 1'b0;
+      gelu_r3m_sign  <= 1'b0;
+      gelu_r3m_esum  <= 9'd0;
+      gelu_r3m_mp    <= 16'd0;
+    end else begin
+      gelu_r3m_valid <= gelu_r3a_valid;
+      if (gelu_r3a_valid) begin
+        gelu_r3m_zero <= (gelu_r3a_r0[14:0] == 15'd0) ||
+                         (gelu_r3a_corr[14:0] == 15'd0);
+        gelu_r3m_sign <= gelu_r3a_r0[15] ^ gelu_r3a_corr[15];
+        gelu_r3m_esum <= {1'b0, gelu_r3a_r0[14:7]} +
+                         {1'b0, gelu_r3a_corr[14:7]};
+        gelu_r3m_mp   <= {1'b1, gelu_r3a_r0[6:0]} *
+                         {1'b1, gelu_r3a_corr[6:0]};
+      end
+    end
+  end
 
   always_ff @(posedge clk) begin
     if (!rst_n || i_clear) begin
       gelu_r3_valid <= 1'b0;
     end else begin
-      gelu_r3_valid   <= gelu_r3a_valid;
-      gelu_r3_sigmoid <= bf16_mul(gelu_r3a_r0, gelu_r3a_corr);
+      gelu_r3_valid <= gelu_r3m_valid;
+      if (gelu_r3m_valid) begin
+        if (gelu_r3m_zero) begin
+          gelu_r3_sigmoid <= 16'd0;
+        end else if (gelu_r3m_mp[15]) begin
+          gelu_r3_sigmoid <= {gelu_r3m_sign, 8'(gelu_r3m_esum - 9'd127 + 9'd1), gelu_r3m_mp[14:8]};
+        end else begin
+          gelu_r3_sigmoid <= {gelu_r3m_sign, 8'(gelu_r3m_esum - 9'd127), gelu_r3m_mp[13:7]};
+        end
+      end
     end
   end
 
