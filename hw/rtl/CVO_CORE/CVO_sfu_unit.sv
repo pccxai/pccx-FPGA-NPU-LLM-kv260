@@ -16,7 +16,7 @@ import bf16_math_pkg::*;
 // Pipelines    : Independent per-op pipelines, multiplexed at the output:
 //   EXP        :  7 cycles
 //   SQRT       :  3 cycles
-//   RECIP      :  5 cycles  (Newton-Raphson, 1 step)
+//   RECIP      :  6 cycles  (Newton-Raphson, 1 step)
 //   SCALE      :  3 cycles  (first input word = scalar, rest = data)
 //   REDUCE_SUM :  variable  (ready-gated BF16 add pipeline, emits scalar)
 //   GELU       : 19 cycles  (MUL + NEG + EXP + ADD + RECIP + MUL chain)
@@ -335,7 +335,7 @@ module CVO_sfu_unit (
     end
   end
 
-  // ===| RECIP Pipeline (5 stages) |=============================================
+  // ===| RECIP Pipeline (6 stages) |=============================================
   // 1/x via 1 Newton-Raphson step: r1 = r0 * (2 - x*r0)
   // Initial estimate: exp flipped around 254, mantissa roughly inverted.
 
@@ -480,19 +480,50 @@ module CVO_sfu_unit (
   end
 
   logic        recip_s4_valid;
-  logic [15:0] recip_s4_result;
-
-  logic [15:0] recip_s3_mag_wire;
-  always_comb begin
-    recip_s3_mag_wire = bf16_mul(recip_s3_r0, recip_s3_corr);
-  end
+  logic        recip_s4_zero;
+  logic        recip_s4_sign;
+  logic [ 8:0] recip_s4_esum;
+  logic [15:0] recip_s4_mp;
 
   always_ff @(posedge clk) begin
     if (!rst_n || i_clear) begin
       recip_s4_valid <= 1'b0;
+      recip_s4_zero  <= 1'b1;
+      recip_s4_sign  <= 1'b0;
+      recip_s4_esum  <= 9'd0;
+      recip_s4_mp    <= 16'd0;
     end else begin
-      recip_s4_valid  <= recip_s3_valid;
-      recip_s4_result <= {recip_s3_sign, recip_s3_mag_wire[14:0]};
+      recip_s4_valid <= recip_s3_valid;
+      recip_s4_zero  <= (recip_s3_r0[14:0] == 15'd0) || (recip_s3_corr[14:0] == 15'd0);
+      recip_s4_sign  <= recip_s3_sign;
+      recip_s4_esum  <= {1'b0, recip_s3_r0[14:7]} + {1'b0, recip_s3_corr[14:7]};
+      recip_s4_mp    <= {1'b1, recip_s3_r0[6:0]} * {1'b1, recip_s3_corr[6:0]};
+    end
+  end
+
+  logic        recip_s5_valid;
+  logic [15:0] recip_s5_result;
+
+  logic [ 7:0] recip_s4_er_wire;
+  logic [ 6:0] recip_s4_mr_wire;
+
+  always_comb begin : comb_recip_mul_pack
+    if (recip_s4_mp[15]) begin
+      recip_s4_er_wire = 8'(recip_s4_esum - 9'd127 + 9'd1);
+      recip_s4_mr_wire = recip_s4_mp[14:8];
+    end else begin
+      recip_s4_er_wire = 8'(recip_s4_esum - 9'd127);
+      recip_s4_mr_wire = recip_s4_mp[13:7];
+    end
+  end
+
+  always_ff @(posedge clk) begin
+    if (!rst_n || i_clear) begin
+      recip_s5_valid  <= 1'b0;
+      recip_s5_result <= 16'd0;
+    end else begin
+      recip_s5_valid  <= recip_s4_valid;
+      recip_s5_result <= recip_s4_zero ? 16'd0 : {recip_s4_sign, recip_s4_er_wire, recip_s4_mr_wire};
     end
   end
 
@@ -1102,8 +1133,8 @@ module CVO_sfu_unit (
         OUT_result_valid = gelu_out_valid;
       end
       CVO_RECIP: begin
-        OUT_result = recip_s4_result;
-        OUT_result_valid = recip_s4_valid;
+        OUT_result = recip_s5_result;
+        OUT_result_valid = recip_s5_valid;
       end
       CVO_SCALE: begin
         OUT_result = scale_s2_result;
