@@ -17,7 +17,7 @@ import bf16_math_pkg::*;
 //   EXP        :  7 cycles
 //   SQRT       :  3 cycles
 //   RECIP      :  6 cycles  (Newton-Raphson, 1 step)
-//   SCALE      :  3 cycles  (first input word = scalar, rest = data)
+//   SCALE      :  4 cycles  (first input word = scalar, rest = data)
 //   REDUCE_SUM :  variable  (ready-gated BF16 add pipeline, emits scalar)
 //   GELU       : 19 cycles  (MUL + NEG + EXP + ADD + RECIP + MUL chain)
 // Throughput   : 1 result/cycle for streaming ops; REDUCE_SUM emits 1 scalar
@@ -527,19 +527,24 @@ module CVO_sfu_unit (
     end
   end
 
-  // ===| SCALE Pipeline (3 stages) |=============================================
+  // ===| SCALE Pipeline (4 stages) |=============================================
   // First element received = scalar (or 1/scalar if FLAG_RECIP_SCALE).
 
   logic        scale_scalar_loaded;
   logic [15:0] scale_scalar;
 
   logic        scale_s1_valid;
-  logic [15:0] scale_s1_product;
+  logic        scale_s1_zero;
+  logic        scale_s1_sign;
+  logic [ 8:0] scale_s1_esum;
+  logic [15:0] scale_s1_mp;
 
   logic        scale_s2_valid;
   logic [15:0] scale_s2_result;
 
   logic [15:0] scale_scalar_next_wire;
+  logic [ 7:0] scale_s1_er_wire;
+  logic [ 6:0] scale_s1_mr_wire;
 
   always_comb begin
     // Approximate 1/scalar for recip_scale mode: flip exponent + invert mantissa
@@ -553,7 +558,12 @@ module CVO_sfu_unit (
       scale_scalar_loaded <= 1'b0;
       scale_scalar        <= 16'd0;
       scale_s1_valid      <= 1'b0;
+      scale_s1_zero       <= 1'b1;
+      scale_s1_sign       <= 1'b0;
+      scale_s1_esum       <= 9'd0;
+      scale_s1_mp         <= 16'd0;
       scale_s2_valid      <= 1'b0;
+      scale_s2_result     <= 16'd0;
     end else begin
       if (IN_valid && IN_func == CVO_SCALE) begin
         if (!scale_scalar_loaded) begin
@@ -561,8 +571,11 @@ module CVO_sfu_unit (
           scale_scalar_loaded <= 1'b1;
           scale_s1_valid      <= 1'b0;
         end else begin
-          scale_s1_valid   <= 1'b1;
-          scale_s1_product <= bf16_mul(IN_data, scale_scalar);
+          scale_s1_valid <= 1'b1;
+          scale_s1_zero  <= (IN_data[14:0] == 15'd0) || (scale_scalar[14:0] == 15'd0);
+          scale_s1_sign  <= IN_data[15] ^ scale_scalar[15];
+          scale_s1_esum  <= {1'b0, IN_data[14:7]} + {1'b0, scale_scalar[14:7]};
+          scale_s1_mp    <= {1'b1, IN_data[6:0]} * {1'b1, scale_scalar[6:0]};
         end
       end else begin
         if (IN_func != CVO_SCALE) scale_scalar_loaded <= 1'b0;
@@ -570,7 +583,17 @@ module CVO_sfu_unit (
       end
 
       scale_s2_valid  <= scale_s1_valid;
-      scale_s2_result <= scale_s1_product;
+      scale_s2_result <= scale_s1_zero ? 16'd0 : {scale_s1_sign, scale_s1_er_wire, scale_s1_mr_wire};
+    end
+  end
+
+  always_comb begin : comb_scale_mul_pack
+    if (scale_s1_mp[15]) begin
+      scale_s1_er_wire = 8'(scale_s1_esum - 9'd127 + 9'd1);
+      scale_s1_mr_wire = scale_s1_mp[14:8];
+    end else begin
+      scale_s1_er_wire = 8'(scale_s1_esum - 9'd127);
+      scale_s1_mr_wire = scale_s1_mp[13:7];
     end
   end
 

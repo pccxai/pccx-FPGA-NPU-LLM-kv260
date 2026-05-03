@@ -151,11 +151,15 @@ module tb_CVO_sfu_reduce_sum;
 	    bit          gelu_seen;
 	    bit          exp_seen;
     bit          recip_seen;
+    bit          scale_seen;
     logic [15:0] recip_input;
     logic [15:0] recip_seed;
     logic [15:0] recip_xr0;
     logic [15:0] recip_corr;
     logic [15:0] recip_expected;
+    logic [15:0] scale_scalar;
+    logic [15:0] scale_input;
+    logic [15:0] scale_expected;
 
     rst_n     = 1'b0;
     i_clear   = 1'b0;
@@ -287,8 +291,46 @@ module tb_CVO_sfu_reduce_sum;
       $display("FAIL: timeout waiting for RECIP output.");
     end
 
+    scale_scalar   = 16'h4000;  // 2.0
+    scale_input    = 16'h3FC0;  // 1.5
+    scale_expected = model_bf16_mul(scale_input, scale_scalar);
+
+    @(negedge clk);
+    IN_func  = CVO_SCALE;
+    IN_flags = '0;
+    IN_data  = scale_scalar;
+    IN_valid = 1'b1;
+    @(negedge clk);
+    IN_valid = 1'b0;
+    IN_data  = 16'd0;
+
+    @(negedge clk);
+    IN_data  = scale_input;
+    IN_valid = 1'b1;
+    @(negedge clk);
+    IN_valid = 1'b0;
+    IN_data  = 16'd0;
+
+    scale_seen = 1'b0;
+    for (int cycle = 0; cycle < 96; cycle++) begin
+      @(posedge clk); #1;
+      if (OUT_result_valid) begin
+        scale_seen = 1'b1;
+        if (OUT_result !== scale_expected) begin
+          errors++;
+          $display("[%0t] SCALE smoke mismatch: got=%h exp=%h", $time, OUT_result, scale_expected);
+        end
+        break;
+      end
+    end
+
+    if (!scale_seen) begin
+      errors++;
+      $display("FAIL: timeout waiting for SCALE output.");
+    end
+
 	    if (errors == 0) begin
-	      $display("PASS: %0d cycles, CVO SFU reduce sum, GELU, EXP, and RECIP smoke match golden.", N_WORDS);
+	      $display("PASS: %0d cycles, CVO SFU reduce sum, GELU, EXP, RECIP, and SCALE smoke match golden.", N_WORDS);
     end else begin
       $display("FAIL: %0d mismatches over CVO SFU smoke.", errors);
     end
