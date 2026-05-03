@@ -149,18 +149,59 @@ module CVO_top (
     return {out_sign, out_exp, out_mant};
   endfunction
 
-  bf16_t       sub_a_wire;
-  bf16_t       sub_b_wire;
-  logic [7:0]  sub_emax_wire;
+  bf16_t      sub_s0_a_wire;
+  bf16_t      sub_s0_b_wire;
+  logic [7:0] sub_s0_emax_wire;
+
+  always_comb begin : comb_sub_emax_classify
+    sub_s0_a_wire    = to_bf16(unit_in_data);
+    sub_s0_b_wire    = to_bf16({~unit_in_e_max[15], unit_in_e_max[14:0]});
+    sub_s0_emax_wire = (sub_s0_a_wire.exp > sub_s0_b_wire.exp) ?
+                       sub_s0_a_wire.exp : sub_s0_b_wire.exp;
+  end
+
+  logic        sub_s0_valid;
+  logic        sub_s0_do_sub;
+  logic [15:0] sub_s0_passthrough;
+  logic [7:0]  sub_s0_emax;
+  bf16_t       sub_s0_a;
+  bf16_t       sub_s0_b;
+  cvo_func_e   sub_s0_func;
+  cvo_flags_t  sub_s0_flags;
+  logic [15:0] sub_s0_length;
+
+  always_ff @(posedge clk) begin
+    if (!rst_n || i_clear) begin
+      sub_s0_valid       <= 1'b0;
+      sub_s0_do_sub      <= 1'b0;
+      sub_s0_passthrough <= 16'd0;
+      sub_s0_emax        <= 8'd0;
+      sub_s0_a           <= '0;
+      sub_s0_b           <= '0;
+      sub_s0_func        <= CVO_EXP;
+      sub_s0_flags       <= '0;
+      sub_s0_length      <= 16'd0;
+    end else begin
+      sub_s0_valid <= unit_in_valid;
+      if (unit_in_valid) begin
+        sub_s0_do_sub      <= unit_in_flags.sub_emax;
+        sub_s0_passthrough <= unit_in_data;
+        sub_s0_emax        <= sub_s0_emax_wire;
+        sub_s0_a           <= sub_s0_a_wire;
+        sub_s0_b           <= sub_s0_b_wire;
+        sub_s0_func        <= unit_in_func;
+        sub_s0_flags       <= unit_in_flags;
+        sub_s0_length      <= unit_in_length;
+      end
+    end
+  end
+
   logic [23:0] sub_aligned_a_wire;
   logic [23:0] sub_aligned_b_wire;
 
   always_comb begin : comb_sub_emax_align
-    sub_a_wire         = to_bf16(unit_in_data);
-    sub_b_wire         = to_bf16({~unit_in_e_max[15], unit_in_e_max[14:0]});
-    sub_emax_wire      = (sub_a_wire.exp > sub_b_wire.exp) ? sub_a_wire.exp : sub_b_wire.exp;
-    sub_aligned_a_wire = align_to_emax(sub_a_wire, sub_emax_wire);
-    sub_aligned_b_wire = align_to_emax(sub_b_wire, sub_emax_wire);
+    sub_aligned_a_wire = align_to_emax(sub_s0_a, sub_s0_emax);
+    sub_aligned_b_wire = align_to_emax(sub_s0_b, sub_s0_emax);
   end
 
   logic        sub_s1_valid;
@@ -185,16 +226,16 @@ module CVO_top (
       sub_s1_flags       <= '0;
       sub_s1_length      <= 16'd0;
     end else begin
-      sub_s1_valid <= unit_in_valid;
-      if (unit_in_valid) begin
-        sub_s1_do_sub      <= unit_in_flags.sub_emax;
-        sub_s1_passthrough <= unit_in_data;
-        sub_s1_emax        <= sub_emax_wire;
+      sub_s1_valid <= sub_s0_valid;
+      if (sub_s0_valid) begin
+        sub_s1_do_sub      <= sub_s0_do_sub;
+        sub_s1_passthrough <= sub_s0_passthrough;
+        sub_s1_emax        <= sub_s0_emax;
         sub_s1_aligned_a   <= sub_aligned_a_wire;
         sub_s1_aligned_b   <= sub_aligned_b_wire;
-        sub_s1_func        <= unit_in_func;
-        sub_s1_flags       <= unit_in_flags;
-        sub_s1_length      <= unit_in_length;
+        sub_s1_func        <= sub_s0_func;
+        sub_s1_flags       <= sub_s0_flags;
+        sub_s1_length      <= sub_s0_length;
       end
     end
   end
