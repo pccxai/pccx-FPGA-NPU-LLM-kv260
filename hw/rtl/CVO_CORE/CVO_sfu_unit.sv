@@ -19,7 +19,7 @@ import bf16_math_pkg::*;
 //   RECIP      :  7 cycles  (Newton-Raphson, 1 step)
 //   SCALE      :  4 cycles  (first input word = scalar, rest = data)
 //   REDUCE_SUM :  variable  (ready-gated BF16 add pipeline, emits scalar)
-//   GELU       : 20 cycles  (MUL + NEG + EXP + ADD + RECIP + MUL chain)
+//   GELU       : 21 cycles  (MUL + NEG + EXP + ADD + RECIP + MUL chain)
 // Throughput   : 1 result/cycle for streaming ops; REDUCE_SUM emits 1 scalar
 //                per IN_length elements.
 // Handshake    : OUT_data_ready is 1'b1 for streaming ops; REDUCE_SUM applies
@@ -805,14 +805,14 @@ module CVO_sfu_unit (
     end
   end
 
-  // ===| GELU Pipeline (20 stages) |=============================================
+  // ===| GELU Pipeline (21 stages) |=============================================
   // GELU(x) ≈ x * sigmoid(1.702*x),  sigmoid(y) = 1/(1+exp(-y))
   // Chain: MUL(1.702)[1] -> NEG[0] -> EXP convert[3] -> EXP lut[2] ->
-  // ADD(1)[1] -> RECIP seed/Newton[4] -> MUL(x)[1]. The BF16-to-fixed
+  // ADD(1)[1] -> RECIP seed/Newton[5] -> MUL(x)[1]. The BF16-to-fixed
   // conversion and Newton correction are split to keep 400 MHz boundaries real.
-  // x is preserved in a 14-cycle delay chain.
+  // x is preserved in a 18-cycle delay chain.
 
-  localparam int GeluDelay = 17;
+  localparam int GeluDelay = 18;
 
   logic [15:0] gelu_x_pipe   [GeluDelay];
 
@@ -1096,22 +1096,50 @@ module CVO_sfu_unit (
       gelu_corr_sum_wire  = {1'b0, gelu_r3aa_mb} - {1'b0, gelu_r3aa_ma};
     end
 
-    if (gelu_r3aa_bypass) begin
-      gelu_corr_packed_wire = gelu_r3aa_bypass_value;
-    end else if (gelu_corr_sum_wire == 10'd0) begin
+    if (gelu_r3ab_bypass) begin
+      gelu_corr_packed_wire = gelu_r3ab_bypass_value;
+    end else if (gelu_r3ab_sum == 10'd0) begin
       gelu_corr_packed_wire = 16'd0;
-    end else if (gelu_corr_sum_wire[9]) begin
-      gelu_corr_packed_wire = {gelu_corr_sout_wire,
-                               8'(gelu_r3aa_elarge + 8'd1),
-                               gelu_corr_sum_wire[9:3]};
-    end else if (gelu_corr_sum_wire[8]) begin
-      gelu_corr_packed_wire = {gelu_corr_sout_wire,
-                               gelu_r3aa_elarge,
-                               gelu_corr_sum_wire[8:2]};
+    end else if (gelu_r3ab_sum[9]) begin
+      gelu_corr_packed_wire = {gelu_r3ab_sout,
+                               8'(gelu_r3ab_elarge + 8'd1),
+                               gelu_r3ab_sum[9:3]};
+    end else if (gelu_r3ab_sum[8]) begin
+      gelu_corr_packed_wire = {gelu_r3ab_sout,
+                               gelu_r3ab_elarge,
+                               gelu_r3ab_sum[8:2]};
     end else begin
-      gelu_corr_packed_wire = {gelu_corr_sout_wire,
-                               8'(gelu_r3aa_elarge - 8'd1),
-                               gelu_corr_sum_wire[7:1]};
+      gelu_corr_packed_wire = {gelu_r3ab_sout,
+                               8'(gelu_r3ab_elarge - 8'd1),
+                               gelu_r3ab_sum[7:1]};
+    end
+  end
+
+  logic        gelu_r3ab_valid;
+  logic        gelu_r3ab_bypass;
+  logic [15:0] gelu_r3ab_bypass_value;
+  logic [ 7:0] gelu_r3ab_elarge;
+  logic        gelu_r3ab_sout;
+  logic [ 9:0] gelu_r3ab_sum;
+  logic [15:0] gelu_r3ab_r0;
+
+  always_ff @(posedge clk) begin
+    if (!rst_n || i_clear) begin
+      gelu_r3ab_valid        <= 1'b0;
+      gelu_r3ab_bypass       <= 1'b0;
+      gelu_r3ab_bypass_value <= 16'd0;
+      gelu_r3ab_elarge       <= 8'd0;
+      gelu_r3ab_sout         <= 1'b0;
+      gelu_r3ab_sum          <= 10'd0;
+      gelu_r3ab_r0           <= 16'd0;
+    end else begin
+      gelu_r3ab_valid        <= gelu_r3aa_valid;
+      gelu_r3ab_bypass       <= gelu_r3aa_bypass;
+      gelu_r3ab_bypass_value <= gelu_r3aa_bypass_value;
+      gelu_r3ab_elarge       <= gelu_r3aa_elarge;
+      gelu_r3ab_sout         <= gelu_corr_sout_wire;
+      gelu_r3ab_sum          <= gelu_corr_sum_wire;
+      gelu_r3ab_r0           <= gelu_r3aa_r0;
     end
   end
 
@@ -1121,8 +1149,8 @@ module CVO_sfu_unit (
       gelu_r3a_r0    <= 16'd0;
       gelu_r3a_corr  <= 16'd0;
     end else begin
-      gelu_r3a_valid <= gelu_r3aa_valid;
-      gelu_r3a_r0    <= gelu_r3aa_r0;
+      gelu_r3a_valid <= gelu_r3ab_valid;
+      gelu_r3a_r0    <= gelu_r3ab_r0;
       gelu_r3a_corr  <= gelu_corr_packed_wire;
     end
   end
