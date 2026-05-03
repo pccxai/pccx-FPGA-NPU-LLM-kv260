@@ -14,7 +14,7 @@ import bf16_math_pkg::*;
 // Reset        : rst_n active-low; i_clear synchronous soft-clear.
 // BF16 layout  : {sign[15], exp[14:7], mant[6:0]}.
 // Pipelines    : Independent per-op pipelines, multiplexed at the output:
-//   EXP        :  5 cycles
+//   EXP        :  7 cycles
 //   SQRT       :  3 cycles
 //   RECIP      :  4 cycles  (Newton-Raphson, 1 step)
 //   SCALE      :  3 cycles  (first input word = scalar, rest = data)
@@ -150,7 +150,7 @@ module CVO_sfu_unit (
     return v[6:0];
   endfunction
 
-  // ===| EXP Pipeline (5 stages) |===============================================
+  // ===| EXP Pipeline (7 stages) |===============================================
 
   // Stage 1 — unpack BF16
   logic       exp_s1_valid;
@@ -162,42 +162,90 @@ module CVO_sfu_unit (
     if (!rst_n || i_clear) begin
       exp_s1_valid <= 1'b0;
     end else begin
-      exp_s1_valid <= IN_valid && (IN_func == CVO_EXP || IN_func == CVO_GELU);
+      exp_s1_valid <= IN_valid && (IN_func == CVO_EXP);
       exp_s1_sign  <= IN_data[15];
       exp_s1_exp   <= IN_data[14:7];
       exp_s1_mant  <= IN_data[6:0];
     end
   end
 
-  // Stage 2 — BF16 → Q8.7 fixed-point
+  // Stages 2-4 — BF16 → Q8.7 fixed-point.
+  // The conversion is intentionally split before the DSP multiply boundary:
+  // exponent classify, variable shift, and sign handling were previously one
+  // setup path into the DSP A input.
+  logic        exp_s1a_valid;
+  logic        exp_s1a_sign;
+  logic        exp_s1a_zero;
+  logic        exp_s1a_sat;
+  logic        exp_s1a_shift_left;
+  logic [ 4:0] exp_s1a_shift_amt;
+  logic [15:0] exp_s1a_mant_ext;
+
+  always_ff @(posedge clk) begin
+    if (!rst_n || i_clear) begin
+      exp_s1a_valid      <= 1'b0;
+      exp_s1a_sign       <= 1'b0;
+      exp_s1a_zero       <= 1'b0;
+      exp_s1a_sat        <= 1'b0;
+      exp_s1a_shift_left <= 1'b0;
+      exp_s1a_shift_amt  <= 5'd0;
+      exp_s1a_mant_ext   <= 16'd0;
+    end else begin
+      int sh;
+      sh = int'(exp_s1_exp) - 127;
+
+      exp_s1a_valid      <= exp_s1_valid;
+      exp_s1a_sign       <= exp_s1_sign;
+      exp_s1a_mant_ext   <= {1'b1, exp_s1_mant, 7'b0};
+      exp_s1a_zero       <= (exp_s1_exp == 8'd0) || (sh <= -23);
+      exp_s1a_sat        <= (sh >= 8);
+      exp_s1a_shift_left <= (sh >= -7);
+      if (sh >= -7) begin
+        exp_s1a_shift_amt <= 5'(sh + 7);
+      end else begin
+        exp_s1a_shift_amt <= 5'((-sh) - 7);
+      end
+    end
+  end
+
+  logic        exp_s1b_valid;
+  logic        exp_s1b_sign;
+  logic [15:0] exp_s1b_mag;
+
+  always_ff @(posedge clk) begin
+    if (!rst_n || i_clear) begin
+      exp_s1b_valid <= 1'b0;
+      exp_s1b_sign  <= 1'b0;
+      exp_s1b_mag   <= 16'd0;
+    end else begin
+      exp_s1b_valid <= exp_s1a_valid;
+      exp_s1b_sign  <= exp_s1a_sign;
+      if (exp_s1a_zero) begin
+        exp_s1b_mag <= 16'd0;
+      end else if (exp_s1a_sat) begin
+        exp_s1b_mag <= 16'h7FFF;
+      end else if (exp_s1a_shift_left) begin
+        exp_s1b_mag <= exp_s1a_mant_ext << exp_s1a_shift_amt;
+      end else begin
+        exp_s1b_mag <= exp_s1a_mant_ext >> exp_s1a_shift_amt;
+      end
+    end
+  end
+
   logic               exp_s1f_valid;
   logic signed [15:0] exp_s1f_xfixed;
-
-  logic signed [15:0] exp_s1_xfixed_wire;  // Q8.7 signed
-
-  always_comb begin : comb_exp_convert
-    logic [15:0] mag;
-    int          sh;
-    sh  = int'(exp_s1_exp) - 127;
-    mag = 16'd0;
-    if (exp_s1_exp == 8'd0) mag = 16'd0;
-    else if (sh >= 8) mag = 16'h7FFF;
-    else if (sh >= -7) mag = 16'({1'b1, exp_s1_mant, 7'b0} << (sh + 7));
-    else mag = 16'({1'b1, exp_s1_mant, 7'b0} >> -(sh + 7));
-    exp_s1_xfixed_wire = exp_s1_sign ? -$signed({1'b0, mag}) : $signed({1'b0, mag});
-  end
 
   always_ff @(posedge clk) begin
     if (!rst_n || i_clear) begin
       exp_s1f_valid  <= 1'b0;
       exp_s1f_xfixed <= '0;
     end else begin
-      exp_s1f_valid  <= exp_s1_valid;
-      exp_s1f_xfixed <= exp_s1_xfixed_wire;
+      exp_s1f_valid  <= exp_s1b_valid;
+      exp_s1f_xfixed <= exp_s1b_sign ? -$signed({1'b0, exp_s1b_mag}) : $signed({1'b0, exp_s1b_mag});
     end
   end
 
-  // Stage 3 — multiply by log2(e)
+  // Stage 5 — multiply by log2(e)
   logic               exp_s2_valid;
   logic        [ 8:0] exp_s2_n;  // integer part of x*log2e
   logic        [ 6:0] exp_s2_frac;  // fractional 7-bit index for LUT
@@ -215,7 +263,7 @@ module CVO_sfu_unit (
     end
   end
 
-  // Stage 4 — assemble output BF16
+  // Stage 6 — assemble output BF16
   logic        exp_s3_valid;
   logic [15:0] exp_s3_result;
 

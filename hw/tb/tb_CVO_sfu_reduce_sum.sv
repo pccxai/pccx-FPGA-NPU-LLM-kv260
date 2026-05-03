@@ -129,6 +129,7 @@ module tb_CVO_sfu_reduce_sum;
     logic [15:0] expected;
     bit          reduce_seen;
     bit          gelu_seen;
+    bit          exp_seen;
 
     rst_n     = 1'b0;
     i_clear   = 1'b0;
@@ -200,8 +201,34 @@ module tb_CVO_sfu_reduce_sum;
       $display("FAIL: timeout waiting for GELU(0) output.");
     end
 
+    @(negedge clk);
+    IN_func  = CVO_EXP;
+    IN_data  = 16'd0;
+    IN_valid = 1'b1;
+    @(negedge clk);
+    IN_valid = 1'b0;
+    IN_data  = 16'd0;
+
+    exp_seen = 1'b0;
+    for (int cycle = 0; cycle < 96; cycle++) begin
+      @(posedge clk); #1;
+      if (OUT_result_valid) begin
+        exp_seen = 1'b1;
+        if (OUT_result !== 16'h3F80) begin
+          errors++;
+          $display("[%0t] EXP(0) mismatch: got=%h exp=3f80", $time, OUT_result);
+        end
+        break;
+      end
+    end
+
+    if (!exp_seen) begin
+      errors++;
+      $display("FAIL: timeout waiting for EXP(0) output.");
+    end
+
     if (errors == 0) begin
-      $display("PASS: %0d cycles, CVO SFU reduce sum and GELU smoke match golden.", N_WORDS);
+      $display("PASS: %0d cycles, CVO SFU reduce sum, GELU, and EXP smoke match golden.", N_WORDS);
     end else begin
       $display("FAIL: %0d mismatches over CVO SFU smoke.", errors);
     end
