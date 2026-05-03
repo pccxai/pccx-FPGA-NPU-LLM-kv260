@@ -1,5 +1,5 @@
 # =============================================================================
-# impl.tcl — implementation + bitstream for the pccx v002 NPU core.
+# impl.tcl — routed implementation evidence for the pccx v002 NPU core.
 #
 # This is NOT auto-run by any other script. It exists as a deliberate
 # gate — implementation + bitstream is an hour-scale job; launch it only
@@ -8,13 +8,37 @@
 #
 # Usage
 # -----
-#   vivado -mode batch -source vivado/impl.tcl
+#   vivado -mode batch -source vivado/impl.tcl -tclargs route
+#   vivado -mode batch -source vivado/impl.tcl -tclargs bitstream
 # =============================================================================
 
 set HW_ROOT  [file normalize [file dirname [info script]]/..]
 set PROJ_DIR [file normalize $HW_ROOT/build/pccx_v002_kv260]
 set REPORTS  $HW_ROOT/build/reports
 file mkdir $REPORTS
+
+set IMPL_MODE "route"
+if {[llength $argv] > 0 && [lindex $argv 0] ne ""} {
+    set IMPL_MODE [lindex $argv 0]
+}
+if {$IMPL_MODE ne "route" && $IMPL_MODE ne "bitstream"} {
+    puts "\[pccx\] invalid impl mode '$IMPL_MODE'; expected route or bitstream."
+    exit 2
+}
+
+set IMPL_JOBS 4
+if {[info exists ::env(PCCX_VIVADO_JOBS)] && $::env(PCCX_VIVADO_JOBS) ne ""} {
+    set IMPL_JOBS $::env(PCCX_VIVADO_JOBS)
+}
+if {![string is integer -strict $IMPL_JOBS] || $IMPL_JOBS < 1} {
+    puts "\[pccx\] invalid PCCX_VIVADO_JOBS=$IMPL_JOBS; expected positive integer."
+    exit 2
+}
+if {[catch {set_param general.maxThreads $IMPL_JOBS} msg]} {
+    puts "\[pccx\] warning: could not set general.maxThreads=$IMPL_JOBS: $msg"
+}
+puts "\[pccx\] impl jobs/threads = $IMPL_JOBS"
+puts "\[pccx\] impl mode = $IMPL_MODE"
 
 open_project $PROJ_DIR/pccx_v002_kv260.xpr
 
@@ -24,12 +48,29 @@ if {[get_property PROGRESS [get_runs synth_1]] ne "100%"} {
     exit 1
 }
 
-# Reset and kick off implementation.
+# The current v002 project intentionally synthesizes NPU_top out of context.
+# Vivado rejects bitstream generation for OOC modules (DRC HDOOC-3). Keep the
+# bitstream step explicit so implementation/timing evidence can still complete
+# cleanly while bitstream remains blocked until a full top-level/BD flow exists.
+if {$IMPL_MODE eq "bitstream"} {
+    set status_file [file normalize $REPORTS/bitstream_status.txt]
+    set fp [open $status_file w]
+    puts $fp "bitstream_status=BITSTREAM_BLOCKED_OOC"
+    puts $fp "reason=Vivado DRC HDOOC-3: bitstream generation is not allowed for out-of-context module implementations."
+    puts $fp "required_next_step=add a full KV260 top-level or block-design wrapper flow, then run write_bitstream there."
+    puts $fp "project=$PROJ_DIR/pccx_v002_kv260.xpr"
+    close $fp
+    puts "\[pccx\] bitstream blocked for OOC module flow. See $status_file"
+    close_project
+    exit 3
+}
+
+# Reset and kick off routed implementation.
 foreach r [get_runs -quiet impl_1] {
     reset_run $r
 }
 
-launch_runs impl_1 -to_step write_bitstream -jobs 4
+launch_runs impl_1 -to_step route_design -jobs $IMPL_JOBS
 wait_on_run impl_1
 
 if {[get_property PROGRESS [get_runs impl_1]] ne "100%"} {
@@ -52,7 +93,13 @@ if {[file exists $bit_file]} {
     file copy -force $bit_file $HW_ROOT/build/pccx_v002_kv260.bit
     puts "\[pccx\] bitstream copied to build/pccx_v002_kv260.bit"
 } else {
-    puts "\[pccx\] warning: expected bitstream not found at $bit_file"
+    set status_file [file normalize $REPORTS/bitstream_status.txt]
+    set fp [open $status_file w]
+    puts $fp "bitstream_status=BITSTREAM_NOT_REQUESTED"
+    puts $fp "reason=impl mode stops at route_design for OOC timing evidence."
+    puts $fp "required_next_step=run ./vivado/build.sh bitstream after a full top-level/BD bitstream flow exists."
+    close $fp
+    puts "\[pccx\] bitstream not requested in route mode. See $status_file"
 }
 
 close_project

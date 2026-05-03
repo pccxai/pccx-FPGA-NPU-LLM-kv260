@@ -83,29 +83,189 @@ module CVO_top (
   logic [15:0] uop_length;
   logic [15:0] elem_count;   // elements processed in current operation
 
-  // ===| BF16 subtract e_max (combinational) |===================================
-  // Implements x - e_max in BF16 via bf16_add(x, -e_max).
+  // ===| Registered Unit Input Boundary |========================================
+  // The L2 bridge deserializes 128-bit words into a 16-bit BF16 stream. Keep that
+  // muxing on the bridge side of a flop so the SFU/CORDIC arithmetic paths start
+  // from a local CVO register rather than from the L2 deser buffer.
 
-  logic [15:0] sub_emax_result_wire;
+  logic        unit_in_valid;
+  logic [15:0] unit_in_data;
+  logic [15:0] unit_in_e_max;
+  cvo_func_e   unit_in_func;
+  cvo_flags_t  unit_in_flags;
+  logic [15:0] unit_in_length;
+  logic        input_accept_wire;
 
-  always_comb begin : comb_sub_emax
-    // Negate e_max by flipping sign bit, then add to x
-    sub_emax_result_wire = bf16_add(IN_data, {~IN_e_max[15], IN_e_max[14:0]});
+  assign input_accept_wire = (state == ST_RUNNING) && IN_data_valid && OUT_data_ready;
+
+  always_ff @(posedge clk) begin
+    if (!rst_n || i_clear) begin
+      unit_in_valid  <= 1'b0;
+      unit_in_data   <= 16'd0;
+      unit_in_e_max  <= 16'd0;
+      unit_in_func   <= CVO_EXP;
+      unit_in_flags  <= '0;
+      unit_in_length <= 16'd0;
+    end else begin
+      unit_in_valid <= input_accept_wire;
+      if (input_accept_wire) begin
+        unit_in_data   <= IN_data;
+        unit_in_e_max  <= IN_e_max;
+        unit_in_func   <= uop_func;
+        unit_in_flags  <= uop_flags;
+        unit_in_length <= uop_length;
+      end
+    end
+  end
+
+  // ===| Pipelined BF16 subtract e_max |=========================================
+  // Implements x - e_max for FLAG_SUB_EMAX. This is intentionally split across
+  // stages because a full BF16 align/add/normalize chain does not meet the
+  // 400 MHz core target as one combinational block.
+
+  function automatic logic [15:0] pack_bf16_sum(input logic [7:0] emax,
+                                                input logic signed [24:0] sum);
+    logic        out_sign;
+    logic [23:0] mag;
+    int          lead;
+    logic [7:0]  out_exp;
+    logic [6:0]  out_mant;
+
+    out_sign = sum[24];
+    mag      = out_sign ? (~sum[23:0] + 24'd1) : sum[23:0];
+    if (mag == 24'd0) return 16'd0;
+
+    lead = 23;
+    while (lead > 0 && mag[lead] == 1'b0) lead = lead - 1;
+
+    out_exp = emax + 8'(lead - 15);
+    if (lead >= 7)
+      out_mant = mag[lead-1-:7];
+    else
+      out_mant = 7'(mag << (7 - lead));
+
+    return {out_sign, out_exp, out_mant};
+  endfunction
+
+  bf16_t       sub_a_wire;
+  bf16_t       sub_b_wire;
+  logic [7:0]  sub_emax_wire;
+  logic [23:0] sub_aligned_a_wire;
+  logic [23:0] sub_aligned_b_wire;
+
+  always_comb begin : comb_sub_emax_align
+    sub_a_wire         = to_bf16(unit_in_data);
+    sub_b_wire         = to_bf16({~unit_in_e_max[15], unit_in_e_max[14:0]});
+    sub_emax_wire      = (sub_a_wire.exp > sub_b_wire.exp) ? sub_a_wire.exp : sub_b_wire.exp;
+    sub_aligned_a_wire = align_to_emax(sub_a_wire, sub_emax_wire);
+    sub_aligned_b_wire = align_to_emax(sub_b_wire, sub_emax_wire);
+  end
+
+  logic        sub_s1_valid;
+  logic        sub_s1_do_sub;
+  logic [15:0] sub_s1_passthrough;
+  logic [7:0]  sub_s1_emax;
+  logic [23:0] sub_s1_aligned_a;
+  logic [23:0] sub_s1_aligned_b;
+  cvo_func_e   sub_s1_func;
+  cvo_flags_t  sub_s1_flags;
+  logic [15:0] sub_s1_length;
+
+  always_ff @(posedge clk) begin
+    if (!rst_n || i_clear) begin
+      sub_s1_valid       <= 1'b0;
+      sub_s1_do_sub      <= 1'b0;
+      sub_s1_passthrough <= 16'd0;
+      sub_s1_emax        <= 8'd0;
+      sub_s1_aligned_a   <= 24'd0;
+      sub_s1_aligned_b   <= 24'd0;
+      sub_s1_func        <= CVO_EXP;
+      sub_s1_flags       <= '0;
+      sub_s1_length      <= 16'd0;
+    end else begin
+      sub_s1_valid <= unit_in_valid;
+      if (unit_in_valid) begin
+        sub_s1_do_sub      <= unit_in_flags.sub_emax;
+        sub_s1_passthrough <= unit_in_data;
+        sub_s1_emax        <= sub_emax_wire;
+        sub_s1_aligned_a   <= sub_aligned_a_wire;
+        sub_s1_aligned_b   <= sub_aligned_b_wire;
+        sub_s1_func        <= unit_in_func;
+        sub_s1_flags       <= unit_in_flags;
+        sub_s1_length      <= unit_in_length;
+      end
+    end
+  end
+
+  logic              sub_s2_valid;
+  logic              sub_s2_do_sub;
+  logic [15:0]       sub_s2_passthrough;
+  logic [7:0]        sub_s2_emax;
+  logic signed [24:0] sub_s2_sum;
+  cvo_func_e         sub_s2_func;
+  cvo_flags_t        sub_s2_flags;
+  logic [15:0]       sub_s2_length;
+
+  always_ff @(posedge clk) begin
+    if (!rst_n || i_clear) begin
+      sub_s2_valid       <= 1'b0;
+      sub_s2_do_sub      <= 1'b0;
+      sub_s2_passthrough <= 16'd0;
+      sub_s2_emax        <= 8'd0;
+      sub_s2_sum         <= 25'sd0;
+      sub_s2_func        <= CVO_EXP;
+      sub_s2_flags       <= '0;
+      sub_s2_length      <= 16'd0;
+    end else begin
+      sub_s2_valid <= sub_s1_valid;
+      if (sub_s1_valid) begin
+        sub_s2_do_sub      <= sub_s1_do_sub;
+        sub_s2_passthrough <= sub_s1_passthrough;
+        sub_s2_emax        <= sub_s1_emax;
+        sub_s2_sum         <= $signed({sub_s1_aligned_a[23], sub_s1_aligned_a}) +
+                              $signed({sub_s1_aligned_b[23], sub_s1_aligned_b});
+        sub_s2_func        <= sub_s1_func;
+        sub_s2_flags       <= sub_s1_flags;
+        sub_s2_length      <= sub_s1_length;
+      end
+    end
   end
 
   // ===| Input to sub-units (after optional e_max subtraction) |=================
-  logic [15:0] data_to_unit_wire;
   logic        data_valid_to_unit_wire;
+  logic [15:0] unit_data;
+  logic        unit_valid;
+  cvo_func_e   unit_func;
+  cvo_flags_t  unit_flags;
+  logic [15:0] unit_length;
 
   always_comb begin
-    data_to_unit_wire    = uop_flags.sub_emax ? sub_emax_result_wire : IN_data;
-    data_valid_to_unit_wire = (state == ST_RUNNING) && IN_data_valid;
+    data_valid_to_unit_wire = unit_valid;
+  end
+
+  always_ff @(posedge clk) begin
+    if (!rst_n || i_clear) begin
+      unit_valid  <= 1'b0;
+      unit_data   <= 16'd0;
+      unit_func   <= CVO_EXP;
+      unit_flags  <= '0;
+      unit_length <= 16'd0;
+    end else begin
+      unit_valid <= sub_s2_valid;
+      if (sub_s2_valid) begin
+        unit_data   <= sub_s2_do_sub ? pack_bf16_sum(sub_s2_emax, sub_s2_sum) :
+                                       sub_s2_passthrough;
+        unit_func   <= sub_s2_func;
+        unit_flags  <= sub_s2_flags;
+        unit_length <= sub_s2_length;
+      end
+    end
   end
 
   // ===| Opcode Routing (declared ahead of units that use it as a gating term) |
   logic is_cordic_op_wire;
   always_comb begin
-    is_cordic_op_wire = (uop_func == CVO_SIN) || (uop_func == CVO_COS);
+    is_cordic_op_wire = (unit_func == CVO_SIN) || (unit_func == CVO_COS);
   end
 
   // ===| SFU Instantiation |=====================================================
@@ -118,11 +278,11 @@ module CVO_top (
       .rst_n           (rst_n),
       .i_clear         (i_clear),
 
-      .IN_func         (uop_func),
-      .IN_length       (uop_length),
-      .IN_flags        (uop_flags),
+      .IN_func         (unit_func),
+      .IN_length       (unit_length),
+      .IN_flags        (unit_flags),
 
-      .IN_data         (data_to_unit_wire),
+      .IN_data         (unit_data),
       .IN_valid        (data_valid_to_unit_wire && !is_cordic_op_wire),
       .OUT_data_ready  (sfu_ready),
 
@@ -139,7 +299,7 @@ module CVO_top (
       .clk          (clk),
       .rst_n        (rst_n),
 
-      .IN_angle_bf16(data_to_unit_wire),
+      .IN_angle_bf16(unit_data),
       .IN_valid     (data_valid_to_unit_wire && is_cordic_op_wire),
 
       .OUT_sin_bf16 (cordic_sin),

@@ -3,7 +3,8 @@
 #
 #   ./build.sh project   # just create_project.tcl
 #   ./build.sh synth     # create_project + synth (OOC)
-#   ./build.sh impl      # full impl + write_bitstream (long job)
+#   ./build.sh impl      # routed OOC implementation + post-impl reports
+#   ./build.sh bitstream # explicit bitstream step; blocked for OOC module flow
 #   ./build.sh clean     # wipe build/ + generated .jou/.log
 #
 # Target: Vivado 2023.2+ on Linux. Will attempt Vivado 2025.2 if available.
@@ -54,7 +55,16 @@ case "${1:-synth}" in
         "$VIVADO_BIN" -mode batch \
             -log    "$BUILD_DIR/vivado_impl.log" \
             -journal "$BUILD_DIR/vivado_impl.jou" \
-            -source vivado/impl.tcl
+            -source vivado/impl.tcl \
+            -tclargs route
+        ;;
+    bitstream)
+        mkdir -p "$BUILD_DIR"
+        "$VIVADO_BIN" -mode batch \
+            -log    "$BUILD_DIR/vivado_bitstream.log" \
+            -journal "$BUILD_DIR/vivado_bitstream.jou" \
+            -source vivado/impl.tcl \
+            -tclargs bitstream
         ;;
     clean)
         rm -rf "$BUILD_DIR"
@@ -62,7 +72,7 @@ case "${1:-synth}" in
         ;;
     *)
         echo "unknown command: $1" >&2
-        echo "usage: $0 {project|synth|impl|clean}" >&2
+        echo "usage: $0 {project|synth|impl|bitstream|clean}" >&2
         exit 1
         ;;
 esac

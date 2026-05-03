@@ -111,16 +111,23 @@ module preprocess_fmap #(
     end
   end
 
-  logic [`BF16_EXP_WIDTH-1:0] emax_cache_mem[0:1023][0:`ARRAY_SIZE_H-1];
+  localparam int EMAX_CACHE_WIDTH = `ARRAY_SIZE_H * `BF16_EXP_WIDTH;
+  logic [EMAX_CACHE_WIDTH-1:0] emax_active_pack;
+  logic [EMAX_CACHE_WIDTH-1:0] emax_cache_rdata;
+  logic [EMAX_CACHE_WIDTH-1:0] emax_cache_mem[0:1023];
   logic [9:0] emax_wr_addr, emax_rd_addr;
+
+  always_comb begin
+    for (int i = 0; i < `ARRAY_SIZE_H; i++) begin
+      emax_active_pack[i*`BF16_EXP_WIDTH+:`BF16_EXP_WIDTH] = active_emax[i];
+    end
+  end
 
   always_ff @(posedge clk) begin
     if (!rst_n || i_clear) begin
       emax_wr_addr <= 0;
     end else if (emax_group_valid) begin
-      for (int i = 0; i < `ARRAY_SIZE_H; i++) begin
-        emax_cache_mem[emax_wr_addr][i] <= active_emax[i];
-      end
+      emax_cache_mem[emax_wr_addr] <= emax_active_pack;
       emax_wr_addr <= emax_wr_addr + 1;
     end
   end
@@ -131,8 +138,14 @@ module preprocess_fmap #(
     end else if (i_rd_start) begin
       emax_rd_addr <= 0;
     end
+    emax_cache_rdata <= emax_cache_mem[emax_rd_addr];
+  end
+
+  always_comb begin
     for (int i = 0; i < `ARRAY_SIZE_H; i++) begin
-      o_cached_emax[i] <= emax_cache_mem[emax_rd_addr][i];
+      o_cached_emax[i] = (!rst_n || i_clear)
+        ? '0
+        : emax_cache_rdata[i*`BF16_EXP_WIDTH+:`BF16_EXP_WIDTH];
     end
   end
 

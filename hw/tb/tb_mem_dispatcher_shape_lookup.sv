@@ -13,7 +13,9 @@
 //
 //   The key regression surface is pointer selection: a LOAD must use its own
 //   shape_ptr_addr for the command generated on that clock, not a stale
-//   shape address left behind by a previous MEMSET or LOAD.
+//   shape address left behind by a previous MEMSET or LOAD. The descriptor
+//   contract is a registered timing boundary: a one-cycle LOAD pulse produces
+//   one ACP/NPU command after the mem_dispatcher shape-word pipeline.
 // ===============================================================================
 
 module tb_mem_dispatcher_shape_lookup;
@@ -34,6 +36,7 @@ module tb_mem_dispatcher_shape_lookup;
   // ===| DUT IO |===============================================================
   axis_if #(.DATA_WIDTH(128)) s_axis_acp_fmap ();
   axis_if #(.DATA_WIDTH(128)) m_axis_acp_result ();
+  axis_if #(.DATA_WIDTH(128)) m_axis_l1_fmap ();
 
   memory_control_uop_t load_uop;
   memory_set_uop_t     mem_set_uop;
@@ -56,6 +59,7 @@ module tb_mem_dispatcher_shape_lookup;
       .rst_axi_n           (rst_axi_n),
       .S_AXIS_ACP_FMAP     (s_axis_acp_fmap),
       .M_AXIS_ACP_RESULT   (m_axis_acp_result),
+      .M_AXIS_L1_FMAP      (m_axis_l1_fmap),
       .IN_LOAD_uop         (load_uop),
       .IN_mem_set_uop      (mem_set_uop),
       .IN_CVO_uop          (cvo_uop),
@@ -179,6 +183,9 @@ module tb_mem_dispatcher_shape_lookup;
       };
       @(posedge clk_core);
       #1;
+      set_load_idle();
+      repeat (3) @(posedge clk_core);
+      #1;
 
       checks++;
       if (dut.acp_rx_start !== 1'b1) begin
@@ -198,7 +205,6 @@ module tb_mem_dispatcher_shape_lookup;
                  exp_write_en, exp_base, exp_end);
       end
 
-      set_load_idle();
       @(posedge clk_core);
       #1;
     end
@@ -224,6 +230,9 @@ module tb_mem_dispatcher_shape_lookup;
       };
       @(posedge clk_core);
       #1;
+      set_load_idle();
+      repeat (3) @(posedge clk_core);
+      #1;
 
       checks++;
       if (dut.npu_rx_start !== 1'b1) begin
@@ -243,7 +252,6 @@ module tb_mem_dispatcher_shape_lookup;
                  src_addr, exp_end);
       end
 
-      set_load_idle();
       @(posedge clk_core);
       #1;
     end
@@ -266,6 +274,7 @@ module tb_mem_dispatcher_shape_lookup;
     s_axis_acp_fmap.tlast  = 1'b0;
     s_axis_acp_fmap.tkeep  = '1;
     m_axis_acp_result.tready = 1'b1;
+    m_axis_l1_fmap.tready = 1'b1;
 
     repeat (4) @(posedge clk_core);
     rst_n_core = 1'b1;

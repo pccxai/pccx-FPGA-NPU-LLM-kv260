@@ -47,6 +47,18 @@ module mem_HP_buffer #(
   // ine Large Depth for URAM (4096 uses 2 URAM blocks per FIFO)
   localparam int URAM_FIFO_DEPTH = 4096;
 
+  // Weight streams are fixed-width, continuous beat streams in this v002
+  // boundary. The FIFO instances move data/valid/ready; terminate sidebands
+  // so downstream AXIS ports have a deterministic contract in synthesis.
+  assign M_CORE_HP0_WEIGHT.tkeep = '1;
+  assign M_CORE_HP0_WEIGHT.tlast = 1'b0;
+  assign M_CORE_HP1_WEIGHT.tkeep = '1;
+  assign M_CORE_HP1_WEIGHT.tlast = 1'b0;
+  assign M_CORE_HP2_WEIGHT.tkeep = '1;
+  assign M_CORE_HP2_WEIGHT.tlast = 1'b0;
+  assign M_CORE_HP3_WEIGHT.tkeep = '1;
+  assign M_CORE_HP3_WEIGHT.tlast = 1'b0;
+
   // [1] HP0 Weight FIFO (URAM based - Massive 64KB)
   xpm_fifo_axis #(
       .FIFO_DEPTH      (URAM_FIFO_DEPTH),

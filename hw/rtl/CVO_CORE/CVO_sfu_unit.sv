@@ -12,12 +12,12 @@ import bf16_math_pkg::*;
 // Reset        : rst_n active-low; i_clear synchronous soft-clear.
 // BF16 layout  : {sign[15], exp[14:7], mant[6:0]}.
 // Pipelines    : Independent per-op pipelines, multiplexed at the output:
-//   EXP        :  4 cycles
+//   EXP        :  5 cycles
 //   SQRT       :  3 cycles
 //   RECIP      :  4 cycles  (Newton-Raphson, 1 step)
 //   SCALE      :  3 cycles  (first input word = scalar, rest = data)
 //   REDUCE_SUM :  variable  (accumulates for IN_length cycles, then emits scalar)
-//   GELU       : 12 cycles  (MUL + NEG + EXP + ADD + RECIP + MUL chain)
+//   GELU       : 14 cycles  (MUL + NEG + EXP + ADD + RECIP + MUL chain)
 // Throughput   : 1 result/cycle for streaming ops; REDUCE_SUM emits 1 scalar
 //                per IN_length elements.
 // Handshake    : OUT_data_ready tied 1'b1 — combinational ready (sub-units
@@ -148,7 +148,7 @@ module CVO_sfu_unit (
     return v[6:0];
   endfunction
 
-  // ===| EXP Pipeline (4 stages) |===============================================
+  // ===| EXP Pipeline (5 stages) |===============================================
 
   // Stage 1 — unpack BF16
   logic       exp_s1_valid;
@@ -167,13 +167,11 @@ module CVO_sfu_unit (
     end
   end
 
-  // Stage 2 — BF16 → Q8.7 fixed-point, then multiply by log2(e)
-  logic               exp_s2_valid;
-  logic        [ 8:0] exp_s2_n;  // integer part of x*log2e
-  logic        [ 6:0] exp_s2_frac;  // fractional 7-bit index for LUT
+  // Stage 2 — BF16 → Q8.7 fixed-point
+  logic               exp_s1f_valid;
+  logic signed [15:0] exp_s1f_xfixed;
 
   logic signed [15:0] exp_s1_xfixed_wire;  // Q8.7 signed
-  logic signed [23:0] exp_s1_y_wire;  // Q9.14: x*log2e
 
   always_comb begin : comb_exp_convert
     logic [15:0] mag;
@@ -185,20 +183,37 @@ module CVO_sfu_unit (
     else if (sh >= -7) mag = 16'({1'b1, exp_s1_mant, 7'b0} << (sh + 7));
     else mag = 16'({1'b1, exp_s1_mant, 7'b0} >> -(sh + 7));
     exp_s1_xfixed_wire = exp_s1_sign ? -$signed({1'b0, mag}) : $signed({1'b0, mag});
-    exp_s1_y_wire      = $signed(exp_s1_xfixed_wire) * $signed({1'b0, Log2EQ17});
   end
+
+  always_ff @(posedge clk) begin
+    if (!rst_n || i_clear) begin
+      exp_s1f_valid  <= 1'b0;
+      exp_s1f_xfixed <= '0;
+    end else begin
+      exp_s1f_valid  <= exp_s1_valid;
+      exp_s1f_xfixed <= exp_s1_xfixed_wire;
+    end
+  end
+
+  // Stage 3 — multiply by log2(e)
+  logic               exp_s2_valid;
+  logic        [ 8:0] exp_s2_n;  // integer part of x*log2e
+  logic        [ 6:0] exp_s2_frac;  // fractional 7-bit index for LUT
+
+  logic signed [23:0] exp_s1_y_wire;  // Q9.14: x*log2e
+  assign exp_s1_y_wire = $signed(exp_s1f_xfixed) * $signed({1'b0, Log2EQ17});
 
   always_ff @(posedge clk) begin
     if (!rst_n || i_clear) begin
       exp_s2_valid <= 1'b0;
     end else begin
-      exp_s2_valid <= exp_s1_valid;
+      exp_s2_valid <= exp_s1f_valid;
       exp_s2_n     <= 9'(exp_s1_y_wire[23:14]);
       exp_s2_frac  <= exp_s1_y_wire[13:7];
     end
   end
 
-  // Stage 3 — assemble output BF16
+  // Stage 4 — assemble output BF16
   logic        exp_s3_valid;
   logic [15:0] exp_s3_result;
 
@@ -425,12 +440,14 @@ module CVO_sfu_unit (
     end
   end
 
-  // ===| GELU Pipeline (12 stages) |=============================================
+  // ===| GELU Pipeline (14 stages) |=============================================
   // GELU(x) ≈ x * sigmoid(1.702*x),  sigmoid(y) = 1/(1+exp(-y))
-  // Chain: MUL(1.702)[1] → NEG[0] → EXP[3] → ADD(1)[1] → RECIP[4] → MUL(x)[1] = 10+delay
-  // x is preserved in a 10-cycle delay chain.
+  // Chain: MUL(1.702)[1] -> NEG[0] -> EXP[3] -> ADD(1)[1] ->
+  // RECIP seed/Newton[4] -> MUL(x)[1]. The Newton correction and
+  // multiply are separated to keep the 400 MHz core timing boundary real.
+  // x is preserved in a 12-cycle delay chain.
 
-  localparam int GeluDelay = 10;
+  localparam int GeluDelay = 12;
 
   logic [15:0] gelu_x_pipe   [GeluDelay];
 
@@ -463,13 +480,15 @@ module CVO_sfu_unit (
     end
   end
 
-  // Stages g3-g5: EXP(-y) — re-use combinational helpers, pipeline 3 stages
+  // Stages g3-g6: EXP(-y) — split BF16->fixed conversion from log2(e) multiply
   logic               gelu_e1_valid;
   logic        [ 8:0] gelu_e1_n;
   logic        [ 6:0] gelu_e1_frac;
 
+  logic               gelu_e0_valid;
+  logic signed [15:0] gelu_e0_xf;
   logic signed [15:0] gelu_g2_xf_wire;
-  logic signed [23:0] gelu_g2_y_wire;
+  logic signed [23:0] gelu_e0_y_wire;
 
   always_comb begin : comb_gelu_exp_convert
     logic [15:0] mag;
@@ -481,16 +500,27 @@ module CVO_sfu_unit (
     else if (sh >= -7) mag = 16'({1'b1, gelu_g2_neg_y[6:0], 7'b0} << (sh + 7));
     else mag = 16'({1'b1, gelu_g2_neg_y[6:0], 7'b0} >> -(sh + 7));
     gelu_g2_xf_wire = gelu_g2_neg_y[15] ? -$signed({1'b0, mag}) : $signed({1'b0, mag});
-    gelu_g2_y_wire  = $signed(gelu_g2_xf_wire) * $signed({1'b0, Log2EQ17});
   end
+
+  always_ff @(posedge clk) begin
+    if (!rst_n || i_clear) begin
+      gelu_e0_valid <= 1'b0;
+      gelu_e0_xf    <= '0;
+    end else begin
+      gelu_e0_valid <= gelu_g2_valid;
+      gelu_e0_xf    <= gelu_g2_xf_wire;
+    end
+  end
+
+  assign gelu_e0_y_wire = $signed(gelu_e0_xf) * $signed({1'b0, Log2EQ17});
 
   always_ff @(posedge clk) begin
     if (!rst_n || i_clear) begin
       gelu_e1_valid <= 1'b0;
     end else begin
-      gelu_e1_valid <= gelu_g2_valid;
-      gelu_e1_n     <= 9'(gelu_g2_y_wire[23:14]);
-      gelu_e1_frac  <= gelu_g2_y_wire[13:7];
+      gelu_e1_valid <= gelu_e0_valid;
+      gelu_e1_n     <= 9'(gelu_e0_y_wire[23:14]);
+      gelu_e1_frac  <= gelu_e0_y_wire[13:7];
     end
   end
 
@@ -562,6 +592,22 @@ module CVO_sfu_unit (
     end
   end
 
+  logic        gelu_r3a_valid;
+  logic [15:0] gelu_r3a_r0;
+  logic [15:0] gelu_r3a_corr;
+
+  always_ff @(posedge clk) begin
+    if (!rst_n || i_clear) begin
+      gelu_r3a_valid <= 1'b0;
+      gelu_r3a_r0    <= 16'd0;
+      gelu_r3a_corr  <= 16'd0;
+    end else begin
+      gelu_r3a_valid <= gelu_r2_valid;
+      gelu_r3a_r0    <= gelu_r2_r0;
+      gelu_r3a_corr  <= bf16_add(Bf16Two, {1'b1, gelu_r2_xr0[14:0]});
+    end
+  end
+
   logic        gelu_r3_valid;
   logic [15:0] gelu_r3_sigmoid;
 
@@ -569,8 +615,8 @@ module CVO_sfu_unit (
     if (!rst_n || i_clear) begin
       gelu_r3_valid <= 1'b0;
     end else begin
-      gelu_r3_valid   <= gelu_r2_valid;
-      gelu_r3_sigmoid <= bf16_mul(gelu_r2_r0, bf16_add(Bf16Two, {1'b1, gelu_r2_xr0[14:0]}));
+      gelu_r3_valid   <= gelu_r3a_valid;
+      gelu_r3_sigmoid <= bf16_mul(gelu_r3a_r0, gelu_r3a_corr);
     end
   end
 

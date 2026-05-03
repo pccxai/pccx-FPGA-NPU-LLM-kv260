@@ -71,6 +71,7 @@ module NPU_top (
   axis_if #(.DATA_WIDTH(128)) M_CORE_HP1_WEIGHT ();
   axis_if #(.DATA_WIDTH(128)) M_CORE_HP2_WEIGHT ();
   axis_if #(.DATA_WIDTH(128)) M_CORE_HP3_WEIGHT ();
+  axis_if #(.DATA_WIDTH(128)) M_CORE_FMAP_FROM_L2 ();
 
   // ===| Internal Wires — Instruction Path |=====================================
   logic                GEMV_op_x64_valid_wire;
@@ -149,6 +150,7 @@ module NPU_top (
 
       .S_AXIS_ACP_FMAP  (S_AXIS_ACP_FMAP),
       .M_AXIS_ACP_RESULT(M_AXIS_ACP_RESULT),
+      .M_AXIS_L1_FMAP   (M_CORE_FMAP_FROM_L2),
 
       .IN_LOAD_uop     (LOAD_uop_wire),
       .IN_mem_set_uop  (mem_set_uop),
@@ -195,7 +197,7 @@ module NPU_top (
       .rst_n  (rst_n_core),
       .i_clear(i_clear),
 
-      .S_AXIS_ACP_FMAP(S_AXIS_ACP_FMAP),
+      .S_AXIS_ACP_FMAP(M_CORE_FMAP_FROM_L2),
 
       .i_rd_start(sram_rd_start_wire),
 

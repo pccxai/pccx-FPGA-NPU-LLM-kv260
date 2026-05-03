@@ -38,6 +38,7 @@ module mem_GLOBAL_cache (
     // ===| AXI-Stream ACP (external, AXI clock domain) |========================
     axis_if.slave  S_AXIS_ACP_FMAP,    // feature map in  (128-bit, from PS/DDR4)
     axis_if.master M_AXIS_ACP_RESULT,  // result out       (128-bit, to PS/DDR4)
+    axis_if.master M_AXIS_NPU_FMAP,    // L2 -> preprocess fmap stream
 
     // ===| Port A — ACP DMA control |============================================
     input  logic        IN_acp_write_en,   // 1=write (DDR→L2), 0=read (L2→DDR)
@@ -130,8 +131,29 @@ module mem_GLOBAL_cache (
   logic        npu_write_en;
   logic        npu_is_busy;
   logic [16:0] npu_end_addr;
+  logic [2:0]  npu_rd_valid_pipe;
+  logic [2:0]  npu_rd_last_pipe;
+  logic        npu_read_fire;
+  logic        npu_write_fire;
 
   assign OUT_npu_is_busy = npu_is_busy;
+  assign npu_read_fire   = npu_is_busy & ~npu_write_en & M_AXIS_NPU_FMAP.tready;
+  assign npu_write_fire  = npu_is_busy &  npu_write_en;
+
+  assign M_AXIS_NPU_FMAP.tdata  = OUT_npu_rdata;
+  assign M_AXIS_NPU_FMAP.tvalid = npu_rd_valid_pipe[2];
+  assign M_AXIS_NPU_FMAP.tlast  = npu_rd_last_pipe[2];
+  assign M_AXIS_NPU_FMAP.tkeep  = '1;
+
+  always_ff @(posedge clk_core) begin
+    if (!rst_n_core) begin
+      npu_rd_valid_pipe <= 3'b000;
+      npu_rd_last_pipe  <= 3'b000;
+    end else begin
+      npu_rd_valid_pipe <= {npu_rd_valid_pipe[1:0], npu_read_fire};
+      npu_rd_last_pipe  <= {npu_rd_last_pipe[1:0], (npu_read_fire && (npu_ptr + 17'd1 >= npu_end_addr))};
+    end
+  end
 
   always_ff @(posedge clk_core) begin
     if (!rst_n_core) begin
@@ -141,8 +163,10 @@ module mem_GLOBAL_cache (
       npu_write_en <= 1'b0;
     end else begin
       if (npu_is_busy) begin
-        npu_ptr <= npu_ptr + 17'd1;
-        if (npu_ptr + 17'd1 >= npu_end_addr) npu_is_busy <= 1'b0;
+        if (npu_write_fire || npu_read_fire) begin
+          npu_ptr <= npu_ptr + 17'd1;
+          if (npu_ptr + 17'd1 >= npu_end_addr) npu_is_busy <= 1'b0;
+        end
       end else if (IN_npu_rx_start) begin
         npu_ptr      <= IN_npu_base_addr;
         npu_end_addr <= IN_npu_end_addr;
@@ -168,7 +192,7 @@ module mem_GLOBAL_cache (
       .OUT_acp_rdata(core_acp_tx_bus.tdata),
 
       // Port B — NPU compute
-      .IN_npu_we    (npu_write_en & npu_is_busy),
+      .IN_npu_we    (npu_write_fire),
       .IN_npu_addr  (npu_ptr),
       .IN_npu_wdata (IN_npu_wdata),
       .OUT_npu_rdata(OUT_npu_rdata)

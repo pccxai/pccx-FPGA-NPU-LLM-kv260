@@ -37,6 +37,14 @@ module mem_BUFFER (
   //fine Tiny Depth for BRAM CDC
   localparam int BRAM_FIFO_DEPTH = 32;
 
+  // The current datapath moves fixed-width 128-bit beats only. XPM carries
+  // data/valid/ready here; terminate sidebands deterministically so top-level
+  // AXIS contracts never synthesize with floating tkeep/tlast pins.
+  assign M_CORE_ACP_RX.tkeep    = '1;
+  assign M_CORE_ACP_RX.tlast    = 1'b0;
+  assign M_AXIS_ACP_RESULT.tkeep = '1;
+  assign M_AXIS_ACP_RESULT.tlast = 1'b0;
+
   // [1] ACP RX FIFO (CDC only: AXI -> Core)
   // FMAP/KV is handled by the massive L2 URAM Cache, so these CDC FIFOs stay TINY.
   xpm_fifo_axis #(

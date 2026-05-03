@@ -11,6 +11,7 @@ REPORT_DIR="$HW_DIR/build/reports"
 DRY_RUN=0
 RUN_SYNTH=0
 RUN_ID="${PCCX_RUN_ID:-}"
+ORIGINAL_ARGS=("$@")
 
 usage() {
     cat <<'USAGE'
@@ -81,6 +82,39 @@ status_from_report() {
     fi
 }
 
+metric_from_report() {
+    local report="$1"
+    local metric="$2"
+    if [[ ! -f "$report" ]]; then
+        printf 'unavailable'
+        return
+    fi
+    python3 - "$report" "$metric" <<'PY'
+import re
+import sys
+
+path, metric = sys.argv[1], sys.argv[2]
+metric_index = {
+    "WNS(ns)": 0,
+    "TNS(ns)": 1,
+    "WHS(ns)": 4,
+    "THS(ns)": 5,
+}.get(metric)
+lines = open(path, "r", encoding="utf-8", errors="replace").read().splitlines()
+for idx, line in enumerate(lines):
+    if metric_index is None or metric not in line:
+        continue
+    if not all(name in line for name in ("WNS(ns)", "TNS(ns)", "WHS(ns)", "THS(ns)")):
+        continue
+    for candidate in lines[idx + 1 : idx + 8]:
+        values = re.findall(r"[-+]?(?:\d+\.\d+|\d+)", candidate)
+        if len(values) > metric_index:
+            print(values[metric_index])
+            raise SystemExit(0)
+print("unavailable")
+PY
+}
+
 capture_report_tail() {
     local report="$1"
     local name="$2"
@@ -105,13 +139,20 @@ fi
 
 TIMING_REPORT="$REPORT_DIR/timing_summary_post_synth.rpt"
 UTIL_REPORT="$REPORT_DIR/utilization_post_synth.rpt"
+IMPL_TIMING_REPORT="$REPORT_DIR/timing_summary_post_impl.rpt"
+IMPL_UTIL_REPORT="$REPORT_DIR/utilization_post_impl.rpt"
 TIMING_STATUS="$(status_from_report "$TIMING_REPORT")"
+IMPL_TIMING_STATUS="$(status_from_report "$IMPL_TIMING_REPORT")"
 if [[ "$SYNTH_STATUS" == "failed" && ! -f "$TIMING_REPORT" ]]; then
     TIMING_STATUS="TIMING_ATTEMPTED_NO_REPORT"
 fi
 
 capture_report_tail "$TIMING_REPORT" timing_summary_post_synth
 capture_report_tail "$UTIL_REPORT" utilization_post_synth
+capture_report_tail "$IMPL_TIMING_REPORT" timing_summary_post_impl
+capture_report_tail "$IMPL_UTIL_REPORT" utilization_post_impl
+
+VIVADO_VERSION="$(vivado -version 2>/dev/null | head -n 1 || printf MISSING)"
 
 {
     printf 'run_id=%s\n' "$RUN_ID"
@@ -119,11 +160,25 @@ capture_report_tail "$UTIL_REPORT" utilization_post_synth
     printf 'git_commit=%s\n' "$COMMIT_FULL"
     printf 'dry_run=%s\n' "$DRY_RUN"
     printf 'run_synth=%s\n' "$RUN_SYNTH"
+    printf 'command_line=%q ' "$0" "${ORIGINAL_ARGS[@]}"
+    printf '\n'
     printf 'synth_status=%s\n' "$SYNTH_STATUS"
     printf 'timing_status=%s\n' "$TIMING_STATUS"
     printf 'timing_report=%s\n' "$TIMING_REPORT"
+    printf 'timing_wns_ns=%s\n' "$(metric_from_report "$TIMING_REPORT" 'WNS(ns)')"
+    printf 'timing_tns_ns=%s\n' "$(metric_from_report "$TIMING_REPORT" 'TNS(ns)')"
+    printf 'timing_whs_ns=%s\n' "$(metric_from_report "$TIMING_REPORT" 'WHS(ns)')"
+    printf 'timing_ths_ns=%s\n' "$(metric_from_report "$TIMING_REPORT" 'THS(ns)')"
+    printf 'impl_timing_status=%s\n' "$IMPL_TIMING_STATUS"
+    printf 'impl_timing_report=%s\n' "$IMPL_TIMING_REPORT"
+    printf 'impl_timing_wns_ns=%s\n' "$(metric_from_report "$IMPL_TIMING_REPORT" 'WNS(ns)')"
+    printf 'impl_timing_tns_ns=%s\n' "$(metric_from_report "$IMPL_TIMING_REPORT" 'TNS(ns)')"
+    printf 'impl_timing_whs_ns=%s\n' "$(metric_from_report "$IMPL_TIMING_REPORT" 'WHS(ns)')"
+    printf 'impl_timing_ths_ns=%s\n' "$(metric_from_report "$IMPL_TIMING_REPORT" 'THS(ns)')"
     printf 'utilization_report=%s\n' "$UTIL_REPORT"
+    printf 'impl_utilization_report=%s\n' "$IMPL_UTIL_REPORT"
     printf 'vivado=%s\n' "$(command -v vivado 2>/dev/null || printf MISSING)"
+    printf 'vivado_version=%s\n' "$VIVADO_VERSION"
     printf 'xvlog=%s\n' "$(command -v xvlog 2>/dev/null || printf MISSING)"
     printf 'part=xck26-sfvc784-2LV-c\n'
     printf 'constraints=%s\n' "$HW_DIR/constraints/pccx_timing.xdc"
