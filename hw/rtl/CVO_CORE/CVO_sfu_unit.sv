@@ -19,7 +19,7 @@ import bf16_math_pkg::*;
 //   RECIP      :  5 cycles  (Newton-Raphson, 1 step)
 //   SCALE      :  3 cycles  (first input word = scalar, rest = data)
 //   REDUCE_SUM :  variable  (ready-gated BF16 add pipeline, emits scalar)
-//   GELU       : 18 cycles  (MUL + NEG + EXP + ADD + RECIP + MUL chain)
+//   GELU       : 19 cycles  (MUL + NEG + EXP + ADD + RECIP + MUL chain)
 // Throughput   : 1 result/cycle for streaming ops; REDUCE_SUM emits 1 scalar
 //                per IN_length elements.
 // Handshake    : OUT_data_ready is 1'b1 for streaming ops; REDUCE_SUM applies
@@ -707,14 +707,14 @@ module CVO_sfu_unit (
     end
   end
 
-  // ===| GELU Pipeline (18 stages) |=============================================
+  // ===| GELU Pipeline (19 stages) |=============================================
   // GELU(x) ≈ x * sigmoid(1.702*x),  sigmoid(y) = 1/(1+exp(-y))
   // Chain: MUL(1.702)[1] -> NEG[0] -> EXP convert[3] -> EXP lut[2] ->
   // ADD(1)[1] -> RECIP seed/Newton[4] -> MUL(x)[1]. The BF16-to-fixed
   // conversion and Newton correction are split to keep 400 MHz boundaries real.
   // x is preserved in a 14-cycle delay chain.
 
-  localparam int GeluDelay = 15;
+  localparam int GeluDelay = 16;
 
   logic [15:0] gelu_x_pipe   [GeluDelay];
 
@@ -859,7 +859,7 @@ module CVO_sfu_unit (
     end
   end
 
-  // Stages g7-g10: RECIP(1 + exp(-y)) = sigmoid
+  // Stages g7-g11: RECIP(1 + exp(-y)) = sigmoid
   logic        gelu_r1_valid;
   logic [15:0] gelu_r1_r0;
   logic [15:0] gelu_r1_x;
@@ -895,9 +895,87 @@ module CVO_sfu_unit (
     end
   end
 
+  logic        gelu_r3aa_valid;
+  logic        gelu_r3aa_bypass;
+  logic [15:0] gelu_r3aa_bypass_value;
+  logic [ 7:0] gelu_r3aa_elarge;
+  logic [ 8:0] gelu_r3aa_ma;
+  logic [ 8:0] gelu_r3aa_mb;
+  logic [15:0] gelu_r3aa_r0;
+
+  logic [ 7:0] gelu_corr_elarge_wire;
+  logic [ 8:0] gelu_corr_ma_wire;
+  logic [ 8:0] gelu_corr_mb_wire;
+
+  always_comb begin : comb_gelu_corr_align
+    if (8'd128 >= gelu_r2_xr0[14:7]) begin
+      gelu_corr_elarge_wire = 8'd128;
+      gelu_corr_ma_wire     = {1'b0, 1'b1, 7'd0};
+      gelu_corr_mb_wire     = 9'({1'b0, 1'b1, gelu_r2_xr0[6:0]} >>
+                                  (8'd128 - gelu_r2_xr0[14:7]));
+    end else begin
+      gelu_corr_elarge_wire = gelu_r2_xr0[14:7];
+      gelu_corr_ma_wire     = 9'({1'b0, 1'b1, 7'd0} >>
+                                  (gelu_r2_xr0[14:7] - 8'd128));
+      gelu_corr_mb_wire     = {1'b0, 1'b1, gelu_r2_xr0[6:0]};
+    end
+  end
+
+  always_ff @(posedge clk) begin
+    if (!rst_n || i_clear) begin
+      gelu_r3aa_valid        <= 1'b0;
+      gelu_r3aa_bypass       <= 1'b0;
+      gelu_r3aa_bypass_value <= 16'd0;
+      gelu_r3aa_elarge       <= 8'd0;
+      gelu_r3aa_ma           <= 9'd0;
+      gelu_r3aa_mb           <= 9'd0;
+      gelu_r3aa_r0           <= 16'd0;
+    end else begin
+      gelu_r3aa_valid        <= gelu_r2_valid;
+      gelu_r3aa_bypass       <= (gelu_r2_xr0[14:0] == 15'd0);
+      gelu_r3aa_bypass_value <= Bf16Two;
+      gelu_r3aa_elarge       <= gelu_corr_elarge_wire;
+      gelu_r3aa_ma           <= gelu_corr_ma_wire;
+      gelu_r3aa_mb           <= gelu_corr_mb_wire;
+      gelu_r3aa_r0           <= gelu_r2_r0;
+    end
+  end
+
   logic        gelu_r3a_valid;
   logic [15:0] gelu_r3a_r0;
   logic [15:0] gelu_r3a_corr;
+
+  logic [15:0] gelu_corr_packed_wire;
+  logic        gelu_corr_sout_wire;
+  logic [ 9:0] gelu_corr_sum_wire;
+
+  always_comb begin : comb_gelu_corr_pack
+    if (gelu_r3aa_ma >= gelu_r3aa_mb) begin
+      gelu_corr_sout_wire = 1'b0;
+      gelu_corr_sum_wire  = {1'b0, gelu_r3aa_ma} - {1'b0, gelu_r3aa_mb};
+    end else begin
+      gelu_corr_sout_wire = 1'b1;
+      gelu_corr_sum_wire  = {1'b0, gelu_r3aa_mb} - {1'b0, gelu_r3aa_ma};
+    end
+
+    if (gelu_r3aa_bypass) begin
+      gelu_corr_packed_wire = gelu_r3aa_bypass_value;
+    end else if (gelu_corr_sum_wire == 10'd0) begin
+      gelu_corr_packed_wire = 16'd0;
+    end else if (gelu_corr_sum_wire[9]) begin
+      gelu_corr_packed_wire = {gelu_corr_sout_wire,
+                               8'(gelu_r3aa_elarge + 8'd1),
+                               gelu_corr_sum_wire[9:3]};
+    end else if (gelu_corr_sum_wire[8]) begin
+      gelu_corr_packed_wire = {gelu_corr_sout_wire,
+                               gelu_r3aa_elarge,
+                               gelu_corr_sum_wire[8:2]};
+    end else begin
+      gelu_corr_packed_wire = {gelu_corr_sout_wire,
+                               8'(gelu_r3aa_elarge - 8'd1),
+                               gelu_corr_sum_wire[7:1]};
+    end
+  end
 
   always_ff @(posedge clk) begin
     if (!rst_n || i_clear) begin
@@ -905,9 +983,9 @@ module CVO_sfu_unit (
       gelu_r3a_r0    <= 16'd0;
       gelu_r3a_corr  <= 16'd0;
     end else begin
-      gelu_r3a_valid <= gelu_r2_valid;
-      gelu_r3a_r0    <= gelu_r2_r0;
-      gelu_r3a_corr  <= bf16_add(Bf16Two, {1'b1, gelu_r2_xr0[14:0]});
+      gelu_r3a_valid <= gelu_r3aa_valid;
+      gelu_r3a_r0    <= gelu_r3aa_r0;
+      gelu_r3a_corr  <= gelu_corr_packed_wire;
     end
   end
 
