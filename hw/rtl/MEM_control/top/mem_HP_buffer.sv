@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 pccxai
 `timescale 1ns / 1ps
 `include "GEMM_Array.svh"
 `include "GLOBAL_CONST.svh"

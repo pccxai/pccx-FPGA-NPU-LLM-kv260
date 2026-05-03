@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 pccxai
 # =============================================================================
 # pccx_timing.xdc — timing-only constraints for the pccx v002 NPU core.
 #

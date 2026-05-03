@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 pccxai
 # =============================================================================
 # impl.tcl — routed implementation evidence for the pccx v002 NPU core.
 #

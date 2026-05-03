@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 pccxai
 # Collect bounded v002 timing evidence without claiming closure.
 
 set -Eeuo pipefail

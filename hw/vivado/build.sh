@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 pccxai
 # build.sh — thin wrapper around the Vivado TCL flow.
 #
 #   ./build.sh project   # just create_project.tcl
