@@ -125,16 +125,13 @@ module CVO_top (
   // stages because a full BF16 align/add/normalize chain does not meet the
   // 400 MHz core target as one combinational block.
 
-  function automatic logic [15:0] pack_bf16_sum(input logic [7:0] emax,
-                                                input logic signed [24:0] sum);
-    logic        out_sign;
-    logic [23:0] mag;
+  function automatic logic [15:0] pack_bf16_mag(input logic        out_sign,
+                                                input logic [7:0]  emax,
+                                                input logic [23:0] mag);
     int          lead;
     logic [7:0]  out_exp;
     logic [6:0]  out_mant;
 
-    out_sign = sum[24];
-    mag      = out_sign ? (~sum[23:0] + 24'd1) : sum[23:0];
     if (mag == 24'd0) return 16'd0;
 
     lead = 23;
@@ -271,13 +268,50 @@ module CVO_top (
         sub_s2_flags       <= sub_s1_flags;
         sub_s2_length      <= sub_s1_length;
       end
+	    end
+	  end
+
+  logic        sub_s3_valid;
+  logic        sub_s3_do_sub;
+  logic [15:0] sub_s3_passthrough;
+  logic [7:0]  sub_s3_emax;
+  logic        sub_s3_sign;
+  logic [23:0] sub_s3_mag;
+  cvo_func_e   sub_s3_func;
+  cvo_flags_t  sub_s3_flags;
+  logic [15:0] sub_s3_length;
+
+  always_ff @(posedge clk) begin
+    if (!rst_n || i_clear) begin
+      sub_s3_valid       <= 1'b0;
+      sub_s3_do_sub      <= 1'b0;
+      sub_s3_passthrough <= 16'd0;
+      sub_s3_emax        <= 8'd0;
+      sub_s3_sign        <= 1'b0;
+      sub_s3_mag         <= 24'd0;
+      sub_s3_func        <= CVO_EXP;
+      sub_s3_flags       <= '0;
+      sub_s3_length      <= 16'd0;
+    end else begin
+      sub_s3_valid <= sub_s2_valid;
+      if (sub_s2_valid) begin
+        sub_s3_do_sub      <= sub_s2_do_sub;
+        sub_s3_passthrough <= sub_s2_passthrough;
+        sub_s3_emax        <= sub_s2_emax;
+        sub_s3_sign        <= sub_s2_sum[24];
+        sub_s3_mag         <= sub_s2_sum[24] ? (~sub_s2_sum[23:0] + 24'd1) :
+                                               sub_s2_sum[23:0];
+        sub_s3_func        <= sub_s2_func;
+        sub_s3_flags       <= sub_s2_flags;
+        sub_s3_length      <= sub_s2_length;
+      end
     end
   end
 
-  // ===| Input to sub-units (after optional e_max subtraction) |=================
-  logic        data_valid_to_unit_wire;
-  logic [15:0] unit_data;
-  logic        unit_valid;
+	  // ===| Input to sub-units (after optional e_max subtraction) |=================
+	  logic        data_valid_to_unit_wire;
+	  logic [15:0] unit_data;
+	  logic        unit_valid;
   cvo_func_e   unit_func;
   cvo_flags_t  unit_flags;
   logic [15:0] unit_length;
@@ -294,13 +328,13 @@ module CVO_top (
       unit_flags  <= '0;
       unit_length <= 16'd0;
     end else begin
-      unit_valid <= sub_s2_valid;
-      if (sub_s2_valid) begin
-        unit_data   <= sub_s2_do_sub ? pack_bf16_sum(sub_s2_emax, sub_s2_sum) :
-                                       sub_s2_passthrough;
-        unit_func   <= sub_s2_func;
-        unit_flags  <= sub_s2_flags;
-        unit_length <= sub_s2_length;
+      unit_valid <= sub_s3_valid;
+      if (sub_s3_valid) begin
+        unit_data   <= sub_s3_do_sub ? pack_bf16_mag(sub_s3_sign, sub_s3_emax, sub_s3_mag) :
+                                       sub_s3_passthrough;
+        unit_func   <= sub_s3_func;
+        unit_flags  <= sub_s3_flags;
+        unit_length <= sub_s3_length;
       end
     end
   end
