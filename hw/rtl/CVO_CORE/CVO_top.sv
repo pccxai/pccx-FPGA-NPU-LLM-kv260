@@ -193,12 +193,78 @@ module CVO_top (
     end
   end
 
+  logic [22:0] sub_s1p_mag_a_wire;
+  logic [22:0] sub_s1p_mag_b_wire;
+  logic [7:0]  sub_s1p_shift_a_wire;
+  logic [7:0]  sub_s1p_shift_b_wire;
+
+  always_comb begin : comb_sub_emax_shift_prepare
+    sub_s1p_mag_a_wire   = {1'b1, sub_s0_a.mantissa, 15'd0};
+    sub_s1p_mag_b_wire   = {1'b1, sub_s0_b.mantissa, 15'd0};
+    sub_s1p_shift_a_wire = sub_s0_emax - sub_s0_a.exp;
+    sub_s1p_shift_b_wire = sub_s0_emax - sub_s0_b.exp;
+  end
+
+  logic        sub_s1p_valid;
+  logic        sub_s1p_do_sub;
+  logic [15:0] sub_s1p_passthrough;
+  logic [7:0]  sub_s1p_emax;
+  logic        sub_s1p_sign_a;
+  logic        sub_s1p_sign_b;
+  logic [22:0] sub_s1p_mag_a;
+  logic [22:0] sub_s1p_mag_b;
+  logic [7:0]  sub_s1p_shift_a;
+  logic [7:0]  sub_s1p_shift_b;
+  cvo_func_e   sub_s1p_func;
+  cvo_flags_t  sub_s1p_flags;
+  logic [15:0] sub_s1p_length;
+
+  always_ff @(posedge clk) begin
+    if (!rst_n || i_clear) begin
+      sub_s1p_valid       <= 1'b0;
+      sub_s1p_do_sub      <= 1'b0;
+      sub_s1p_passthrough <= 16'd0;
+      sub_s1p_emax        <= 8'd0;
+      sub_s1p_sign_a      <= 1'b0;
+      sub_s1p_sign_b      <= 1'b0;
+      sub_s1p_mag_a       <= 23'd0;
+      sub_s1p_mag_b       <= 23'd0;
+      sub_s1p_shift_a     <= 8'd0;
+      sub_s1p_shift_b     <= 8'd0;
+      sub_s1p_func        <= CVO_EXP;
+      sub_s1p_flags       <= '0;
+      sub_s1p_length      <= 16'd0;
+    end else begin
+      sub_s1p_valid <= sub_s0_valid;
+      if (sub_s0_valid) begin
+        sub_s1p_do_sub      <= sub_s0_do_sub;
+        sub_s1p_passthrough <= sub_s0_passthrough;
+        sub_s1p_emax        <= sub_s0_emax;
+        sub_s1p_sign_a      <= sub_s0_a.sign;
+        sub_s1p_sign_b      <= sub_s0_b.sign;
+        sub_s1p_mag_a       <= sub_s1p_mag_a_wire;
+        sub_s1p_mag_b       <= sub_s1p_mag_b_wire;
+        sub_s1p_shift_a     <= sub_s1p_shift_a_wire;
+        sub_s1p_shift_b     <= sub_s1p_shift_b_wire;
+        sub_s1p_func        <= sub_s0_func;
+        sub_s1p_flags       <= sub_s0_flags;
+        sub_s1p_length      <= sub_s0_length;
+      end
+    end
+  end
+
+  logic [22:0] sub_shifted_a_wire;
+  logic [22:0] sub_shifted_b_wire;
   logic [23:0] sub_aligned_a_wire;
   logic [23:0] sub_aligned_b_wire;
 
   always_comb begin : comb_sub_emax_align
-    sub_aligned_a_wire = align_to_emax(sub_s0_a, sub_s0_emax);
-    sub_aligned_b_wire = align_to_emax(sub_s0_b, sub_s0_emax);
+    sub_shifted_a_wire = sub_s1p_mag_a >> sub_s1p_shift_a;
+    sub_shifted_b_wire = sub_s1p_mag_b >> sub_s1p_shift_b;
+    sub_aligned_a_wire = sub_s1p_sign_a ? (~{1'b0, sub_shifted_a_wire} + 24'd1) :
+                                          {1'b0, sub_shifted_a_wire};
+    sub_aligned_b_wire = sub_s1p_sign_b ? (~{1'b0, sub_shifted_b_wire} + 24'd1) :
+                                          {1'b0, sub_shifted_b_wire};
   end
 
   logic        sub_s1_valid;
@@ -223,16 +289,16 @@ module CVO_top (
       sub_s1_flags       <= '0;
       sub_s1_length      <= 16'd0;
     end else begin
-      sub_s1_valid <= sub_s0_valid;
-      if (sub_s0_valid) begin
-        sub_s1_do_sub      <= sub_s0_do_sub;
-        sub_s1_passthrough <= sub_s0_passthrough;
-        sub_s1_emax        <= sub_s0_emax;
+      sub_s1_valid <= sub_s1p_valid;
+      if (sub_s1p_valid) begin
+        sub_s1_do_sub      <= sub_s1p_do_sub;
+        sub_s1_passthrough <= sub_s1p_passthrough;
+        sub_s1_emax        <= sub_s1p_emax;
         sub_s1_aligned_a   <= sub_aligned_a_wire;
         sub_s1_aligned_b   <= sub_aligned_b_wire;
-        sub_s1_func        <= sub_s0_func;
-        sub_s1_flags       <= sub_s0_flags;
-        sub_s1_length      <= sub_s0_length;
+        sub_s1_func        <= sub_s1p_func;
+        sub_s1_flags       <= sub_s1p_flags;
+        sub_s1_length      <= sub_s1p_length;
       end
     end
   end
