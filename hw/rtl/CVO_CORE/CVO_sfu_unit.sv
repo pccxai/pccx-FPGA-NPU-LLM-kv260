@@ -1086,6 +1086,13 @@ module CVO_sfu_unit (
   logic [15:0] gelu_corr_packed_wire;
   logic        gelu_corr_sout_wire;
   logic [ 9:0] gelu_corr_sum_wire;
+  logic        gelu_r3ab_valid;
+  logic        gelu_r3ab_bypass;
+  logic [15:0] gelu_r3ab_bypass_value;
+  logic [ 7:0] gelu_r3ab_elarge;
+  logic        gelu_r3ab_sout;
+  logic [ 9:0] gelu_r3ab_sum;
+  logic [15:0] gelu_r3ab_r0;
 
   always_comb begin : comb_gelu_corr_pack
     if (gelu_r3aa_ma >= gelu_r3aa_mb) begin
@@ -1114,14 +1121,6 @@ module CVO_sfu_unit (
                                gelu_r3ab_sum[7:1]};
     end
   end
-
-  logic        gelu_r3ab_valid;
-  logic        gelu_r3ab_bypass;
-  logic [15:0] gelu_r3ab_bypass_value;
-  logic [ 7:0] gelu_r3ab_elarge;
-  logic        gelu_r3ab_sout;
-  logic [ 9:0] gelu_r3ab_sum;
-  logic [15:0] gelu_r3ab_r0;
 
   always_ff @(posedge clk) begin
     if (!rst_n || i_clear) begin
