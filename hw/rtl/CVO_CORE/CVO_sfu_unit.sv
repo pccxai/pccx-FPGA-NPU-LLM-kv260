@@ -18,12 +18,12 @@ import bf16_math_pkg::*;
 //   SQRT       :  3 cycles
 //   RECIP      :  4 cycles  (Newton-Raphson, 1 step)
 //   SCALE      :  3 cycles  (first input word = scalar, rest = data)
-//   REDUCE_SUM :  variable  (accumulates for IN_length cycles, then emits scalar)
+//   REDUCE_SUM :  variable  (ready-gated BF16 add pipeline, emits scalar)
 //   GELU       : 14 cycles  (MUL + NEG + EXP + ADD + RECIP + MUL chain)
 // Throughput   : 1 result/cycle for streaming ops; REDUCE_SUM emits 1 scalar
 //                per IN_length elements.
-// Handshake    : OUT_data_ready tied 1'b1 — combinational ready (sub-units
-//                are non-blocking pipelines).
+// Handshake    : OUT_data_ready is 1'b1 for streaming ops; REDUCE_SUM applies
+//                local backpressure while the accumulator pipeline is busy.
 // Reset state  : All per-op pipeline registers cleared; output mux silent.
 // Errors       : EXP overflow saturates to +inf (16'h7F80); EXP underflow → 0.
 // Counters     : none.
@@ -418,26 +418,159 @@ module CVO_sfu_unit (
   logic        rsum_out_valid;
   logic [15:0] rsum_out;
 
+  logic        rsum_in_valid;
+  logic [15:0] rsum_in_data;
+  logic        rsum_in_last;
+
+  logic        rsum_a_valid;
+  logic        rsum_a_last;
+  logic        rsum_a_bypass;
+  logic [15:0] rsum_a_bypass_value;
+  logic        rsum_a_sa;
+  logic        rsum_a_sb;
+  logic [ 7:0] rsum_a_elarge;
+  logic [ 8:0] rsum_a_ma;
+  logic [ 8:0] rsum_a_mb;
+
+  logic        rsum_b_valid;
+  logic        rsum_b_last;
+  logic        rsum_b_bypass;
+  logic [15:0] rsum_b_bypass_value;
+  logic        rsum_b_sout;
+  logic [ 7:0] rsum_b_elarge;
+  logic [ 9:0] rsum_b_sum;
+
+  logic        rsum_p_valid;
+  logic        rsum_p_last;
+  logic [15:0] rsum_p_result;
+
+  logic        rsum_data_ready;
+  logic [15:0] rsum_packed_wire;
+
+  assign rsum_data_ready = !rsum_in_valid && !rsum_a_valid && !rsum_b_valid && !rsum_p_valid;
+
+  always_comb begin : comb_rsum_pack
+    rsum_packed_wire = 16'd0;
+    if (rsum_b_bypass) begin
+      rsum_packed_wire = rsum_b_bypass_value;
+    end else if (rsum_b_sum == 10'd0) begin
+      rsum_packed_wire = 16'd0;
+    end else if (rsum_b_sum[9]) begin
+      rsum_packed_wire = {rsum_b_sout, 8'(rsum_b_elarge + 8'd1), rsum_b_sum[9:3]};
+    end else if (rsum_b_sum[8]) begin
+      rsum_packed_wire = {rsum_b_sout, rsum_b_elarge, rsum_b_sum[8:2]};
+    end else begin
+      rsum_packed_wire = {rsum_b_sout, 8'(rsum_b_elarge - 8'd1), rsum_b_sum[7:1]};
+    end
+  end
+
   always_ff @(posedge clk) begin
     if (!rst_n || i_clear) begin
       rsum_count     <= 16'd0;
       rsum_accum     <= 16'd0;
       rsum_out_valid <= 1'b0;
       rsum_out       <= 16'd0;
+      rsum_in_valid  <= 1'b0;
+      rsum_in_data   <= 16'd0;
+      rsum_in_last   <= 1'b0;
+      rsum_a_valid   <= 1'b0;
+      rsum_a_last    <= 1'b0;
+      rsum_a_bypass  <= 1'b0;
+      rsum_a_bypass_value <= 16'd0;
+      rsum_a_sa      <= 1'b0;
+      rsum_a_sb      <= 1'b0;
+      rsum_a_elarge  <= 8'd0;
+      rsum_a_ma      <= 9'd0;
+      rsum_a_mb      <= 9'd0;
+      rsum_b_valid   <= 1'b0;
+      rsum_b_last    <= 1'b0;
+      rsum_b_bypass  <= 1'b0;
+      rsum_b_bypass_value <= 16'd0;
+      rsum_b_sout    <= 1'b0;
+      rsum_b_elarge  <= 8'd0;
+      rsum_b_sum     <= 10'd0;
+      rsum_p_valid   <= 1'b0;
+      rsum_p_last    <= 1'b0;
+      rsum_p_result  <= 16'd0;
     end else begin
       rsum_out_valid <= 1'b0;
-      if (IN_valid && IN_func == CVO_REDUCE_SUM) begin
-        rsum_count <= rsum_count + 16'd1;
-        rsum_accum <= bf16_add(rsum_accum, IN_data);
-        if (rsum_count == IN_length - 16'd1) begin
-          rsum_out       <= bf16_add(rsum_accum, IN_data);
-          rsum_out_valid <= 1'b1;
-          rsum_count     <= 16'd0;
-          rsum_accum     <= 16'd0;
+
+      // Stage 0: accept exactly one input while the dependent accumulator
+      // pipeline is empty. CVO_top already honors OUT_data_ready.
+      if (IN_valid && (IN_func == CVO_REDUCE_SUM) && rsum_data_ready) begin
+        rsum_in_valid <= 1'b1;
+        rsum_in_data  <= IN_data;
+        rsum_in_last  <= (rsum_count == IN_length - 16'd1);
+        rsum_count    <= (rsum_count == IN_length - 16'd1) ? 16'd0 : rsum_count + 16'd1;
+      end else begin
+        rsum_in_valid <= 1'b0;
+        if ((IN_func != CVO_REDUCE_SUM) && rsum_data_ready) begin
+          rsum_count <= 16'd0;
+          rsum_accum <= 16'd0;
         end
-      end else if (IN_func != CVO_REDUCE_SUM) begin
-        rsum_count <= 16'd0;
-        rsum_accum <= 16'd0;
+      end
+
+      // Stage 1: unpack, exponent-align mantissas, and carry zero bypasses.
+      rsum_a_valid <= rsum_in_valid;
+      rsum_a_last  <= rsum_in_last;
+      if (rsum_accum[14:0] == 0 || rsum_in_data[14:0] == 0) begin
+        rsum_a_bypass       <= 1'b1;
+        rsum_a_bypass_value <= (rsum_accum[14:0] == 0) ? rsum_in_data : rsum_accum;
+        rsum_a_sa           <= 1'b0;
+        rsum_a_sb           <= 1'b0;
+        rsum_a_elarge       <= 8'd0;
+        rsum_a_ma           <= 9'd0;
+        rsum_a_mb           <= 9'd0;
+      end else begin
+        rsum_a_bypass       <= 1'b0;
+        rsum_a_bypass_value <= 16'd0;
+        rsum_a_sa           <= rsum_accum[15];
+        rsum_a_sb           <= rsum_in_data[15];
+        if (rsum_accum[14:7] >= rsum_in_data[14:7]) begin
+          rsum_a_elarge <= rsum_accum[14:7];
+          rsum_a_ma     <= {1'b0, 1'b1, rsum_accum[6:0]};
+          rsum_a_mb     <= 9'({1'b0, 1'b1, rsum_in_data[6:0]} >> (rsum_accum[14:7] - rsum_in_data[14:7]));
+        end else begin
+          rsum_a_elarge <= rsum_in_data[14:7];
+          rsum_a_ma     <= 9'({1'b0, 1'b1, rsum_accum[6:0]} >> (rsum_in_data[14:7] - rsum_accum[14:7]));
+          rsum_a_mb     <= {1'b0, 1'b1, rsum_in_data[6:0]};
+        end
+      end
+
+      // Stage 2: signed mantissa add/subtract.
+      rsum_b_valid        <= rsum_a_valid;
+      rsum_b_last         <= rsum_a_last;
+      rsum_b_bypass       <= rsum_a_bypass;
+      rsum_b_bypass_value <= rsum_a_bypass_value;
+      rsum_b_elarge       <= rsum_a_elarge;
+      if (rsum_a_bypass) begin
+        rsum_b_sout <= 1'b0;
+        rsum_b_sum  <= 10'd0;
+      end else if (rsum_a_sa == rsum_a_sb) begin
+        rsum_b_sout <= rsum_a_sa;
+        rsum_b_sum  <= {1'b0, rsum_a_ma} + {1'b0, rsum_a_mb};
+      end else if (rsum_a_ma >= rsum_a_mb) begin
+        rsum_b_sout <= rsum_a_sa;
+        rsum_b_sum  <= {1'b0, rsum_a_ma} - {1'b0, rsum_a_mb};
+      end else begin
+        rsum_b_sout <= rsum_a_sb;
+        rsum_b_sum  <= {1'b0, rsum_a_mb} - {1'b0, rsum_a_ma};
+      end
+
+      // Stage 3: normalize and pack BF16.
+      rsum_p_valid  <= rsum_b_valid;
+      rsum_p_last   <= rsum_b_last;
+      rsum_p_result <= rsum_packed_wire;
+
+      // Stage 4: commit accumulator or emit final scalar.
+      if (rsum_p_valid) begin
+        if (rsum_p_last) begin
+          rsum_out       <= rsum_p_result;
+          rsum_out_valid <= 1'b1;
+          rsum_accum     <= 16'd0;
+        end else begin
+          rsum_accum <= rsum_p_result;
+        end
       end
     end
   end
@@ -637,7 +770,7 @@ module CVO_sfu_unit (
 
   // ===| Output Mux |============================================================
   always_comb begin
-    OUT_data_ready   = 1'b1;
+    OUT_data_ready   = (IN_func == CVO_REDUCE_SUM) ? rsum_data_ready : 1'b1;
     OUT_result       = 16'd0;
     OUT_result_valid = 1'b0;
     case (IN_func)
