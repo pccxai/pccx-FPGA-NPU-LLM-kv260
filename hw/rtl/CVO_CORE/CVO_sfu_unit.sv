@@ -19,7 +19,7 @@ import bf16_math_pkg::*;
 //   RECIP      :  7 cycles  (Newton-Raphson, 1 step)
 //   SCALE      :  4 cycles  (first input word = scalar, rest = data)
 //   REDUCE_SUM :  variable  (ready-gated BF16 add pipeline, emits scalar)
-//   GELU       : 19 cycles  (MUL + NEG + EXP + ADD + RECIP + MUL chain)
+//   GELU       : 20 cycles  (MUL + NEG + EXP + ADD + RECIP + MUL chain)
 // Throughput   : 1 result/cycle for streaming ops; REDUCE_SUM emits 1 scalar
 //                per IN_length elements.
 // Handshake    : OUT_data_ready is 1'b1 for streaming ops; REDUCE_SUM applies
@@ -805,14 +805,14 @@ module CVO_sfu_unit (
     end
   end
 
-  // ===| GELU Pipeline (19 stages) |=============================================
+  // ===| GELU Pipeline (20 stages) |=============================================
   // GELU(x) ≈ x * sigmoid(1.702*x),  sigmoid(y) = 1/(1+exp(-y))
   // Chain: MUL(1.702)[1] -> NEG[0] -> EXP convert[3] -> EXP lut[2] ->
   // ADD(1)[1] -> RECIP seed/Newton[4] -> MUL(x)[1]. The BF16-to-fixed
   // conversion and Newton correction are split to keep 400 MHz boundaries real.
   // x is preserved in a 14-cycle delay chain.
 
-  localparam int GeluDelay = 16;
+  localparam int GeluDelay = 17;
 
   logic [15:0] gelu_x_pipe   [GeluDelay];
 
@@ -957,7 +957,7 @@ module CVO_sfu_unit (
     end
   end
 
-  // Stages g7-g11: RECIP(1 + exp(-y)) = sigmoid
+  // Stages g7-g12: RECIP(1 + exp(-y)) = sigmoid
   logic        gelu_r1_valid;
   logic [15:0] gelu_r1_r0;
   logic [15:0] gelu_r1_x;
@@ -979,6 +979,44 @@ module CVO_sfu_unit (
     end
   end
 
+  logic        gelu_r2a_valid;
+  logic        gelu_r2a_zero;
+  logic        gelu_r2a_sign;
+  logic [ 8:0] gelu_r2a_esum;
+  logic [15:0] gelu_r2a_mp;
+  logic [15:0] gelu_r2a_r0;
+
+  logic [ 7:0] gelu_r2a_er_wire;
+  logic [ 6:0] gelu_r2a_mr_wire;
+
+  always_ff @(posedge clk) begin
+    if (!rst_n || i_clear) begin
+      gelu_r2a_valid <= 1'b0;
+      gelu_r2a_zero  <= 1'b1;
+      gelu_r2a_sign  <= 1'b0;
+      gelu_r2a_esum  <= 9'd0;
+      gelu_r2a_mp    <= 16'd0;
+      gelu_r2a_r0    <= 16'd0;
+    end else begin
+      gelu_r2a_valid <= gelu_r1_valid;
+      gelu_r2a_zero  <= (gelu_r1_x[14:0] == 15'd0) || (gelu_r1_r0[14:0] == 15'd0);
+      gelu_r2a_sign  <= gelu_r1_x[15] ^ gelu_r1_r0[15];
+      gelu_r2a_esum  <= {1'b0, gelu_r1_x[14:7]} + {1'b0, gelu_r1_r0[14:7]};
+      gelu_r2a_mp    <= {1'b1, gelu_r1_x[6:0]} * {1'b1, gelu_r1_r0[6:0]};
+      gelu_r2a_r0    <= gelu_r1_r0;
+    end
+  end
+
+  always_comb begin : comb_gelu_xr0_pack
+    if (gelu_r2a_mp[15]) begin
+      gelu_r2a_er_wire = 8'(gelu_r2a_esum - 9'd127 + 9'd1);
+      gelu_r2a_mr_wire = gelu_r2a_mp[14:8];
+    end else begin
+      gelu_r2a_er_wire = 8'(gelu_r2a_esum - 9'd127);
+      gelu_r2a_mr_wire = gelu_r2a_mp[13:7];
+    end
+  end
+
   logic        gelu_r2_valid;
   logic [15:0] gelu_r2_xr0;
   logic [15:0] gelu_r2_r0;
@@ -986,10 +1024,12 @@ module CVO_sfu_unit (
   always_ff @(posedge clk) begin
     if (!rst_n || i_clear) begin
       gelu_r2_valid <= 1'b0;
+      gelu_r2_xr0   <= 16'd0;
+      gelu_r2_r0    <= 16'd0;
     end else begin
-      gelu_r2_valid <= gelu_r1_valid;
-      gelu_r2_xr0   <= bf16_mul(gelu_r1_x, gelu_r1_r0);
-      gelu_r2_r0    <= gelu_r1_r0;
+      gelu_r2_valid <= gelu_r2a_valid;
+      gelu_r2_xr0   <= gelu_r2a_zero ? 16'd0 : {gelu_r2a_sign, gelu_r2a_er_wire, gelu_r2a_mr_wire};
+      gelu_r2_r0    <= gelu_r2a_r0;
     end
   end
 
