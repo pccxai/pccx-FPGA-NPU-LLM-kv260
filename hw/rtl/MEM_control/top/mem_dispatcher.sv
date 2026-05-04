@@ -191,8 +191,7 @@ module mem_dispatcher #() (
   // 128-bit word counts. Keep that arithmetic behind a registered boundary:
   //   s1: capture route/base/shape
   //   s2: compute X*Y
-  //   s3: compute low bits of X*Y*Z needed by the 128-bit word count
-  //   s4: compute ceil(X*Y*Z/8)
+  //   s3: compute ceil(X*Y*Z/8)
   //   issue: enqueue ACP/NPU descriptor
   // This removes the prior shape_const_ram -> DSP -> DSP -> descriptor path
   // from the 400 MHz core cycle while preserving the external command contract.
@@ -226,14 +225,10 @@ module mem_dispatcher #() (
   logic        load_s3_to_npu;
   logic        load_s3_write_en;
   logic [16:0] load_s3_base_addr;
-  logic [19:0] load_s3_elem_count_lo;
+  logic [16:0] load_s3_word_total;
+  logic [50:0] load_s2_words_plus7;
 
-  logic        load_s4_valid;
-  logic        load_s4_to_acp;
-  logic        load_s4_to_npu;
-  logic        load_s4_write_en;
-  logic [16:0] load_s4_base_addr;
-  logic [16:0] load_s4_word_total;
+  assign load_s2_words_plus7 = (load_s2_shape_xy * load_s2_shape_z) + 51'd7;
 
   always_ff @(posedge clk_core) begin
     if (!rst_n_core) begin
@@ -263,13 +258,7 @@ module mem_dispatcher #() (
       load_s3_to_npu    <= 1'b0;
       load_s3_write_en  <= 1'b0;
       load_s3_base_addr <= '0;
-      load_s3_elem_count_lo <= '0;
-      load_s4_valid     <= 1'b0;
-      load_s4_to_acp    <= 1'b0;
-      load_s4_to_npu    <= 1'b0;
-      load_s4_write_en  <= 1'b0;
-      load_s4_base_addr <= '0;
-      load_s4_word_total <= '0;
+      load_s3_word_total <= '0;
     end else begin
       acp_rx_start <= 1'b0;
       npu_rx_start <= 1'b0;
@@ -337,30 +326,23 @@ module mem_dispatcher #() (
       load_s3_to_npu     <= load_s2_to_npu;
       load_s3_write_en   <= load_s2_write_en;
       load_s3_base_addr  <= load_s2_base_addr;
-      load_s3_elem_count_lo <= load_s2_shape_xy[19:0] * load_s2_shape_z;
+      load_s3_word_total <= load_s2_words_plus7[19:3];
 
-      load_s4_valid      <= load_s3_valid;
-      load_s4_to_acp     <= load_s3_to_acp;
-      load_s4_to_npu     <= load_s3_to_npu;
-      load_s4_write_en   <= load_s3_write_en;
-      load_s4_base_addr  <= load_s3_base_addr;
-      load_s4_word_total <= load_s3_elem_count_lo[19:3] + {16'd0, |load_s3_elem_count_lo[2:0]};
-
-      if (load_s4_valid && load_s4_to_acp) begin
+      if (load_s3_valid && load_s3_to_acp) begin
         acp_uop <= '{
-            write_en  : load_s4_write_en,
-            base_addr : load_s4_base_addr,
-            end_addr  : load_s4_base_addr + load_s4_word_total
+            write_en  : load_s3_write_en,
+            base_addr : load_s3_base_addr,
+            end_addr  : load_s3_base_addr + load_s3_word_total
         };
         acp_rx_start <= 1'b1;
         IN_acp_rdy   <= 1'b1;
       end
 
-      if (load_s4_valid && load_s4_to_npu) begin
+      if (load_s3_valid && load_s3_to_npu) begin
         npu_uop <= '{
-            write_en  : load_s4_write_en,
-            base_addr : load_s4_base_addr,
-            end_addr  : load_s4_base_addr + load_s4_word_total
+            write_en  : load_s3_write_en,
+            base_addr : load_s3_base_addr,
+            end_addr  : load_s3_base_addr + load_s3_word_total
         };
         npu_rx_start <= 1'b1;
         IN_npu_rdy   <= 1'b1;

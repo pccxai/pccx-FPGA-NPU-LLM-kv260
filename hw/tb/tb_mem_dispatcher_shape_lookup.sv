@@ -186,7 +186,7 @@ module tb_mem_dispatcher_shape_lookup;
       @(posedge clk_core);
       #1;
       set_load_idle();
-      repeat (4) @(posedge clk_core);
+      repeat (3) @(posedge clk_core);
       #1;
 
       checks++;
@@ -233,7 +233,7 @@ module tb_mem_dispatcher_shape_lookup;
       @(posedge clk_core);
       #1;
       set_load_idle();
-      repeat (4) @(posedge clk_core);
+      repeat (3) @(posedge clk_core);
       #1;
 
       checks++;
