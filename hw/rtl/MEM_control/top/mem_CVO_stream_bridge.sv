@@ -19,7 +19,7 @@ import isa_pkg::*;
 //   Phase 2 — WRITE: drain FIFO → serialise 8 × 16-bit → 128-bit bursts
 //                    → write to L2[dst_addr..dst_addr+N_words-1].
 // L2 addr unit : 128-bit words. base_addr N ↔ bytes [16*N .. 16*N+15].
-// L2 read lat  : 5 clocks (URAM READ_LATENCY_B = 5) — tracked via rd_lat_pipe.
+// L2 read lat  : 7 clocks (URAM READ_LATENCY_B = 7) — tracked via rd_lat_pipe.
 // Max vec len  : ResultFifoDepth × 16-bit = 32 KB (1 BRAM36 instance) — the
 //                FIFO depth caps the longest CVO op vector.
 // Handshake    : OUT_cvo_valid asserts during READ phase only;
@@ -47,7 +47,7 @@ module mem_CVO_stream_bridge (
     output logic         OUT_l2_we,
     output logic [ 16:0] OUT_l2_addr,
     output logic [127:0] OUT_l2_wdata,
-    input  logic [127:0] IN_l2_rdata,   // valid 4 cycles after OUT_l2_addr+~we
+    input  logic [127:0] IN_l2_rdata,   // valid 7 cycles after OUT_l2_addr+~we
 
     // ===| CVO data stream (to CVO_top.IN_data) |=================================
     output logic [15:0] OUT_cvo_data,
@@ -94,8 +94,8 @@ module mem_CVO_stream_bridge (
   logic         rd_buf_valid;  // deser buffer holds valid data
   logic [ 15:0] elems_fed;  // elements delivered to CVO
 
-  // 5-cycle read latency tracking
-  logic [  4:0] rd_lat_pipe;  // shift register: [4]=oldest, [0]=newest
+  // 7-cycle read latency tracking
+  logic [  6:0] rd_lat_pipe;  // shift register: [6]=oldest, [0]=newest
 
   // ===| Write-side state |======================================================
   logic [  2:0] wr_elem_idx;  // accumulation index 0..7
@@ -147,7 +147,7 @@ module mem_CVO_stream_bridge (
       rd_elem_idx  <= '0;
       rd_deser_buf <= '0;
       rd_buf_valid <= 1'b0;
-      rd_lat_pipe  <= 5'b0;
+      rd_lat_pipe  <= 7'b0;
       elems_fed    <= '0;
       wr_elem_idx  <= '0;
       wr_ser_buf   <= '0;
@@ -172,7 +172,7 @@ module mem_CVO_stream_bridge (
             rd_word_cnt  <= '0;
             rd_elem_idx  <= '0;
             rd_buf_valid <= 1'b0;
-            rd_lat_pipe  <= 5'b0;
+            rd_lat_pipe  <= 7'b0;
             elems_fed    <= '0;
             wr_elem_idx  <= '0;
             wr_ser_buf   <= '0;
@@ -186,7 +186,7 @@ module mem_CVO_stream_bridge (
         // ===| READ: stream L2 → CVO; capture results in FIFO |================
         ST_READ: begin
           // Advance latency shift register
-          rd_lat_pipe <= {rd_lat_pipe[3:0], 1'b0};
+          rd_lat_pipe <= {rd_lat_pipe[5:0], 1'b0};
 
           // Issue next L2 read when deser buffer is empty (pre-fetch when 3 left)
           if (!rd_buf_valid && rd_word_cnt < 13'(total_words)) begin
@@ -194,8 +194,8 @@ module mem_CVO_stream_bridge (
             rd_word_cnt    <= rd_word_cnt + 13'd1;
           end
 
-          // Capture L2 data 5 cycles after read issued
-          if (rd_lat_pipe[4]) begin
+          // Capture L2 data 7 cycles after read issued
+          if (rd_lat_pipe[6]) begin
             rd_deser_buf <= IN_l2_rdata;
             rd_buf_valid <= 1'b1;
             rd_elem_idx  <= 3'd0;
