@@ -83,7 +83,7 @@ module mem_GLOBAL_cache (
 
   assign OUT_acp_is_busy = acp_is_busy;
 
-  localparam int URAM_LATENCY = 4;
+  localparam int URAM_LATENCY = 5;
 
   // ACP read pipeline: tracks mem_L2_cache_fmap READ_LATENCY.
   logic [URAM_LATENCY-1:0] acp_rd_valid_pipe;
