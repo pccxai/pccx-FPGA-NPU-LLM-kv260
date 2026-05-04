@@ -17,7 +17,7 @@ import bf16_math_pkg::*;
 //   EXP        :  7 cycles
 //   SQRT       :  3 cycles
 //   RECIP      :  8 cycles  (Newton-Raphson, 1 step)
-//   SCALE      :  4 cycles  (first input word = scalar, rest = data)
+//   SCALE      :  5 cycles  (first input word = scalar, rest = data)
 //   REDUCE_SUM :  variable  (ready-gated BF16 add pipeline, emits scalar)
 //   GELU       : 22 cycles  (MUL + NEG + EXP + ADD + RECIP + MUL chain)
 // Throughput   : 1 result/cycle for streaming ops; REDUCE_SUM emits 1 scalar
@@ -601,11 +601,15 @@ module CVO_sfu_unit (
     end
   end
 
-  // ===| SCALE Pipeline (4 stages) |=============================================
+  // ===| SCALE Pipeline (5 stages) |=============================================
   // First element received = scalar (or 1/scalar if FLAG_RECIP_SCALE).
 
   logic        scale_scalar_loaded;
   logic [15:0] scale_scalar;
+
+  logic        scale_s0_valid;
+  logic [15:0] scale_s0_data;
+  logic [15:0] scale_s0_scalar;
 
   logic        scale_s1_valid;
   logic        scale_s1_zero;
@@ -631,6 +635,9 @@ module CVO_sfu_unit (
     if (!rst_n || i_clear) begin
       scale_scalar_loaded <= 1'b0;
       scale_scalar        <= 16'd0;
+      scale_s0_valid      <= 1'b0;
+      scale_s0_data       <= 16'd0;
+      scale_s0_scalar     <= 16'd0;
       scale_s1_valid      <= 1'b0;
       scale_s1_zero       <= 1'b1;
       scale_s1_sign       <= 1'b0;
@@ -643,18 +650,22 @@ module CVO_sfu_unit (
         if (!scale_scalar_loaded) begin
           scale_scalar        <= scale_scalar_next_wire;
           scale_scalar_loaded <= 1'b1;
-          scale_s1_valid      <= 1'b0;
+          scale_s0_valid      <= 1'b0;
         end else begin
-          scale_s1_valid <= 1'b1;
-          scale_s1_zero  <= (IN_data[14:0] == 15'd0) || (scale_scalar[14:0] == 15'd0);
-          scale_s1_sign  <= IN_data[15] ^ scale_scalar[15];
-          scale_s1_esum  <= {1'b0, IN_data[14:7]} + {1'b0, scale_scalar[14:7]};
-          scale_s1_mp    <= {1'b1, IN_data[6:0]} * {1'b1, scale_scalar[6:0]};
+          scale_s0_valid  <= 1'b1;
+          scale_s0_data   <= IN_data;
+          scale_s0_scalar <= scale_scalar;
         end
       end else begin
         if (IN_func != CVO_SCALE) scale_scalar_loaded <= 1'b0;
-        scale_s1_valid <= 1'b0;
+        scale_s0_valid <= 1'b0;
       end
+
+      scale_s1_valid <= scale_s0_valid;
+      scale_s1_zero  <= (scale_s0_data[14:0] == 15'd0) || (scale_s0_scalar[14:0] == 15'd0);
+      scale_s1_sign  <= scale_s0_data[15] ^ scale_s0_scalar[15];
+      scale_s1_esum  <= {1'b0, scale_s0_data[14:7]} + {1'b0, scale_s0_scalar[14:7]};
+      scale_s1_mp    <= {1'b1, scale_s0_data[6:0]} * {1'b1, scale_s0_scalar[6:0]};
 
       scale_s2_valid  <= scale_s1_valid;
       scale_s2_result <= scale_s1_zero ? 16'd0 : {scale_s1_sign, scale_s1_er_wire, scale_s1_mr_wire};
