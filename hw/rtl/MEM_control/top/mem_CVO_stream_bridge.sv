@@ -102,6 +102,9 @@ module mem_CVO_stream_bridge (
   logic [127:0] wr_ser_buf;  // serialisation buffer
   logic [ 12:0] wr_word_cnt;  // words written so far
   logic [ 15:0] elems_result;  // results drained from FIFO
+  logic         wr_word_valid;  // registered one-cycle L2 write command
+  logic [ 16:0] wr_word_addr;  // registered destination word address
+  logic [127:0] wr_word_data;  // registered 128-bit word written to L2
 
   // ===| Output FIFO (CVO results → write buffer) |==============================
   // XPM FIFO sync, depth=2048, width=16 bit (max 32 KB = 1 BRAM36)
@@ -150,9 +153,13 @@ module mem_CVO_stream_bridge (
       wr_ser_buf   <= '0;
       wr_word_cnt  <= '0;
       elems_result <= '0;
+      wr_word_valid <= 1'b0;
+      wr_word_addr  <= '0;
+      wr_word_data  <= '0;
       OUT_done     <= 1'b0;
     end else begin
-      OUT_done <= 1'b0;
+      OUT_done      <= 1'b0;
+      wr_word_valid <= 1'b0;
 
       case (state)
         // ===| IDLE: latch uop, convert element addresses to word addresses |===
@@ -171,6 +178,7 @@ module mem_CVO_stream_bridge (
             wr_ser_buf   <= '0;
             wr_word_cnt  <= '0;
             elems_result <= '0;
+            wr_word_valid <= 1'b0;
             state        <= ST_READ;
           end
         end
@@ -218,8 +226,11 @@ module mem_CVO_stream_bridge (
 
           // When 8 elements accumulated (or last partial word), write to L2
           if (wr_elem_idx == 3'd7 || elems_result == total_elems) begin
-            wr_word_cnt <= wr_word_cnt + 13'd1;
-            wr_elem_idx <= 3'd0;
+            wr_word_valid <= 1'b1;
+            wr_word_addr  <= 17'(wr_base + wr_word_cnt);
+            wr_word_data  <= {fifo_dout, wr_ser_buf[127:16]};
+            wr_word_cnt   <= wr_word_cnt + 13'd1;
+            wr_elem_idx   <= 3'd0;
           end
 
           if (elems_result == total_elems && fifo_empty) begin
@@ -248,11 +259,12 @@ module mem_CVO_stream_bridge (
     OUT_l2_addr  = '0;
     OUT_l2_wdata = '0;
 
-    if (state == ST_WRITE && wr_elem_idx == 3'd0 && wr_word_cnt > 0) begin
-      // Write accumulated 128-bit word to dst
+    if (wr_word_valid) begin
+      // Write registered 128-bit result word to dst.  Keeping write data
+      // registered avoids a count-controlled 128-bit mux on the URAM DIN path.
       OUT_l2_we    = 1'b1;
-      OUT_l2_addr  = 17'(wr_base + (wr_word_cnt - 13'd1));
-      OUT_l2_wdata = wr_ser_buf;
+      OUT_l2_addr  = wr_word_addr;
+      OUT_l2_wdata = wr_word_data;
     end else if (state == ST_READ && rd_lat_pipe[0]) begin
       // Issue read for next 128-bit word from src
       OUT_l2_we   = 1'b0;
