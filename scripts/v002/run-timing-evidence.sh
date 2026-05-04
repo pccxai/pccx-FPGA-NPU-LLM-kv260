@@ -187,7 +187,17 @@ field_from_status_file() {
     awk -F= -v key="$field" '$1 == key {print substr($0, length(key) + 2); found=1; exit} END {if (!found) print "unavailable"}' "$report"
 }
 
-VIVADO_VERSION="$(vivado -version 2>/dev/null | head -n 1 || printf MISSING)"
+vivado_version() {
+    local vivado_bin
+    vivado_bin="$(command -v vivado 2>/dev/null || true)"
+    if [[ -z "$vivado_bin" ]]; then
+        printf 'MISSING'
+        return
+    fi
+    "$vivado_bin" -version 2>/dev/null | awk 'NR == 1 {print; found=1} END {if (!found) exit 1}' || printf 'MISSING'
+}
+
+VIVADO_VERSION="$(vivado_version)"
 BITSTREAM_STATUS="$(field_from_status_file "$BITSTREAM_STATUS_FILE" 'bitstream_status')"
 IMPLEMENTATION_SCOPE="$(field_from_status_file "$BITSTREAM_STATUS_FILE" 'implementation_scope')"
 if [[ "$IMPLEMENTATION_SCOPE" == "unavailable" ]]; then
