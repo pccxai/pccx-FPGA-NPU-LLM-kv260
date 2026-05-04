@@ -7,6 +7,8 @@
 #   ./build.sh synth     # create_project + synth (OOC)
 #   ./build.sh impl      # routed OOC implementation + post-impl reports
 #   ./build.sh bitstream # explicit bitstream step; blocked for OOC module flow
+#   ./build.sh top-status # full top-level / BD prerequisite status
+#   ./build.sh top-bitstream # full top-level bitstream gate; blocked until BD exists
 #   ./build.sh clean     # wipe build/ + generated .jou/.log
 #
 # Target: Vivado 2023.2+ on Linux. Will attempt Vivado 2025.2 if available.
@@ -68,13 +70,29 @@ case "${1:-synth}" in
             -source vivado/impl.tcl \
             -tclargs bitstream
         ;;
+    top-status)
+        mkdir -p "$BUILD_DIR"
+        "$VIVADO_BIN" -mode batch \
+            -log    "$BUILD_DIR/vivado_top_status.log" \
+            -journal "$BUILD_DIR/vivado_top_status.jou" \
+            -source vivado/top_level_status.tcl \
+            -tclargs status
+        ;;
+    top-bitstream)
+        mkdir -p "$BUILD_DIR"
+        "$VIVADO_BIN" -mode batch \
+            -log    "$BUILD_DIR/vivado_top_bitstream.log" \
+            -journal "$BUILD_DIR/vivado_top_bitstream.jou" \
+            -source vivado/top_level_status.tcl \
+            -tclargs bitstream
+        ;;
     clean)
         rm -rf "$BUILD_DIR"
         rm -f  "$HW_DIR/vivado.jou" "$HW_DIR/vivado.log"
         ;;
     *)
         echo "unknown command: $1" >&2
-        echo "usage: $0 {project|synth|impl|bitstream|clean}" >&2
+        echo "usage: $0 {project|synth|impl|bitstream|top-status|top-bitstream|clean}" >&2
         exit 1
         ;;
 esac

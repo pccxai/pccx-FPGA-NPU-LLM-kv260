@@ -149,6 +149,8 @@ TIMING_REPORT="$REPORT_DIR/timing_summary_post_synth.rpt"
 UTIL_REPORT="$REPORT_DIR/utilization_post_synth.rpt"
 IMPL_TIMING_REPORT="$REPORT_DIR/timing_summary_post_impl.rpt"
 IMPL_UTIL_REPORT="$REPORT_DIR/utilization_post_impl.rpt"
+BITSTREAM_STATUS_FILE="$REPORT_DIR/bitstream_status.txt"
+TOP_LEVEL_STATUS_FILE="$REPORT_DIR/top_level_bitstream_status.txt"
 TIMING_STATUS="$(status_from_report "$TIMING_REPORT")"
 IMPL_TIMING_STATUS="$(status_from_report "$IMPL_TIMING_REPORT")"
 if [[ "$SYNTH_STATUS" == "failed" && ! -f "$TIMING_REPORT" ]]; then
@@ -172,8 +174,30 @@ capture_report_tail "$TIMING_REPORT" timing_summary_post_synth
 capture_report_tail "$UTIL_REPORT" utilization_post_synth
 capture_report_tail "$IMPL_TIMING_REPORT" timing_summary_post_impl
 capture_report_tail "$IMPL_UTIL_REPORT" utilization_post_impl
+capture_report_tail "$BITSTREAM_STATUS_FILE" bitstream_status
+capture_report_tail "$TOP_LEVEL_STATUS_FILE" top_level_bitstream_status
+
+field_from_status_file() {
+    local report="$1"
+    local field="$2"
+    if [[ ! -f "$report" ]]; then
+        printf 'unavailable'
+        return
+    fi
+    awk -F= -v key="$field" '$1 == key {print substr($0, length(key) + 2); found=1; exit} END {if (!found) print "unavailable"}' "$report"
+}
 
 VIVADO_VERSION="$(vivado -version 2>/dev/null | head -n 1 || printf MISSING)"
+BITSTREAM_STATUS="$(field_from_status_file "$BITSTREAM_STATUS_FILE" 'bitstream_status')"
+IMPLEMENTATION_SCOPE="$(field_from_status_file "$BITSTREAM_STATUS_FILE" 'implementation_scope')"
+if [[ "$IMPLEMENTATION_SCOPE" == "unavailable" ]]; then
+    case "$BITSTREAM_STATUS" in
+        BITSTREAM_NOT_REQUESTED|BITSTREAM_BLOCKED_OOC)
+            IMPLEMENTATION_SCOPE="OOC_ROUTE_ONLY"
+            ;;
+    esac
+fi
+FULL_TOP_LEVEL_FLOW="$(field_from_status_file "$TOP_LEVEL_STATUS_FILE" 'full_top_level_flow')"
 
 {
     printf 'run_id=%s\n' "$RUN_ID"
@@ -200,6 +224,11 @@ VIVADO_VERSION="$(vivado -version 2>/dev/null | head -n 1 || printf MISSING)"
     printf 'impl_timing_ths_ns=%s\n' "$(metric_from_report "$IMPL_TIMING_REPORT" 'THS(ns)')"
     printf 'utilization_report=%s\n' "$UTIL_REPORT"
     printf 'impl_utilization_report=%s\n' "$IMPL_UTIL_REPORT"
+    printf 'bitstream_status_file=%s\n' "$BITSTREAM_STATUS_FILE"
+    printf 'bitstream_status=%s\n' "$BITSTREAM_STATUS"
+    printf 'implementation_scope=%s\n' "$IMPLEMENTATION_SCOPE"
+    printf 'full_top_level_status_file=%s\n' "$TOP_LEVEL_STATUS_FILE"
+    printf 'full_top_level_flow=%s\n' "$FULL_TOP_LEVEL_FLOW"
     printf 'vivado=%s\n' "$(command -v vivado 2>/dev/null || printf MISSING)"
     printf 'vivado_version=%s\n' "$VIVADO_VERSION"
     printf 'xvlog=%s\n' "$(command -v xvlog 2>/dev/null || printf MISSING)"

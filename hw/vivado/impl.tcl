@@ -62,9 +62,11 @@ if {[get_property PROGRESS [get_runs synth_1]] ne "100%"} {
 if {$IMPL_MODE eq "bitstream"} {
     set status_file [file normalize $REPORTS/bitstream_status.txt]
     set fp [open $status_file w]
+    puts $fp "implementation_scope=OOC_ROUTE_ONLY"
     puts $fp "bitstream_status=BITSTREAM_BLOCKED_OOC"
     puts $fp "reason=Vivado DRC HDOOC-3: bitstream generation is not allowed for out-of-context module implementations."
-    puts $fp "required_next_step=add a full KV260 top-level or block-design wrapper flow, then run write_bitstream there."
+    puts $fp "full_top_level_flow=NOT_STARTED"
+    puts $fp "required_next_step=run ./vivado/build.sh top-status, then add a full KV260 top-level or block-design wrapper flow before write_bitstream."
     puts $fp "project=$PROJ_DIR/pccx_v002_kv260.xpr"
     close $fp
     puts "\[pccx\] bitstream blocked for OOC module flow. See $status_file"
@@ -117,9 +119,11 @@ if {[file exists $bit_file]} {
 } else {
     set status_file [file normalize $REPORTS/bitstream_status.txt]
     set fp [open $status_file w]
+    puts $fp "implementation_scope=OOC_ROUTE_ONLY"
     puts $fp "bitstream_status=BITSTREAM_NOT_REQUESTED"
     puts $fp "reason=impl mode stops at route_design for OOC timing evidence."
-    puts $fp "required_next_step=run ./vivado/build.sh bitstream after a full top-level/BD bitstream flow exists."
+    puts $fp "full_top_level_flow=NOT_STARTED"
+    puts $fp "required_next_step=run ./vivado/build.sh top-status, then add a full top-level/BD bitstream flow before write_bitstream."
     close $fp
     puts "\[pccx\] bitstream not requested in route mode. See $status_file"
 }
