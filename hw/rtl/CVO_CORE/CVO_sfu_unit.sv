@@ -19,7 +19,7 @@ import bf16_math_pkg::*;
 //   RECIP      :  8 cycles  (Newton-Raphson, 1 step)
 //   SCALE      :  4 cycles  (first input word = scalar, rest = data)
 //   REDUCE_SUM :  variable  (ready-gated BF16 add pipeline, emits scalar)
-//   GELU       : 21 cycles  (MUL + NEG + EXP + ADD + RECIP + MUL chain)
+//   GELU       : 22 cycles  (MUL + NEG + EXP + ADD + RECIP + MUL chain)
 // Throughput   : 1 result/cycle for streaming ops; REDUCE_SUM emits 1 scalar
 //                per IN_length elements.
 // Handshake    : OUT_data_ready is 1'b1 for streaming ops; REDUCE_SUM applies
@@ -844,14 +844,14 @@ module CVO_sfu_unit (
     end
   end
 
-  // ===| GELU Pipeline (21 stages) |=============================================
+  // ===| GELU Pipeline (22 stages) |=============================================
   // GELU(x) ≈ x * sigmoid(1.702*x),  sigmoid(y) = 1/(1+exp(-y))
   // Chain: MUL(1.702)[1] -> NEG[0] -> EXP convert[3] -> EXP lut[2] ->
-  // ADD(1)[1] -> RECIP seed/Newton[5] -> MUL(x)[1]. The BF16-to-fixed
-  // conversion and Newton correction are split to keep 400 MHz boundaries real.
-  // x is preserved in a 18-cycle delay chain.
+  // ADD(1)[2] -> RECIP seed/Newton[5] -> MUL(x)[1]. The BF16-to-fixed
+  // conversion, denominator add, and Newton correction are split to keep
+  // 400 MHz boundaries real. x is preserved in a 19-cycle delay chain.
 
-  localparam int GeluDelay = 18;
+  localparam int GeluDelay = 19;
 
   logic [15:0] gelu_x_pipe   [GeluDelay];
 
@@ -983,16 +983,72 @@ module CVO_sfu_unit (
     end
   end
 
-  // Stage g6: 1 + exp(-y)
+  // Stages g6a-g6b: 1 + exp(-y)
+  logic        gelu_g6a_valid;
+  logic        gelu_g6a_bypass;
+  logic [15:0] gelu_g6a_bypass_value;
+  logic [ 7:0] gelu_g6a_elarge;
+  logic [ 8:0] gelu_g6a_ma;
+  logic [ 8:0] gelu_g6a_mb;
+
   logic        gelu_g6_valid;
   logic [15:0] gelu_g6_denom;
 
+  logic [ 9:0] gelu_g6_sum_wire;
+  logic [15:0] gelu_g6_pack_wire;
+
+  assign gelu_g6_sum_wire = {1'b0, gelu_g6a_ma} + {1'b0, gelu_g6a_mb};
+
+  always_comb begin : comb_gelu_denom_pack
+    gelu_g6_pack_wire = 16'd0;
+    if (gelu_g6a_bypass) begin
+      gelu_g6_pack_wire = gelu_g6a_bypass_value;
+    end else if (gelu_g6_sum_wire == 10'd0) begin
+      gelu_g6_pack_wire = 16'd0;
+    end else if (gelu_g6_sum_wire[9]) begin
+      gelu_g6_pack_wire = {1'b0, 8'(gelu_g6a_elarge + 8'd1), gelu_g6_sum_wire[9:3]};
+    end else if (gelu_g6_sum_wire[8]) begin
+      gelu_g6_pack_wire = {1'b0, gelu_g6a_elarge, gelu_g6_sum_wire[8:2]};
+    end else begin
+      gelu_g6_pack_wire = {1'b0, 8'(gelu_g6a_elarge - 8'd1), gelu_g6_sum_wire[7:1]};
+    end
+  end
+
   always_ff @(posedge clk) begin
     if (!rst_n || i_clear) begin
-      gelu_g6_valid <= 1'b0;
+      gelu_g6a_valid        <= 1'b0;
+      gelu_g6a_bypass       <= 1'b0;
+      gelu_g6a_bypass_value <= 16'd0;
+      gelu_g6a_elarge       <= 8'd0;
+      gelu_g6a_ma           <= 9'd0;
+      gelu_g6a_mb           <= 9'd0;
+      gelu_g6_valid         <= 1'b0;
+      gelu_g6_denom         <= 16'd0;
     end else begin
-      gelu_g6_valid <= gelu_e2_valid;
-      gelu_g6_denom <= bf16_add(Bf16One, gelu_e2_expval);
+      gelu_g6a_valid <= gelu_e2_valid;
+      if (gelu_e2_expval[14:0] == 15'd0) begin
+        gelu_g6a_bypass       <= 1'b1;
+        gelu_g6a_bypass_value <= Bf16One;
+        gelu_g6a_elarge       <= 8'd0;
+        gelu_g6a_ma           <= 9'd0;
+        gelu_g6a_mb           <= 9'd0;
+      end else if (8'd127 >= gelu_e2_expval[14:7]) begin
+        gelu_g6a_bypass       <= 1'b0;
+        gelu_g6a_bypass_value <= 16'd0;
+        gelu_g6a_elarge       <= 8'd127;
+        gelu_g6a_ma           <= {1'b0, 1'b1, Bf16One[6:0]};
+        gelu_g6a_mb           <= 9'({1'b0, 1'b1, gelu_e2_expval[6:0]} >>
+                                     (8'd127 - gelu_e2_expval[14:7]));
+      end else begin
+        gelu_g6a_bypass       <= 1'b0;
+        gelu_g6a_bypass_value <= 16'd0;
+        gelu_g6a_elarge       <= gelu_e2_expval[14:7];
+        gelu_g6a_ma           <= 9'({1'b0, 1'b1, Bf16One[6:0]} >>
+                                     (gelu_e2_expval[14:7] - 8'd127));
+        gelu_g6a_mb           <= {1'b0, 1'b1, gelu_e2_expval[6:0]};
+      end
+      gelu_g6_valid <= gelu_g6a_valid;
+      gelu_g6_denom <= gelu_g6_pack_wire;
     end
   end
 
