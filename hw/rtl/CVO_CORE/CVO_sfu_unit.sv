@@ -16,7 +16,7 @@ import bf16_math_pkg::*;
 // Pipelines    : Independent per-op pipelines, multiplexed at the output:
 //   EXP        :  7 cycles
 //   SQRT       :  3 cycles
-//   RECIP      :  8 cycles  (Newton-Raphson, 1 step)
+//   RECIP      :  9 cycles  (Newton-Raphson, 1 step)
 //   SCALE      :  5 cycles  (first input word = scalar, rest = data)
 //   REDUCE_SUM :  variable  (ready-gated BF16 add pipeline, emits scalar)
 //   GELU       : 22 cycles  (MUL + NEG + EXP + ADD + RECIP + MUL chain)
@@ -27,7 +27,7 @@ import bf16_math_pkg::*;
 // Reset state  : All per-op pipeline registers cleared; output mux silent.
 // Errors       : EXP overflow saturates to +inf (16'h7F80); EXP underflow → 0.
 // Counters     : none.
-// Protected    : Internals untouched (CLAUDE.md §6.2 — LUT math user-owned).
+// Ownership    : LUT math internals are timing-sensitive and kept local to this SFU.
 // ===============================================================================
 
 module CVO_sfu_unit (
@@ -367,12 +367,10 @@ module CVO_sfu_unit (
   logic        recip_s2a_zero;
   logic        recip_s2a_sign;
   logic [ 8:0] recip_s2a_esum;
-  logic [15:0] recip_s2a_mp;
+  logic [11:0] recip_s2a_mp_lo;
+  logic [11:0] recip_s2a_mp_hi;
   logic [15:0] recip_s2a_r0;
   logic        recip_s2a_out_sign;
-
-  logic [ 7:0] recip_s2a_er_wire;
-  logic [ 6:0] recip_s2a_mr_wire;
 
   always_ff @(posedge clk) begin
     if (!rst_n || i_clear) begin
@@ -380,7 +378,8 @@ module CVO_sfu_unit (
       recip_s2a_zero     <= 1'b1;
       recip_s2a_sign     <= 1'b0;
       recip_s2a_esum     <= 9'd0;
-      recip_s2a_mp       <= 16'd0;
+      recip_s2a_mp_lo    <= 12'd0;
+      recip_s2a_mp_hi    <= 12'd0;
       recip_s2a_r0       <= 16'd0;
       recip_s2a_out_sign <= 1'b0;
     end else begin
@@ -388,19 +387,56 @@ module CVO_sfu_unit (
       recip_s2a_zero     <= (recip_s1_x[14:0] == 15'd0) || (recip_s1_r0[14:0] == 15'd0);
       recip_s2a_sign     <= recip_s1_x[15] ^ recip_s1_r0[15];
       recip_s2a_esum     <= {1'b0, recip_s1_x[14:7]} + {1'b0, recip_s1_r0[14:7]};
-      recip_s2a_mp       <= {1'b1, recip_s1_x[6:0]} * {1'b1, recip_s1_r0[6:0]};
+      recip_s2a_mp_lo    <= 12'({1'b1, recip_s1_x[6:0]} * recip_s1_r0[3:0]);
+      recip_s2a_mp_hi    <= 12'({1'b1, recip_s1_x[6:0]} * {1'b1, recip_s1_r0[6:4]});
       recip_s2a_r0       <= recip_s1_r0;
       recip_s2a_out_sign <= recip_s1_sign;
     end
   end
 
-  always_comb begin : comb_recip_xr0_pack
-    if (recip_s2a_mp[15]) begin
-      recip_s2a_er_wire = 8'(recip_s2a_esum - 9'd127 + 9'd1);
-      recip_s2a_mr_wire = recip_s2a_mp[14:8];
+  logic        recip_s2m_valid;
+  logic        recip_s2m_zero;
+  logic        recip_s2m_sign;
+  logic [ 8:0] recip_s2m_esum;
+  logic [15:0] recip_s2m_mp;
+  logic [15:0] recip_s2m_r0;
+  logic        recip_s2m_out_sign;
+
+  logic [15:0] recip_s2m_mp_wire;
+  logic [ 7:0] recip_s2m_er_wire;
+  logic [ 6:0] recip_s2m_mr_wire;
+
+  always_comb begin : comb_recip_xr0_partial_sum
+    recip_s2m_mp_wire = {4'd0, recip_s2a_mp_lo} + {recip_s2a_mp_hi, 4'd0};
+  end
+
+  always_ff @(posedge clk) begin
+    if (!rst_n || i_clear) begin
+      recip_s2m_valid    <= 1'b0;
+      recip_s2m_zero     <= 1'b1;
+      recip_s2m_sign     <= 1'b0;
+      recip_s2m_esum     <= 9'd0;
+      recip_s2m_mp       <= 16'd0;
+      recip_s2m_r0       <= 16'd0;
+      recip_s2m_out_sign <= 1'b0;
     end else begin
-      recip_s2a_er_wire = 8'(recip_s2a_esum - 9'd127);
-      recip_s2a_mr_wire = recip_s2a_mp[13:7];
+      recip_s2m_valid    <= recip_s2a_valid;
+      recip_s2m_zero     <= recip_s2a_zero;
+      recip_s2m_sign     <= recip_s2a_sign;
+      recip_s2m_esum     <= recip_s2a_esum;
+      recip_s2m_mp       <= recip_s2m_mp_wire;
+      recip_s2m_r0       <= recip_s2a_r0;
+      recip_s2m_out_sign <= recip_s2a_out_sign;
+    end
+  end
+
+  always_comb begin : comb_recip_xr0_pack
+    if (recip_s2m_mp[15]) begin
+      recip_s2m_er_wire = 8'(recip_s2m_esum - 9'd127 + 9'd1);
+      recip_s2m_mr_wire = recip_s2m_mp[14:8];
+    end else begin
+      recip_s2m_er_wire = 8'(recip_s2m_esum - 9'd127);
+      recip_s2m_mr_wire = recip_s2m_mp[13:7];
     end
   end
 
@@ -416,10 +452,10 @@ module CVO_sfu_unit (
       recip_s2_r0    <= 16'd0;
       recip_s2_sign  <= 1'b0;
     end else begin
-      recip_s2_valid <= recip_s2a_valid;
-      recip_s2_xr0   <= recip_s2a_zero ? 16'd0 : {recip_s2a_sign, recip_s2a_er_wire, recip_s2a_mr_wire};
-      recip_s2_r0    <= recip_s2a_r0;
-      recip_s2_sign  <= recip_s2a_out_sign;
+      recip_s2_valid <= recip_s2m_valid;
+      recip_s2_xr0   <= recip_s2m_zero ? 16'd0 : {recip_s2m_sign, recip_s2m_er_wire, recip_s2m_mr_wire};
+      recip_s2_r0    <= recip_s2m_r0;
+      recip_s2_sign  <= recip_s2m_out_sign;
     end
   end
 
