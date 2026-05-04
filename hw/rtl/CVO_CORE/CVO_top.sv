@@ -30,7 +30,7 @@ import bf16_math_pkg::*;
 //                surfaces it via OUT_accm.
 // FSM states   : IDLE → RUNNING → DONE → IDLE.
 // Latency      : Sub-unit latency (see CVO_sfu_unit / CVO_cordic_unit
-//                contracts) + 1 output register cycle.
+//                contracts) + CVO input/output pipeline registers.
 // Throughput   : 1 result per cycle in steady state for non-CORDIC ops.
 // Backpressure : OUT_data_ready ANDs sub-unit ready with (state == RUNNING).
 // Reset state  : ST_IDLE, OUT_result = 0, OUT_result_valid = 0, OUT_done = 0.
@@ -125,23 +125,32 @@ module CVO_top (
   // stages because a full BF16 align/add/normalize chain does not meet the
   // 400 MHz core target as one combinational block.
 
-  function automatic logic [15:0] pack_bf16_mag(input logic        out_sign,
-                                                input logic [7:0]  emax,
-                                                input logic [23:0] mag);
-    int          lead;
+  function automatic logic [4:0] lead_index24(input logic [23:0] mag);
+    int lead;
+
+    lead = 23;
+    while (lead > 0 && mag[lead] == 1'b0) lead = lead - 1;
+
+    return 5'(lead);
+  endfunction
+
+  function automatic logic [15:0] pack_bf16_mag_with_lead(input logic        out_sign,
+                                                          input logic [7:0]  emax,
+                                                          input logic [23:0] mag,
+                                                          input logic [4:0]  lead);
+    int          lead_i;
     logic [7:0]  out_exp;
     logic [6:0]  out_mant;
 
     if (mag == 24'd0) return 16'd0;
 
-    lead = 23;
-    while (lead > 0 && mag[lead] == 1'b0) lead = lead - 1;
+    lead_i = int'(lead);
 
-    out_exp = emax + 8'(lead - 15);
-    if (lead >= 7)
-      out_mant = mag[lead-1-:7];
+    out_exp = emax + 8'(lead_i - 15);
+    if (lead_i >= 7)
+      out_mant = mag[lead_i-1-:7];
     else
-      out_mant = 7'(mag << (7 - lead));
+      out_mant = 7'(mag << (7 - lead_i));
 
     return {out_sign, out_exp, out_mant};
   endfunction
@@ -374,6 +383,51 @@ module CVO_top (
     end
   end
 
+  logic [4:0] sub_s4_lead_wire;
+
+  always_comb begin : comb_sub_emax_pack_prepare
+    sub_s4_lead_wire = lead_index24(sub_s3_mag);
+  end
+
+  logic        sub_s4_valid;
+  logic        sub_s4_do_sub;
+  logic [15:0] sub_s4_passthrough;
+  logic [7:0]  sub_s4_emax;
+  logic        sub_s4_sign;
+  logic [23:0] sub_s4_mag;
+  logic [4:0]  sub_s4_lead;
+  cvo_func_e   sub_s4_func;
+  cvo_flags_t  sub_s4_flags;
+  logic [15:0] sub_s4_length;
+
+  always_ff @(posedge clk) begin
+    if (!rst_n || i_clear) begin
+      sub_s4_valid       <= 1'b0;
+      sub_s4_do_sub      <= 1'b0;
+      sub_s4_passthrough <= 16'd0;
+      sub_s4_emax        <= 8'd0;
+      sub_s4_sign        <= 1'b0;
+      sub_s4_mag         <= 24'd0;
+      sub_s4_lead        <= 5'd0;
+      sub_s4_func        <= CVO_EXP;
+      sub_s4_flags       <= '0;
+      sub_s4_length      <= 16'd0;
+    end else begin
+      sub_s4_valid <= sub_s3_valid;
+      if (sub_s3_valid) begin
+        sub_s4_do_sub      <= sub_s3_do_sub;
+        sub_s4_passthrough <= sub_s3_passthrough;
+        sub_s4_emax        <= sub_s3_emax;
+        sub_s4_sign        <= sub_s3_sign;
+        sub_s4_mag         <= sub_s3_mag;
+        sub_s4_lead        <= sub_s4_lead_wire;
+        sub_s4_func        <= sub_s3_func;
+        sub_s4_flags       <= sub_s3_flags;
+        sub_s4_length      <= sub_s3_length;
+      end
+    end
+  end
+
 	  // ===| Input to sub-units (after optional e_max subtraction) |=================
 	  logic        data_valid_to_unit_wire;
 	  logic [15:0] unit_data;
@@ -394,13 +448,14 @@ module CVO_top (
       unit_flags  <= '0;
       unit_length <= 16'd0;
     end else begin
-      unit_valid <= sub_s3_valid;
-      if (sub_s3_valid) begin
-        unit_data   <= sub_s3_do_sub ? pack_bf16_mag(sub_s3_sign, sub_s3_emax, sub_s3_mag) :
-                                       sub_s3_passthrough;
-        unit_func   <= sub_s3_func;
-        unit_flags  <= sub_s3_flags;
-        unit_length <= sub_s3_length;
+      unit_valid <= sub_s4_valid;
+      if (sub_s4_valid) begin
+        unit_data   <= sub_s4_do_sub ? pack_bf16_mag_with_lead(sub_s4_sign, sub_s4_emax,
+                                                               sub_s4_mag, sub_s4_lead) :
+                                       sub_s4_passthrough;
+        unit_func   <= sub_s4_func;
+        unit_flags  <= sub_s4_flags;
+        unit_length <= sub_s4_length;
       end
     end
   end
