@@ -12,18 +12,20 @@ REPORT_DIR="$HW_DIR/build/reports"
 
 DRY_RUN=0
 RUN_SYNTH=0
+REQUIRE_IMPL_CLEAN=0
 RUN_ID="${PCCX_RUN_ID:-}"
 ORIGINAL_ARGS=("$@")
 
 usage() {
     cat <<'USAGE'
-usage: scripts/v002/run-timing-evidence.sh [--dry-run] [--run-synth] [--run-id <id>]
+usage: scripts/v002/run-timing-evidence.sh [--dry-run] [--run-synth] [--require-impl-clean] [--run-id <id>]
 
 Options:
-  --dry-run       collect environment/report status only
-  --run-synth     run hw/vivado/build.sh synth before collecting status
-  --run-id <id>   use a deterministic evidence directory suffix
-  -h, --help      print this help
+  --dry-run             collect environment/report status only
+  --run-synth           run hw/vivado/build.sh synth before collecting status
+  --require-impl-clean  exit nonzero unless post-impl timing is present and clean
+  --run-id <id>         use a deterministic evidence directory suffix
+  -h, --help            print this help
 USAGE
 }
 
@@ -35,6 +37,10 @@ while (($#)); do
             ;;
         --run-synth)
             RUN_SYNTH=1
+            shift
+            ;;
+        --require-impl-clean)
+            REQUIRE_IMPL_CLEAN=1
             shift
             ;;
         --run-id)
@@ -148,6 +154,19 @@ IMPL_TIMING_STATUS="$(status_from_report "$IMPL_TIMING_REPORT")"
 if [[ "$SYNTH_STATUS" == "failed" && ! -f "$TIMING_REPORT" ]]; then
     TIMING_STATUS="TIMING_ATTEMPTED_NO_REPORT"
 fi
+if [[ -f "$IMPL_TIMING_REPORT" ]]; then
+    if [[ "$IMPL_TIMING_STATUS" == "TIMING_REPORT_PRESENT_CLOSED" ]]; then
+        OVERALL_TIMING_STATUS="POST_IMPL_TIMING_CLOSED"
+    else
+        OVERALL_TIMING_STATUS="POST_IMPL_TIMING_NOT_CLOSED"
+    fi
+elif [[ "$TIMING_STATUS" == "TIMING_REPORT_PRESENT_CLOSED" ]]; then
+    OVERALL_TIMING_STATUS="POST_SYNTH_TIMING_CLOSED_IMPL_NOT_RUN"
+elif [[ "$TIMING_STATUS" == "TIMING_NOT_RUN" ]]; then
+    OVERALL_TIMING_STATUS="TIMING_NOT_RUN"
+else
+    OVERALL_TIMING_STATUS="POST_SYNTH_TIMING_NOT_CLOSED"
+fi
 
 capture_report_tail "$TIMING_REPORT" timing_summary_post_synth
 capture_report_tail "$UTIL_REPORT" utilization_post_synth
@@ -162,9 +181,11 @@ VIVADO_VERSION="$(vivado -version 2>/dev/null | head -n 1 || printf MISSING)"
     printf 'git_commit=%s\n' "$COMMIT_FULL"
     printf 'dry_run=%s\n' "$DRY_RUN"
     printf 'run_synth=%s\n' "$RUN_SYNTH"
+    printf 'require_impl_clean=%s\n' "$REQUIRE_IMPL_CLEAN"
     printf 'command_line=%q ' "$0" "${ORIGINAL_ARGS[@]}"
     printf '\n'
     printf 'synth_status=%s\n' "$SYNTH_STATUS"
+    printf 'overall_timing_status=%s\n' "$OVERALL_TIMING_STATUS"
     printf 'timing_status=%s\n' "$TIMING_STATUS"
     printf 'timing_report=%s\n' "$TIMING_REPORT"
     printf 'timing_wns_ns=%s\n' "$(metric_from_report "$TIMING_REPORT" 'WNS(ns)')"
@@ -188,13 +209,26 @@ VIVADO_VERSION="$(vivado -version 2>/dev/null | head -n 1 || printf MISSING)"
 } >"$SUMMARY"
 
 printf 'summary=%s\n' "$SUMMARY"
+printf 'overall_timing_status=%s\n' "$OVERALL_TIMING_STATUS"
 printf 'timing_status=%s\n' "$TIMING_STATUS"
+printf 'impl_timing_status=%s\n' "$IMPL_TIMING_STATUS"
 
-case "$TIMING_STATUS" in
-    TIMING_REPORT_PRESENT_CLOSED)
-        exit 0
-        ;;
-    *)
-        exit 2
-        ;;
-esac
+if (( REQUIRE_IMPL_CLEAN )); then
+    case "$IMPL_TIMING_STATUS" in
+        TIMING_REPORT_PRESENT_CLOSED)
+            exit 0
+            ;;
+        *)
+            exit 2
+            ;;
+    esac
+else
+    case "$TIMING_STATUS" in
+        TIMING_REPORT_PRESENT_CLOSED)
+            exit 0
+            ;;
+        *)
+            exit 2
+            ;;
+    esac
+fi
