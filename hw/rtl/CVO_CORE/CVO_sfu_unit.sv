@@ -17,7 +17,7 @@ import bf16_math_pkg::*;
 //   EXP        :  7 cycles
 //   SQRT       :  3 cycles
 //   RECIP      :  9 cycles  (Newton-Raphson, 1 step)
-//   SCALE      :  5 cycles  (first input word = scalar, rest = data)
+//   SCALE      :  6 cycles  (first input word = scalar, rest = data)
 //   REDUCE_SUM :  variable  (ready-gated BF16 add pipeline, emits scalar)
 //   GELU       : 22 cycles  (MUL + NEG + EXP + ADD + RECIP + MUL chain)
 // Throughput   : 1 result/cycle for streaming ops; REDUCE_SUM emits 1 scalar
@@ -637,7 +637,7 @@ module CVO_sfu_unit (
     end
   end
 
-  // ===| SCALE Pipeline (5 stages) |=============================================
+  // ===| SCALE Pipeline (6 stages) |=============================================
   // First element received = scalar (or 1/scalar if FLAG_RECIP_SCALE).
 
   logic        scale_scalar_loaded;
@@ -651,14 +651,21 @@ module CVO_sfu_unit (
   logic        scale_s1_zero;
   logic        scale_s1_sign;
   logic [ 8:0] scale_s1_esum;
-  logic [15:0] scale_s1_mp;
+  logic [ 7:0] scale_s1_ma;
+  logic [ 7:0] scale_s1_mb;
 
   logic        scale_s2_valid;
-  logic [15:0] scale_s2_result;
+  logic        scale_s2_zero;
+  logic        scale_s2_sign;
+  logic [ 8:0] scale_s2_esum;
+  logic [15:0] scale_s2_mp;
+
+  logic        scale_s3_valid;
+  logic [15:0] scale_s3_result;
 
   logic [15:0] scale_scalar_next_wire;
-  logic [ 7:0] scale_s1_er_wire;
-  logic [ 6:0] scale_s1_mr_wire;
+  logic [ 7:0] scale_s2_er_wire;
+  logic [ 6:0] scale_s2_mr_wire;
 
   always_comb begin
     // Approximate 1/scalar for recip_scale mode: flip exponent + invert mantissa
@@ -678,9 +685,15 @@ module CVO_sfu_unit (
       scale_s1_zero       <= 1'b1;
       scale_s1_sign       <= 1'b0;
       scale_s1_esum       <= 9'd0;
-      scale_s1_mp         <= 16'd0;
+      scale_s1_ma         <= 8'd0;
+      scale_s1_mb         <= 8'd0;
       scale_s2_valid      <= 1'b0;
-      scale_s2_result     <= 16'd0;
+      scale_s2_zero       <= 1'b1;
+      scale_s2_sign       <= 1'b0;
+      scale_s2_esum       <= 9'd0;
+      scale_s2_mp         <= 16'd0;
+      scale_s3_valid      <= 1'b0;
+      scale_s3_result     <= 16'd0;
     end else begin
       if (IN_valid && IN_func == CVO_SCALE) begin
         if (!scale_scalar_loaded) begin
@@ -701,20 +714,27 @@ module CVO_sfu_unit (
       scale_s1_zero  <= (scale_s0_data[14:0] == 15'd0) || (scale_s0_scalar[14:0] == 15'd0);
       scale_s1_sign  <= scale_s0_data[15] ^ scale_s0_scalar[15];
       scale_s1_esum  <= {1'b0, scale_s0_data[14:7]} + {1'b0, scale_s0_scalar[14:7]};
-      scale_s1_mp    <= {1'b1, scale_s0_data[6:0]} * {1'b1, scale_s0_scalar[6:0]};
+      scale_s1_ma    <= {1'b1, scale_s0_data[6:0]};
+      scale_s1_mb    <= {1'b1, scale_s0_scalar[6:0]};
 
-      scale_s2_valid  <= scale_s1_valid;
-      scale_s2_result <= scale_s1_zero ? 16'd0 : {scale_s1_sign, scale_s1_er_wire, scale_s1_mr_wire};
+      scale_s2_valid <= scale_s1_valid;
+      scale_s2_zero  <= scale_s1_zero;
+      scale_s2_sign  <= scale_s1_sign;
+      scale_s2_esum  <= scale_s1_esum;
+      scale_s2_mp    <= scale_s1_ma * scale_s1_mb;
+
+      scale_s3_valid  <= scale_s2_valid;
+      scale_s3_result <= scale_s2_zero ? 16'd0 : {scale_s2_sign, scale_s2_er_wire, scale_s2_mr_wire};
     end
   end
 
   always_comb begin : comb_scale_mul_pack
-    if (scale_s1_mp[15]) begin
-      scale_s1_er_wire = 8'(scale_s1_esum - 9'd127 + 9'd1);
-      scale_s1_mr_wire = scale_s1_mp[14:8];
+    if (scale_s2_mp[15]) begin
+      scale_s2_er_wire = 8'(scale_s2_esum - 9'd127 + 9'd1);
+      scale_s2_mr_wire = scale_s2_mp[14:8];
     end else begin
-      scale_s1_er_wire = 8'(scale_s1_esum - 9'd127);
-      scale_s1_mr_wire = scale_s1_mp[13:7];
+      scale_s2_er_wire = 8'(scale_s2_esum - 9'd127);
+      scale_s2_mr_wire = scale_s2_mp[13:7];
     end
   end
 
@@ -1413,8 +1433,8 @@ module CVO_sfu_unit (
         OUT_result_valid = recip_s5_valid;
       end
       CVO_SCALE: begin
-        OUT_result = scale_s2_result;
-        OUT_result_valid = scale_s2_valid;
+        OUT_result = scale_s3_result;
+        OUT_result_valid = scale_s3_valid;
       end
       CVO_REDUCE_SUM: begin
         OUT_result = rsum_out;
