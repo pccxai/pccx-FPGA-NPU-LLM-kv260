@@ -42,6 +42,11 @@ if {[catch {set_param general.maxThreads $IMPL_JOBS} msg]} {
 puts "\[pccx\] impl jobs/threads = $IMPL_JOBS"
 puts "\[pccx\] impl mode = $IMPL_MODE"
 
+set IMPL_STRATEGY ""
+if {[info exists ::env(PCCX_IMPL_STRATEGY)] && $::env(PCCX_IMPL_STRATEGY) ne ""} {
+    set IMPL_STRATEGY $::env(PCCX_IMPL_STRATEGY)
+}
+
 open_project $PROJ_DIR/pccx_v002_kv260.xpr
 
 # Confirm the synth run is clean before committing to impl.
@@ -71,6 +76,15 @@ if {$IMPL_MODE eq "bitstream"} {
 foreach r [get_runs -quiet impl_1] {
     reset_run $r
 }
+
+if {$IMPL_STRATEGY ne ""} {
+    if {[catch {set_property strategy $IMPL_STRATEGY [get_runs impl_1]} msg]} {
+        puts "\[pccx\] invalid PCCX_IMPL_STRATEGY=$IMPL_STRATEGY: $msg"
+        close_project
+        exit 2
+    }
+}
+puts "\[pccx\] impl strategy = [get_property strategy [get_runs impl_1]]"
 
 launch_runs impl_1 -to_step route_design -jobs $IMPL_JOBS
 wait_on_run impl_1
