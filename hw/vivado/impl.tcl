@@ -89,8 +89,12 @@ puts "\[pccx\] impl strategy = [get_property strategy [get_runs impl_1]]"
 launch_runs impl_1 -to_step route_design -jobs $IMPL_JOBS
 wait_on_run impl_1
 
-if {[get_property PROGRESS [get_runs impl_1]] ne "100%"} {
-    puts "\[pccx\] impl_1 did not finish (progress=[get_property PROGRESS [get_runs impl_1]])."
+set impl_progress [get_property PROGRESS [get_runs impl_1]]
+set impl_status   [get_property STATUS [get_runs impl_1]]
+puts "\[pccx\] impl progress = $impl_progress"
+puts "\[pccx\] impl status = $impl_status"
+if {$impl_progress ne "100%" && [string first "route_design Complete" $impl_status] < 0} {
+    puts "\[pccx\] impl_1 did not finish."
     exit 1
 }
 
