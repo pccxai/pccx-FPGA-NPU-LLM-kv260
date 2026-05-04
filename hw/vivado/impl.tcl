@@ -42,7 +42,7 @@ if {[catch {set_param general.maxThreads $IMPL_JOBS} msg]} {
 puts "\[pccx\] impl jobs/threads = $IMPL_JOBS"
 puts "\[pccx\] impl mode = $IMPL_MODE"
 
-set IMPL_STRATEGY ""
+set IMPL_STRATEGY "Vivado Implementation Defaults"
 if {[info exists ::env(PCCX_IMPL_STRATEGY)] && $::env(PCCX_IMPL_STRATEGY) ne ""} {
     set IMPL_STRATEGY $::env(PCCX_IMPL_STRATEGY)
 }
@@ -77,12 +77,10 @@ foreach r [get_runs -quiet impl_1] {
     reset_run $r
 }
 
-if {$IMPL_STRATEGY ne ""} {
-    if {[catch {set_property strategy $IMPL_STRATEGY [get_runs impl_1]} msg]} {
-        puts "\[pccx\] invalid PCCX_IMPL_STRATEGY=$IMPL_STRATEGY: $msg"
-        close_project
-        exit 2
-    }
+if {[catch {set_property strategy $IMPL_STRATEGY [get_runs impl_1]} msg]} {
+    puts "\[pccx\] invalid PCCX_IMPL_STRATEGY=$IMPL_STRATEGY: $msg"
+    close_project
+    exit 2
 }
 puts "\[pccx\] impl strategy = [get_property strategy [get_runs impl_1]]"
 
@@ -91,11 +89,15 @@ wait_on_run impl_1
 
 set impl_progress [get_property PROGRESS [get_runs impl_1]]
 set impl_status   [get_property STATUS [get_runs impl_1]]
+set routed_dcp    [file normalize $PROJ_DIR/pccx_v002_kv260.runs/impl_1/NPU_top_routed.dcp]
 puts "\[pccx\] impl progress = $impl_progress"
 puts "\[pccx\] impl status = $impl_status"
-if {$impl_progress ne "100%" && [string first "route_design Complete" $impl_status] < 0} {
+if {$impl_progress ne "100%" && [string first "route_design Complete" $impl_status] < 0 && ![file exists $routed_dcp]} {
     puts "\[pccx\] impl_1 did not finish."
     exit 1
+}
+if {[file exists $routed_dcp]} {
+    puts "\[pccx\] routed checkpoint = $routed_dcp"
 }
 
 open_run impl_1
