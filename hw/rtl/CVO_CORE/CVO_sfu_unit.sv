@@ -16,7 +16,7 @@ import bf16_math_pkg::*;
 // Pipelines    : Independent per-op pipelines, multiplexed at the output:
 //   EXP        :  7 cycles
 //   SQRT       :  3 cycles
-//   RECIP      :  9 cycles  (Newton-Raphson, 1 step)
+//   RECIP      : 10 cycles  (Newton-Raphson, 1 step)
 //   SCALE      :  6 cycles  (first input word = scalar, rest = data)
 //   REDUCE_SUM :  variable  (ready-gated BF16 add pipeline, emits scalar)
 //   GELU       : 22 cycles  (MUL + NEG + EXP + ADD + RECIP + MUL chain)
@@ -335,7 +335,7 @@ module CVO_sfu_unit (
     end
   end
 
-  // ===| RECIP Pipeline (8 stages) |=============================================
+  // ===| RECIP Pipeline (10 cycles) |============================================
   // 1/x via 1 Newton-Raphson step: r1 = r0 * (2 - x*r0)
   // Initial estimate: exp flipped around 254, mantissa roughly inverted.
 
@@ -589,11 +589,42 @@ module CVO_sfu_unit (
     end
   end
 
+  logic        recip_s4a_valid;
+  logic        recip_s4a_zero;
+  logic        recip_s4a_sign;
+  logic [ 8:0] recip_s4a_esum;
+  logic [11:0] recip_s4a_mp_lo;
+  logic [11:0] recip_s4a_mp_hi;
+
+  always_ff @(posedge clk) begin
+    if (!rst_n || i_clear) begin
+      recip_s4a_valid <= 1'b0;
+      recip_s4a_zero  <= 1'b1;
+      recip_s4a_sign  <= 1'b0;
+      recip_s4a_esum  <= 9'd0;
+      recip_s4a_mp_lo <= 12'd0;
+      recip_s4a_mp_hi <= 12'd0;
+    end else begin
+      recip_s4a_valid <= recip_s3_valid;
+      recip_s4a_zero  <= (recip_s3_r0[14:0] == 15'd0) || (recip_s3_corr[14:0] == 15'd0);
+      recip_s4a_sign  <= recip_s3_sign;
+      recip_s4a_esum  <= {1'b0, recip_s3_r0[14:7]} + {1'b0, recip_s3_corr[14:7]};
+      recip_s4a_mp_lo <= 12'({1'b1, recip_s3_r0[6:0]} * recip_s3_corr[3:0]);
+      recip_s4a_mp_hi <= 12'({1'b1, recip_s3_r0[6:0]} * {1'b1, recip_s3_corr[6:4]});
+    end
+  end
+
   logic        recip_s4_valid;
   logic        recip_s4_zero;
   logic        recip_s4_sign;
   logic [ 8:0] recip_s4_esum;
   logic [15:0] recip_s4_mp;
+
+  logic [15:0] recip_s4_mp_wire;
+
+  always_comb begin : comb_recip_final_partial_sum
+    recip_s4_mp_wire = {4'd0, recip_s4a_mp_lo} + {recip_s4a_mp_hi, 4'd0};
+  end
 
   always_ff @(posedge clk) begin
     if (!rst_n || i_clear) begin
@@ -603,11 +634,11 @@ module CVO_sfu_unit (
       recip_s4_esum  <= 9'd0;
       recip_s4_mp    <= 16'd0;
     end else begin
-      recip_s4_valid <= recip_s3_valid;
-      recip_s4_zero  <= (recip_s3_r0[14:0] == 15'd0) || (recip_s3_corr[14:0] == 15'd0);
-      recip_s4_sign  <= recip_s3_sign;
-      recip_s4_esum  <= {1'b0, recip_s3_r0[14:7]} + {1'b0, recip_s3_corr[14:7]};
-      recip_s4_mp    <= {1'b1, recip_s3_r0[6:0]} * {1'b1, recip_s3_corr[6:0]};
+      recip_s4_valid <= recip_s4a_valid;
+      recip_s4_zero  <= recip_s4a_zero;
+      recip_s4_sign  <= recip_s4a_sign;
+      recip_s4_esum  <= recip_s4a_esum;
+      recip_s4_mp    <= recip_s4_mp_wire;
     end
   end
 
