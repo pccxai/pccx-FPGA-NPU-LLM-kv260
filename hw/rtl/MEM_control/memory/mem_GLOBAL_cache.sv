@@ -89,8 +89,12 @@ module mem_GLOBAL_cache (
   logic        acp_write_en;
   logic        acp_is_busy;
   logic [16:0] acp_end_addr;
+  logic        acp_cmd_pending;
+  logic        acp_cmd_write_en;
+  logic [16:0] acp_cmd_base_addr;
+  logic [16:0] acp_cmd_end_addr;
 
-  assign OUT_acp_is_busy = acp_is_busy;
+  assign OUT_acp_is_busy = acp_is_busy | acp_cmd_pending;
 
   localparam int URAM_LATENCY = 7;
 
@@ -117,6 +121,10 @@ module mem_GLOBAL_cache (
       acp_end_addr <= '0;
       acp_is_busy  <= 1'b0;
       acp_write_en <= 1'b0;
+      acp_cmd_pending   <= 1'b0;
+      acp_cmd_write_en  <= 1'b0;
+      acp_cmd_base_addr <= '0;
+      acp_cmd_end_addr  <= '0;
     end else begin
       if (acp_is_busy) begin
         if (acp_write_en) begin
@@ -130,11 +138,17 @@ module mem_GLOBAL_cache (
             if (acp_ptr + 17'd1 >= acp_end_addr) acp_is_busy <= 1'b0;
           end
         end
+      end else if (acp_cmd_pending) begin
+        acp_ptr         <= acp_cmd_base_addr;
+        acp_end_addr    <= acp_cmd_end_addr;
+        acp_is_busy     <= 1'b1;
+        acp_write_en    <= acp_cmd_write_en;
+        acp_cmd_pending <= 1'b0;
       end else if (IN_acp_rx_start) begin
-        acp_ptr      <= IN_acp_base_addr;
-        acp_end_addr <= IN_acp_end_addr;
-        acp_is_busy  <= 1'b1;
-        acp_write_en <= IN_acp_write_en;
+        acp_cmd_base_addr <= IN_acp_base_addr;
+        acp_cmd_end_addr  <= IN_acp_end_addr;
+        acp_cmd_write_en  <= IN_acp_write_en;
+        acp_cmd_pending   <= 1'b1;
       end
     end
   end
