@@ -57,8 +57,8 @@ module mem_GLOBAL_cache (
     output logic         OUT_npu_is_busy,
 
     // Direct port-B owner: CVO bridge in mem_dispatcher. IN_npu_direct_en
-    // holds the local NPU FSM; IN_npu_direct_valid selects an explicit L2
-    // command so bridge FSM state does not sit in the URAM address mux.
+    // holds the local NPU FSM; registered IN_npu_direct_valid selects an
+    // explicit L2 command so bridge FSM state does not sit in the URAM muxes.
     input  logic         IN_npu_direct_en,
     input  logic         IN_npu_direct_valid,
     input  logic         IN_npu_direct_we,
@@ -158,7 +158,7 @@ module mem_GLOBAL_cache (
 
   assign OUT_npu_is_busy = npu_is_busy;
   assign npu_direct_active = IN_npu_direct_en;
-  assign npu_direct_cmd = IN_npu_direct_en & IN_npu_direct_valid;
+  assign npu_direct_cmd = IN_npu_direct_valid;
   assign npu_read_fire   = npu_is_busy & ~npu_write_en & M_AXIS_NPU_FMAP.tready & ~npu_direct_active;
   assign npu_write_fire  = npu_is_busy &  npu_write_en & ~npu_direct_active;
   assign npu_on_last_word = (npu_ptr >= npu_last_addr);
