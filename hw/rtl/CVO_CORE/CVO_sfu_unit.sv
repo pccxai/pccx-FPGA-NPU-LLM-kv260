@@ -17,7 +17,7 @@ import bf16_math_pkg::*;
 //   EXP        :  7 cycles
 //   SQRT       :  3 cycles
 //   RECIP      : 10 cycles  (Newton-Raphson, 1 step)
-//   SCALE      :  6 cycles  (first input word = scalar, rest = data)
+//   SCALE      :  7 cycles  (first input word = scalar, rest = data)
 //   REDUCE_SUM :  variable  (ready-gated BF16 add pipeline, emits scalar)
 //   GELU       : 22 cycles  (MUL + NEG + EXP + ADD + RECIP + MUL chain)
 // Throughput   : 1 result/cycle for streaming ops; REDUCE_SUM emits 1 scalar
@@ -668,7 +668,7 @@ module CVO_sfu_unit (
     end
   end
 
-  // ===| SCALE Pipeline (6 stages) |=============================================
+  // ===| SCALE Pipeline (7 cycles) |=============================================
   // First element received = scalar (or 1/scalar if FLAG_RECIP_SCALE).
 
   logic        scale_scalar_loaded;
@@ -685,6 +685,13 @@ module CVO_sfu_unit (
   logic [ 7:0] scale_s1_ma;
   logic [ 7:0] scale_s1_mb;
 
+  logic        scale_s2a_valid;
+  logic        scale_s2a_zero;
+  logic        scale_s2a_sign;
+  logic [ 8:0] scale_s2a_esum;
+  logic [11:0] scale_s2a_mp_lo;
+  logic [11:0] scale_s2a_mp_hi;
+
   logic        scale_s2_valid;
   logic        scale_s2_zero;
   logic        scale_s2_sign;
@@ -695,6 +702,7 @@ module CVO_sfu_unit (
   logic [15:0] scale_s3_result;
 
   logic [15:0] scale_scalar_next_wire;
+  logic [15:0] scale_s2_mp_wire;
   logic [ 7:0] scale_s2_er_wire;
   logic [ 6:0] scale_s2_mr_wire;
 
@@ -718,6 +726,12 @@ module CVO_sfu_unit (
       scale_s1_esum       <= 9'd0;
       scale_s1_ma         <= 8'd0;
       scale_s1_mb         <= 8'd0;
+      scale_s2a_valid     <= 1'b0;
+      scale_s2a_zero      <= 1'b1;
+      scale_s2a_sign      <= 1'b0;
+      scale_s2a_esum      <= 9'd0;
+      scale_s2a_mp_lo     <= 12'd0;
+      scale_s2a_mp_hi     <= 12'd0;
       scale_s2_valid      <= 1'b0;
       scale_s2_zero       <= 1'b1;
       scale_s2_sign       <= 1'b0;
@@ -748,15 +762,26 @@ module CVO_sfu_unit (
       scale_s1_ma    <= {1'b1, scale_s0_data[6:0]};
       scale_s1_mb    <= {1'b1, scale_s0_scalar[6:0]};
 
-      scale_s2_valid <= scale_s1_valid;
-      scale_s2_zero  <= scale_s1_zero;
-      scale_s2_sign  <= scale_s1_sign;
-      scale_s2_esum  <= scale_s1_esum;
-      scale_s2_mp    <= scale_s1_ma * scale_s1_mb;
+      scale_s2a_valid <= scale_s1_valid;
+      scale_s2a_zero  <= scale_s1_zero;
+      scale_s2a_sign  <= scale_s1_sign;
+      scale_s2a_esum  <= scale_s1_esum;
+      scale_s2a_mp_lo <= 12'(scale_s1_ma * scale_s1_mb[3:0]);
+      scale_s2a_mp_hi <= 12'(scale_s1_ma * scale_s1_mb[7:4]);
+
+      scale_s2_valid <= scale_s2a_valid;
+      scale_s2_zero  <= scale_s2a_zero;
+      scale_s2_sign  <= scale_s2a_sign;
+      scale_s2_esum  <= scale_s2a_esum;
+      scale_s2_mp    <= scale_s2_mp_wire;
 
       scale_s3_valid  <= scale_s2_valid;
       scale_s3_result <= scale_s2_zero ? 16'd0 : {scale_s2_sign, scale_s2_er_wire, scale_s2_mr_wire};
     end
+  end
+
+  always_comb begin : comb_scale_partial_sum
+    scale_s2_mp_wire = {4'd0, scale_s2a_mp_lo} + {scale_s2a_mp_hi, 4'd0};
   end
 
   always_comb begin : comb_scale_mul_pack
