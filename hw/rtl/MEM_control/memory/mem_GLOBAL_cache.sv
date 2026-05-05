@@ -142,10 +142,12 @@ module mem_GLOBAL_cache (
   logic        npu_write_en;
   logic        npu_is_busy;
   logic [16:0] npu_end_addr;
+  logic [16:0] npu_last_addr;
   logic [URAM_LATENCY-1:0] npu_rd_valid_pipe;
   logic [URAM_LATENCY-1:0] npu_rd_last_pipe;
   logic        npu_read_fire;
   logic        npu_write_fire;
+  logic        npu_on_last_word;
   logic        npu_direct_active;
   logic        l2_npu_we;
   logic [16:0] l2_npu_addr;
@@ -155,6 +157,7 @@ module mem_GLOBAL_cache (
   assign npu_direct_active = IN_npu_direct_en;
   assign npu_read_fire   = npu_is_busy & ~npu_write_en & M_AXIS_NPU_FMAP.tready & ~npu_direct_active;
   assign npu_write_fire  = npu_is_busy &  npu_write_en & ~npu_direct_active;
+  assign npu_on_last_word = (npu_ptr >= npu_last_addr);
 
   assign M_AXIS_NPU_FMAP.tdata  = OUT_npu_rdata;
   assign M_AXIS_NPU_FMAP.tvalid = npu_rd_valid_pipe[URAM_LATENCY-1];
@@ -167,7 +170,7 @@ module mem_GLOBAL_cache (
       npu_rd_last_pipe  <= '0;
     end else begin
       npu_rd_valid_pipe <= {npu_rd_valid_pipe[URAM_LATENCY-2:0], npu_read_fire};
-      npu_rd_last_pipe  <= {npu_rd_last_pipe[URAM_LATENCY-2:0], (npu_read_fire && (npu_ptr + 17'd1 >= npu_end_addr))};
+      npu_rd_last_pipe  <= {npu_rd_last_pipe[URAM_LATENCY-2:0], (npu_read_fire && npu_on_last_word)};
     end
   end
 
@@ -175,17 +178,19 @@ module mem_GLOBAL_cache (
     if (!rst_n_core) begin
       npu_ptr      <= '0;
       npu_end_addr <= '0;
+      npu_last_addr <= '0;
       npu_is_busy  <= 1'b0;
       npu_write_en <= 1'b0;
     end else begin
       if (npu_is_busy) begin
         if (npu_write_fire || npu_read_fire) begin
           npu_ptr <= npu_ptr + 17'd1;
-          if (npu_ptr + 17'd1 >= npu_end_addr) npu_is_busy <= 1'b0;
+          if (npu_on_last_word) npu_is_busy <= 1'b0;
         end
       end else if (IN_npu_rx_start) begin
         npu_ptr      <= IN_npu_base_addr;
         npu_end_addr <= IN_npu_end_addr;
+        npu_last_addr <= IN_npu_end_addr - 17'd1;
         npu_is_busy  <= 1'b1;
         npu_write_en <= IN_npu_write_en;
       end

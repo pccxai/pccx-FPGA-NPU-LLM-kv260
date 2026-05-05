@@ -191,7 +191,9 @@ module mem_dispatcher #() (
   // 128-bit word counts. Keep that arithmetic behind a registered boundary:
   //   s1: capture route/base/shape
   //   s2: compute X*Y
-  //   s3: compute ceil(X*Y*Z/8)
+  //   s3: keep the low product operands required by the 17-bit word contract
+  //   s4: compute low 20 bits of X*Y*Z
+  //   s5: compute ceil(X*Y*Z/8) and enqueue descriptor
   //   issue: enqueue ACP/NPU descriptor
   // This removes the prior shape_const_ram -> DSP -> DSP -> descriptor path
   // from the 400 MHz core cycle while preserving the external command contract.
@@ -225,10 +227,29 @@ module mem_dispatcher #() (
   logic        load_s3_to_npu;
   logic        load_s3_write_en;
   logic [16:0] load_s3_base_addr;
-  logic [16:0] load_s3_word_total;
-  logic [50:0] load_s2_words_plus7;
+  logic [19:0] load_s3_shape_xy_low;
+  logic [16:0] load_s3_shape_z;
+  logic [36:0] load_s3_elem_low_product;
 
-  assign load_s2_words_plus7 = (load_s2_shape_xy * load_s2_shape_z) + 51'd7;
+  logic        load_s4_valid;
+  logic        load_s4_to_acp;
+  logic        load_s4_to_npu;
+  logic        load_s4_write_en;
+  logic [16:0] load_s4_base_addr;
+  logic [19:0] load_s4_elem_low20;
+  logic [16:0] load_s4_word_floor;
+  logic        load_s4_word_round;
+
+  logic        load_s5_valid;
+  logic        load_s5_to_acp;
+  logic        load_s5_to_npu;
+  logic        load_s5_write_en;
+  logic [16:0] load_s5_base_addr;
+  logic [16:0] load_s5_word_total;
+
+  assign load_s3_elem_low_product = load_s3_shape_xy_low * load_s3_shape_z;
+  assign load_s4_word_floor       = load_s4_elem_low20[19:3];
+  assign load_s4_word_round       = |load_s4_elem_low20[2:0];
 
   always_ff @(posedge clk_core) begin
     if (!rst_n_core) begin
@@ -258,7 +279,20 @@ module mem_dispatcher #() (
       load_s3_to_npu    <= 1'b0;
       load_s3_write_en  <= 1'b0;
       load_s3_base_addr <= '0;
-      load_s3_word_total <= '0;
+      load_s3_shape_xy_low <= '0;
+      load_s3_shape_z      <= '0;
+      load_s4_valid      <= 1'b0;
+      load_s4_to_acp     <= 1'b0;
+      load_s4_to_npu     <= 1'b0;
+      load_s4_write_en   <= 1'b0;
+      load_s4_base_addr  <= '0;
+      load_s4_elem_low20 <= '0;
+      load_s5_valid      <= 1'b0;
+      load_s5_to_acp     <= 1'b0;
+      load_s5_to_npu     <= 1'b0;
+      load_s5_write_en   <= 1'b0;
+      load_s5_base_addr  <= '0;
+      load_s5_word_total <= '0;
     end else begin
       acp_rx_start <= 1'b0;
       npu_rx_start <= 1'b0;
@@ -326,23 +360,38 @@ module mem_dispatcher #() (
       load_s3_to_npu     <= load_s2_to_npu;
       load_s3_write_en   <= load_s2_write_en;
       load_s3_base_addr  <= load_s2_base_addr;
-      load_s3_word_total <= load_s2_words_plus7[19:3];
+      load_s3_shape_xy_low <= load_s2_shape_xy[19:0];
+      load_s3_shape_z      <= load_s2_shape_z;
 
-      if (load_s3_valid && load_s3_to_acp) begin
+      load_s4_valid      <= load_s3_valid;
+      load_s4_to_acp     <= load_s3_to_acp;
+      load_s4_to_npu     <= load_s3_to_npu;
+      load_s4_write_en   <= load_s3_write_en;
+      load_s4_base_addr  <= load_s3_base_addr;
+      load_s4_elem_low20 <= load_s3_elem_low_product[19:0];
+
+      load_s5_valid      <= load_s4_valid;
+      load_s5_to_acp     <= load_s4_to_acp;
+      load_s5_to_npu     <= load_s4_to_npu;
+      load_s5_write_en   <= load_s4_write_en;
+      load_s5_base_addr  <= load_s4_base_addr;
+      load_s5_word_total <= load_s4_word_floor + 17'(load_s4_word_round);
+
+      if (load_s5_valid && load_s5_to_acp) begin
         acp_uop <= '{
-            write_en  : load_s3_write_en,
-            base_addr : load_s3_base_addr,
-            end_addr  : load_s3_base_addr + load_s3_word_total
+            write_en  : load_s5_write_en,
+            base_addr : load_s5_base_addr,
+            end_addr  : load_s5_base_addr + load_s5_word_total
         };
         acp_rx_start <= 1'b1;
         IN_acp_rdy   <= 1'b1;
       end
 
-      if (load_s3_valid && load_s3_to_npu) begin
+      if (load_s5_valid && load_s5_to_npu) begin
         npu_uop <= '{
-            write_en  : load_s3_write_en,
-            base_addr : load_s3_base_addr,
-            end_addr  : load_s3_base_addr + load_s3_word_total
+            write_en  : load_s5_write_en,
+            base_addr : load_s5_base_addr,
+            end_addr  : load_s5_base_addr + load_s5_word_total
         };
         npu_rx_start <= 1'b1;
         IN_npu_rdy   <= 1'b1;

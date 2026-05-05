@@ -16,8 +16,8 @@
 //   The key regression surface is pointer selection: a LOAD must use its own
 //   shape_ptr_addr for the command generated on that clock, not a stale
 //   shape address left behind by a previous MEMSET or LOAD. The descriptor
-//   contract is a registered timing boundary: a one-cycle LOAD pulse produces
-//   one ACP/NPU command after the mem_dispatcher shape-word pipeline.
+  //   contract is a registered timing boundary: a one-cycle LOAD pulse produces
+  //   one ACP/NPU command after the mem_dispatcher shape-word pipeline.
 //
 //   The TB also checks the CVO bridge path owns the L2 port-B address/write
 //   boundary when a CVO uop is active. That catches a wiring class where the
@@ -190,7 +190,7 @@ module tb_mem_dispatcher_shape_lookup;
       @(posedge clk_core);
       #1;
       set_load_idle();
-      repeat (3) @(posedge clk_core);
+      repeat (5) @(posedge clk_core);
       #1;
 
       checks++;
@@ -237,7 +237,7 @@ module tb_mem_dispatcher_shape_lookup;
       @(posedge clk_core);
       #1;
       set_load_idle();
-      repeat (3) @(posedge clk_core);
+      repeat (5) @(posedge clk_core);
       #1;
 
       checks++;
