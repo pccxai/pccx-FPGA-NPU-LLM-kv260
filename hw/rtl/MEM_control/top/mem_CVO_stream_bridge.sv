@@ -19,7 +19,8 @@ import isa_pkg::*;
 //   Phase 2 — WRITE: drain FIFO → serialise 8 × 16-bit → 128-bit bursts
 //                    → write to L2[dst_addr..dst_addr+N_words-1].
 // L2 addr unit : 128-bit words. base_addr N ↔ bytes [16*N .. 16*N+15].
-// L2 read lat  : 7 clocks (URAM READ_LATENCY_B = 7) — tracked via rd_lat_pipe.
+// L2 read lat  : 8 clocks (1 registered direct-command handoff +
+//                URAM READ_LATENCY_B = 7) — tracked via rd_lat_pipe.
 // Max vec len  : ResultFifoDepth × 16-bit = 32 KB (1 BRAM36 instance) — the
 //                FIFO depth caps the longest CVO op vector.
 // Handshake    : OUT_cvo_valid asserts during READ phase only;
@@ -97,9 +98,10 @@ module mem_CVO_stream_bridge (
   logic         rd_word_valid;  // registered one-cycle L2 read command
   logic [ 16:0] rd_word_addr;  // registered source word address
 
-  // 7-cycle read latency tracking after the registered address command is
-  // presented to the synchronous URAM port-B input.
-  logic [  6:0] rd_lat_pipe;  // shift register: [6]=oldest, [0]=newest
+  // Read latency tracking after the registered address command is presented to
+  // mem_GLOBAL_cache, which stages CVO direct commands once before the URAM.
+  localparam int L2ReadLatencyCycles = 8;
+  logic [L2ReadLatencyCycles-1:0] rd_lat_pipe;
 
   // ===| Write-side state |======================================================
   logic [  2:0] wr_elem_idx;  // accumulation index 0..7
@@ -153,7 +155,7 @@ module mem_CVO_stream_bridge (
       rd_buf_valid <= 1'b0;
       rd_word_valid <= 1'b0;
       rd_word_addr  <= '0;
-      rd_lat_pipe  <= 7'b0;
+      rd_lat_pipe  <= '0;
       elems_fed    <= '0;
       wr_elem_idx  <= '0;
       wr_ser_buf   <= '0;
@@ -181,7 +183,7 @@ module mem_CVO_stream_bridge (
             rd_buf_valid <= 1'b0;
             rd_word_valid <= 1'b0;
             rd_word_addr  <= 17'(IN_cvo_uop.src_addr >> 3);
-            rd_lat_pipe  <= 7'b0;
+            rd_lat_pipe  <= '0;
             elems_fed    <= '0;
             wr_elem_idx  <= '0;
             wr_ser_buf   <= '0;
@@ -195,7 +197,7 @@ module mem_CVO_stream_bridge (
         // ===| READ: stream L2 → CVO; capture results in FIFO |================
         ST_READ: begin
           // Advance latency shift register
-          rd_lat_pipe <= {rd_lat_pipe[5:0], rd_word_valid};
+          rd_lat_pipe <= {rd_lat_pipe[L2ReadLatencyCycles-2:0], rd_word_valid};
 
           // Issue next L2 read from a registered address boundary.  The prior
           // combinational rd_base+rd_word_cnt path drove the URAM cascade
@@ -206,8 +208,8 @@ module mem_CVO_stream_bridge (
             rd_word_cnt   <= rd_word_cnt + 13'd1;
           end
 
-          // Capture L2 data 7 cycles after read issued
-          if (rd_lat_pipe[6]) begin
+          // Capture L2 data after the direct-command handoff and URAM latency.
+          if (rd_lat_pipe[L2ReadLatencyCycles-1]) begin
             rd_deser_buf <= IN_l2_rdata;
             rd_buf_valid <= 1'b1;
             rd_elem_idx  <= 3'd0;

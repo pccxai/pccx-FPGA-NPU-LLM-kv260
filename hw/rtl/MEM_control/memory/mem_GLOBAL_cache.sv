@@ -57,8 +57,7 @@ module mem_GLOBAL_cache (
     output logic         OUT_npu_is_busy,
 
     // Direct port-B owner: CVO bridge in mem_dispatcher. IN_npu_direct_en
-    // holds the local NPU FSM; registered IN_npu_direct_valid selects an
-    // explicit L2 command so bridge FSM state does not sit in the URAM muxes.
+    // holds the local NPU FSM while a bridge op is active.
     input  logic         IN_npu_direct_en,
     input  logic         IN_npu_direct_valid,
     input  logic         IN_npu_direct_we,
@@ -166,13 +165,17 @@ module mem_GLOBAL_cache (
   logic        npu_on_last_word;
   logic        npu_direct_active;
   logic        npu_direct_cmd;
+  logic        npu_direct_cmd_q;
+  logic        npu_direct_we_q;
+  logic [16:0] npu_direct_addr_q;
+  logic [127:0] npu_direct_wdata_q;
   logic        l2_npu_we;
   logic [16:0] l2_npu_addr;
   logic [127:0] l2_npu_wdata;
 
   assign OUT_npu_is_busy = npu_is_busy;
-  assign npu_direct_active = IN_npu_direct_en;
-  assign npu_direct_cmd = IN_npu_direct_valid;
+  assign npu_direct_active = IN_npu_direct_en | npu_direct_cmd_q;
+  assign npu_direct_cmd = npu_direct_cmd_q;
   assign npu_read_fire   = npu_is_busy & ~npu_write_en & M_AXIS_NPU_FMAP.tready & ~npu_direct_active;
   assign npu_write_fire  = npu_is_busy &  npu_write_en & ~npu_direct_active;
   assign npu_on_last_word = (npu_ptr >= npu_last_addr);
@@ -189,6 +192,22 @@ module mem_GLOBAL_cache (
     end else begin
       npu_rd_valid_pipe <= {npu_rd_valid_pipe[URAM_LATENCY-2:0], npu_read_fire};
       npu_rd_last_pipe  <= {npu_rd_last_pipe[URAM_LATENCY-2:0], (npu_read_fire && npu_on_last_word)};
+    end
+  end
+
+  // Stage CVO direct commands next to the L2 port-B mux so the bridge FSM valid
+  // pulse does not fan out directly into the URAM write-control net.
+  always_ff @(posedge clk_core) begin
+    if (!rst_n_core) begin
+      npu_direct_cmd_q   <= 1'b0;
+      npu_direct_we_q    <= 1'b0;
+      npu_direct_addr_q  <= '0;
+      npu_direct_wdata_q <= '0;
+    end else begin
+      npu_direct_cmd_q   <= IN_npu_direct_valid;
+      npu_direct_we_q    <= IN_npu_direct_we;
+      npu_direct_addr_q  <= IN_npu_direct_addr;
+      npu_direct_wdata_q <= IN_npu_direct_wdata;
     end
   end
 
@@ -221,9 +240,9 @@ module mem_GLOBAL_cache (
     l2_npu_wdata = IN_npu_wdata;
 
     if (npu_direct_cmd) begin
-      l2_npu_we    = IN_npu_direct_we;
-      l2_npu_addr  = IN_npu_direct_addr;
-      l2_npu_wdata = IN_npu_direct_wdata;
+      l2_npu_we    = npu_direct_we_q;
+      l2_npu_addr  = npu_direct_addr_q;
+      l2_npu_wdata = npu_direct_wdata_q;
     end
   end
 

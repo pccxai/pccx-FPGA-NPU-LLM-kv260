@@ -83,6 +83,7 @@ module tb_mem_dispatcher_shape_lookup;
   // ===| Scoreboard |===========================================================
   int errors = 0;
   int checks = 0;
+  localparam int LoadIssueLatencyCycles = 7;
 
   function automatic logic [16:0] ceil_words(
       input int unsigned x_val,
@@ -190,7 +191,7 @@ module tb_mem_dispatcher_shape_lookup;
       @(posedge clk_core);
       #1;
       set_load_idle();
-      repeat (5) @(posedge clk_core);
+      repeat (LoadIssueLatencyCycles) @(posedge clk_core);
       #1;
 
       checks++;
@@ -237,7 +238,7 @@ module tb_mem_dispatcher_shape_lookup;
       @(posedge clk_core);
       #1;
       set_load_idle();
-      repeat (5) @(posedge clk_core);
+      repeat (LoadIssueLatencyCycles) @(posedge clk_core);
       #1;
 
       checks++;
@@ -299,6 +300,9 @@ module tb_mem_dispatcher_shape_lookup;
         $display("[%0t] mismatch cvo direct: direct_valid=%0b exp 1",
                  $time, dut.cvo_l2_valid);
       end
+
+      @(posedge clk_core);
+      #1;
 
       checks++;
       if (dut.u_l2_cache.u_l2_uram.IN_npu_we !== 1'b0 ||
