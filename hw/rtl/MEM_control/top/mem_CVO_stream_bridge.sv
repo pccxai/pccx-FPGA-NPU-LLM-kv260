@@ -43,7 +43,8 @@ module mem_CVO_stream_bridge (
     output logic             OUT_done,
 
     // ===| L2 port B direct interface (128-bit) |================================
-    // Single-address mux: write takes priority over read.
+    // Single-address mux: valid command only; write takes priority over read.
+    output logic         OUT_l2_valid,
     output logic         OUT_l2_we,
     output logic [ 16:0] OUT_l2_addr,
     output logic [127:0] OUT_l2_wdata,
@@ -164,6 +165,7 @@ module mem_CVO_stream_bridge (
       OUT_done     <= 1'b0;
     end else begin
       OUT_done      <= 1'b0;
+      rd_word_valid <= 1'b0;
       wr_word_valid <= 1'b0;
 
       case (state)
@@ -192,8 +194,6 @@ module mem_CVO_stream_bridge (
 
         // ===| READ: stream L2 → CVO; capture results in FIFO |================
         ST_READ: begin
-          rd_word_valid <= 1'b0;
-
           // Advance latency shift register
           rd_lat_pipe <= {rd_lat_pipe[5:0], rd_word_valid};
 
@@ -267,6 +267,7 @@ module mem_CVO_stream_bridge (
   // ===| L2 port B output mux ===================================================
   // Priority: write (WRITE phase) > read (READ phase)
   always_comb begin
+    OUT_l2_valid = 1'b0;
     OUT_l2_we    = 1'b0;
     OUT_l2_addr  = '0;
     OUT_l2_wdata = '0;
@@ -274,11 +275,13 @@ module mem_CVO_stream_bridge (
     if (wr_word_valid) begin
       // Write registered 128-bit result word to dst.  Keeping write data
       // registered avoids a count-controlled 128-bit mux on the URAM DIN path.
+      OUT_l2_valid = 1'b1;
       OUT_l2_we    = 1'b1;
       OUT_l2_addr  = wr_word_addr;
       OUT_l2_wdata = wr_word_data;
-    end else if (state == ST_READ && rd_word_valid) begin
+    end else if (rd_word_valid) begin
       // Issue registered read for next 128-bit word from src.
+      OUT_l2_valid = 1'b1;
       OUT_l2_we   = 1'b0;
       OUT_l2_addr = rd_word_addr;
     end

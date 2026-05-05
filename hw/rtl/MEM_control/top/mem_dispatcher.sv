@@ -427,6 +427,7 @@ module mem_dispatcher #() (
   // ===| L2 cache controller |===================================================
   // CVO bridge drives L2 port B when active; otherwise port B is driven by
   // the NPU DMA state machine in mem_GLOBAL_cache.
+  logic        cvo_l2_valid;
   logic        cvo_l2_we;
   logic [16:0] cvo_l2_addr;
   logic [127:0] cvo_l2_wdata;
@@ -469,6 +470,7 @@ module mem_dispatcher #() (
 
       // Direct port-B owner for CVO L2 read/write bursts.
       .IN_npu_direct_en   (cvo_bridge_busy),
+      .IN_npu_direct_valid(cvo_l2_valid),
       .IN_npu_direct_we   (cvo_l2_we),
       .IN_npu_direct_addr (cvo_l2_addr),
       .IN_npu_direct_wdata(cvo_l2_wdata),
@@ -490,6 +492,7 @@ module mem_dispatcher #() (
       .OUT_done           (cvo_bridge_done),
 
       // L2 port B direct access
+      .OUT_l2_valid       (cvo_l2_valid),
       .OUT_l2_we          (cvo_l2_we),
       .OUT_l2_addr        (cvo_l2_addr),
       .OUT_l2_wdata       (cvo_l2_wdata),

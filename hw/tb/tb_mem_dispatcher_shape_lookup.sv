@@ -294,6 +294,13 @@ module tb_mem_dispatcher_shape_lookup;
       end
 
       checks++;
+      if (dut.cvo_l2_valid !== 1'b1) begin
+        errors++;
+        $display("[%0t] mismatch cvo direct: direct_valid=%0b exp 1",
+                 $time, dut.cvo_l2_valid);
+      end
+
+      checks++;
       if (dut.u_l2_cache.u_l2_uram.IN_npu_we !== 1'b0 ||
           dut.u_l2_cache.u_l2_uram.IN_npu_addr !== 17'd4) begin
         errors++;

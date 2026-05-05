@@ -56,9 +56,11 @@ module mem_GLOBAL_cache (
     input  logic  [16:0] IN_npu_end_addr,
     output logic         OUT_npu_is_busy,
 
-    // Direct port-B owner: CVO bridge in mem_dispatcher. When asserted, the
-    // local NPU FSM is held so the bridge can issue explicit L2 reads/writes.
+    // Direct port-B owner: CVO bridge in mem_dispatcher. IN_npu_direct_en
+    // holds the local NPU FSM; IN_npu_direct_valid selects an explicit L2
+    // command so bridge FSM state does not sit in the URAM address mux.
     input  logic         IN_npu_direct_en,
+    input  logic         IN_npu_direct_valid,
     input  logic         IN_npu_direct_we,
     input  logic  [16:0] IN_npu_direct_addr,
     input  logic [127:0] IN_npu_direct_wdata,
@@ -149,12 +151,14 @@ module mem_GLOBAL_cache (
   logic        npu_write_fire;
   logic        npu_on_last_word;
   logic        npu_direct_active;
+  logic        npu_direct_cmd;
   logic        l2_npu_we;
   logic [16:0] l2_npu_addr;
   logic [127:0] l2_npu_wdata;
 
   assign OUT_npu_is_busy = npu_is_busy;
   assign npu_direct_active = IN_npu_direct_en;
+  assign npu_direct_cmd = IN_npu_direct_en & IN_npu_direct_valid;
   assign npu_read_fire   = npu_is_busy & ~npu_write_en & M_AXIS_NPU_FMAP.tready & ~npu_direct_active;
   assign npu_write_fire  = npu_is_busy &  npu_write_en & ~npu_direct_active;
   assign npu_on_last_word = (npu_ptr >= npu_last_addr);
@@ -202,7 +206,7 @@ module mem_GLOBAL_cache (
     l2_npu_addr  = npu_ptr;
     l2_npu_wdata = IN_npu_wdata;
 
-    if (npu_direct_active) begin
+    if (npu_direct_cmd) begin
       l2_npu_we    = IN_npu_direct_we;
       l2_npu_addr  = IN_npu_direct_addr;
       l2_npu_wdata = IN_npu_direct_wdata;
