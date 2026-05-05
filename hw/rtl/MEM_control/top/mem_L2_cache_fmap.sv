@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 pccxai
 `timescale 1ns / 1ps
 `include "GLOBAL_CONST.svh"
 
@@ -11,7 +13,7 @@
 // Ports        :
 //   Port A — ACP DMA path (host DDR4 ↔ L2 via ACP)
 //   Port B — NPU compute  (GEMM / GEMV / CVO streaming R/W)
-// Latency      : READ_LATENCY = 3 cycles (URAM registered output, 400 MHz).
+// Latency      : READ_LATENCY = 7 cycles (URAM cascade/output pipe, 400 MHz).
 // Throughput   : 1 read + 1 write per port per cycle (true dual-port).
 // Write policy : WRITE_MODE = no_change on both ports (URAM TDP requirement);
 //                read-then-write on the SAME address in the SAME cycle is
@@ -58,8 +60,9 @@ module mem_L2_cache_fmap #(
       // ===| Implementation |===
       .MEMORY_PRIMITIVE   ("ultra"),      // Force URAM on UltraScale+
       .CLOCKING_MODE      ("common_clock"),
-      .READ_LATENCY_A     (3),
-      .READ_LATENCY_B     (3),
+      .CASCADE_HEIGHT     (2),            // Shorten URAM cascade timing depth at 400 MHz
+      .READ_LATENCY_A     (7),
+      .READ_LATENCY_B     (7),
       // URAM true-dual-port requires no-change mode on both ports.
       .WRITE_MODE_A       ("no_change"),
       .WRITE_MODE_B       ("no_change"),

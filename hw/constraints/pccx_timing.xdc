@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 pccxai
 # =============================================================================
 # pccx_timing.xdc — timing-only constraints for the pccx v002 NPU core.
 #
@@ -31,17 +33,20 @@ set_clock_groups -asynchronous \
 # ---------------------------------------------------------------------------
 # Any path into the first flop of a reset bridge is inherently async.
 # Mark those as false paths so they don't inflate the WNS report.
-set_false_path -to [get_cells -hier -filter {NAME =~ */u_reset_sync*/sync_reg_reg[0]}]
+set_false_path -quiet \
+    -to [get_cells -quiet -hier -filter {NAME =~ */u_reset_sync*/sync_reg_reg[0]}]
 
 # ---------------------------------------------------------------------------
 # Asynchronous FIFO flag paths
 # ---------------------------------------------------------------------------
 # Xilinx XPM_FIFO_ASYNC instances handle their own meta-stability; mark
 # the gray-coded pointer crossings as async.
-set_false_path -from [get_cells -hier -filter {NAME =~ */wr_pntr_gray_reg*}] \
-               -to   [get_cells -hier -filter {NAME =~ */wr_pntr_gray_sync_reg*}]
-set_false_path -from [get_cells -hier -filter {NAME =~ */rd_pntr_gray_reg*}] \
-               -to   [get_cells -hier -filter {NAME =~ */rd_pntr_gray_sync_reg*}]
+set_false_path -quiet \
+    -from [get_cells -quiet -hier -filter {NAME =~ */wr_pntr_gray_reg*}] \
+    -to   [get_cells -quiet -hier -filter {NAME =~ */wr_pntr_gray_sync_reg*}]
+set_false_path -quiet \
+    -from [get_cells -quiet -hier -filter {NAME =~ */rd_pntr_gray_reg*}] \
+    -to   [get_cells -quiet -hier -filter {NAME =~ */rd_pntr_gray_sync_reg*}]
 
 # ---------------------------------------------------------------------------
 # Multi-cycle paths on the accumulator drain
@@ -50,9 +55,9 @@ set_false_path -from [get_cells -hier -filter {NAME =~ */rd_pntr_gray_reg*}] \
 # controller issues a flush (§2.2 of the Phase A audit). The drain path
 # from P-register to the result packer can tolerate multiple cycles
 # because the controller stalls new MACs during flush.
-set_multicycle_path -setup 2 \
-    -from [get_cells -hier -filter {NAME =~ */GEMM_dsp_unit*/DSP_HARD_BLOCK*}] \
-    -to   [get_cells -hier -filter {NAME =~ */u_mat_result_normalizer*}]
-set_multicycle_path -hold  1 \
-    -from [get_cells -hier -filter {NAME =~ */GEMM_dsp_unit*/DSP_HARD_BLOCK*}] \
-    -to   [get_cells -hier -filter {NAME =~ */u_mat_result_normalizer*}]
+set_multicycle_path -quiet -setup 2 \
+    -from [get_cells -quiet -hier -filter {NAME =~ */GEMM_dsp_unit*/DSP_HARD_BLOCK*}] \
+    -to   [get_cells -quiet -hier -filter {NAME =~ */u_mat_result_normalizer*}]
+set_multicycle_path -quiet -hold  1 \
+    -from [get_cells -quiet -hier -filter {NAME =~ */GEMM_dsp_unit*/DSP_HARD_BLOCK*}] \
+    -to   [get_cells -quiet -hier -filter {NAME =~ */u_mat_result_normalizer*}]

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 pccxai
 `timescale 1ns / 1ps
 `include "GLOBAL_CONST.svh"
 
@@ -28,7 +30,7 @@ import bf16_math_pkg::*;
 //                surfaces it via OUT_accm.
 // FSM states   : IDLE → RUNNING → DONE → IDLE.
 // Latency      : Sub-unit latency (see CVO_sfu_unit / CVO_cordic_unit
-//                contracts) + 1 output register cycle.
+//                contracts) + CVO input/output pipeline registers.
 // Throughput   : 1 result per cycle in steady state for non-CORDIC ops.
 // Backpressure : OUT_data_ready ANDs sub-unit ready with (state == RUNNING).
 // Reset state  : ST_IDLE, OUT_result = 0, OUT_result_valid = 0, OUT_done = 0.
@@ -83,29 +85,385 @@ module CVO_top (
   logic [15:0] uop_length;
   logic [15:0] elem_count;   // elements processed in current operation
 
-  // ===| BF16 subtract e_max (combinational) |===================================
-  // Implements x - e_max in BF16 via bf16_add(x, -e_max).
+  // ===| Registered Unit Input Boundary |========================================
+  // The L2 bridge deserializes 128-bit words into a 16-bit BF16 stream. Keep that
+  // muxing on the bridge side of a flop so the SFU/CORDIC arithmetic paths start
+  // from a local CVO register rather than from the L2 deser buffer.
 
-  logic [15:0] sub_emax_result_wire;
+  logic        unit_in_valid;
+  logic [15:0] unit_in_data;
+  logic [15:0] unit_in_e_max;
+  cvo_func_e   unit_in_func;
+  cvo_flags_t  unit_in_flags;
+  logic [15:0] unit_in_length;
+  logic        input_accept_wire;
 
-  always_comb begin : comb_sub_emax
-    // Negate e_max by flipping sign bit, then add to x
-    sub_emax_result_wire = bf16_add(IN_data, {~IN_e_max[15], IN_e_max[14:0]});
+  assign input_accept_wire = (state == ST_RUNNING) && IN_data_valid && OUT_data_ready;
+
+  always_ff @(posedge clk) begin
+    if (!rst_n || i_clear) begin
+      unit_in_valid  <= 1'b0;
+      unit_in_data   <= 16'd0;
+      unit_in_e_max  <= 16'd0;
+      unit_in_func   <= CVO_EXP;
+      unit_in_flags  <= '0;
+      unit_in_length <= 16'd0;
+    end else begin
+      unit_in_valid <= input_accept_wire;
+      if (input_accept_wire) begin
+        unit_in_data   <= IN_data;
+        unit_in_e_max  <= IN_e_max;
+        unit_in_func   <= uop_func;
+        unit_in_flags  <= uop_flags;
+        unit_in_length <= uop_length;
+      end
+    end
   end
 
-  // ===| Input to sub-units (after optional e_max subtraction) |=================
-  logic [15:0] data_to_unit_wire;
-  logic        data_valid_to_unit_wire;
+  // ===| Pipelined BF16 subtract e_max |=========================================
+  // Implements x - e_max for FLAG_SUB_EMAX. This is intentionally split across
+  // stages because a full BF16 align/add/normalize chain does not meet the
+  // 400 MHz core target as one combinational block.
+
+  function automatic logic [4:0] lead_index24(input logic [23:0] mag);
+    int lead;
+
+    lead = 23;
+    while (lead > 0 && mag[lead] == 1'b0) lead = lead - 1;
+
+    return 5'(lead);
+  endfunction
+
+  function automatic logic [15:0] pack_bf16_mag_with_lead(input logic        out_sign,
+                                                          input logic [7:0]  emax,
+                                                          input logic [23:0] mag,
+                                                          input logic [4:0]  lead);
+    int          lead_i;
+    logic [7:0]  out_exp;
+    logic [6:0]  out_mant;
+
+    if (mag == 24'd0) return 16'd0;
+
+    lead_i = int'(lead);
+
+    out_exp = emax + 8'(lead_i - 15);
+    if (lead_i >= 7)
+      out_mant = mag[lead_i-1-:7];
+    else
+      out_mant = 7'(mag << (7 - lead_i));
+
+    return {out_sign, out_exp, out_mant};
+  endfunction
+
+  bf16_t      sub_s0_a_wire;
+  bf16_t      sub_s0_b_wire;
+  logic [7:0] sub_s0_emax_wire;
+
+  always_comb begin : comb_sub_emax_classify
+    sub_s0_a_wire    = to_bf16(unit_in_data);
+    sub_s0_b_wire    = to_bf16({~unit_in_e_max[15], unit_in_e_max[14:0]});
+    sub_s0_emax_wire = (sub_s0_a_wire.exp > sub_s0_b_wire.exp) ?
+                       sub_s0_a_wire.exp : sub_s0_b_wire.exp;
+  end
+
+  logic        sub_s0_valid;
+  logic        sub_s0_do_sub;
+  logic [15:0] sub_s0_passthrough;
+  logic [7:0]  sub_s0_emax;
+  bf16_t       sub_s0_a;
+  bf16_t       sub_s0_b;
+  cvo_func_e   sub_s0_func;
+  cvo_flags_t  sub_s0_flags;
+  logic [15:0] sub_s0_length;
+
+  always_ff @(posedge clk) begin
+    if (!rst_n || i_clear) begin
+      sub_s0_valid       <= 1'b0;
+      sub_s0_do_sub      <= 1'b0;
+      sub_s0_passthrough <= 16'd0;
+      sub_s0_emax        <= 8'd0;
+      sub_s0_a           <= '0;
+      sub_s0_b           <= '0;
+      sub_s0_func        <= CVO_EXP;
+      sub_s0_flags       <= '0;
+      sub_s0_length      <= 16'd0;
+    end else begin
+      sub_s0_valid <= unit_in_valid;
+      if (unit_in_valid) begin
+        sub_s0_do_sub      <= unit_in_flags.sub_emax;
+        sub_s0_passthrough <= unit_in_data;
+        sub_s0_emax        <= sub_s0_emax_wire;
+        sub_s0_a           <= sub_s0_a_wire;
+        sub_s0_b           <= sub_s0_b_wire;
+        sub_s0_func        <= unit_in_func;
+        sub_s0_flags       <= unit_in_flags;
+        sub_s0_length      <= unit_in_length;
+      end
+    end
+  end
+
+  logic [22:0] sub_s1p_mag_a_wire;
+  logic [22:0] sub_s1p_mag_b_wire;
+  logic [7:0]  sub_s1p_shift_a_wire;
+  logic [7:0]  sub_s1p_shift_b_wire;
+
+  always_comb begin : comb_sub_emax_shift_prepare
+    sub_s1p_mag_a_wire   = {1'b1, sub_s0_a.mantissa, 15'd0};
+    sub_s1p_mag_b_wire   = {1'b1, sub_s0_b.mantissa, 15'd0};
+    sub_s1p_shift_a_wire = sub_s0_emax - sub_s0_a.exp;
+    sub_s1p_shift_b_wire = sub_s0_emax - sub_s0_b.exp;
+  end
+
+  logic        sub_s1p_valid;
+  logic        sub_s1p_do_sub;
+  logic [15:0] sub_s1p_passthrough;
+  logic [7:0]  sub_s1p_emax;
+  logic        sub_s1p_sign_a;
+  logic        sub_s1p_sign_b;
+  logic [22:0] sub_s1p_mag_a;
+  logic [22:0] sub_s1p_mag_b;
+  logic [7:0]  sub_s1p_shift_a;
+  logic [7:0]  sub_s1p_shift_b;
+  cvo_func_e   sub_s1p_func;
+  cvo_flags_t  sub_s1p_flags;
+  logic [15:0] sub_s1p_length;
+
+  always_ff @(posedge clk) begin
+    if (!rst_n || i_clear) begin
+      sub_s1p_valid       <= 1'b0;
+      sub_s1p_do_sub      <= 1'b0;
+      sub_s1p_passthrough <= 16'd0;
+      sub_s1p_emax        <= 8'd0;
+      sub_s1p_sign_a      <= 1'b0;
+      sub_s1p_sign_b      <= 1'b0;
+      sub_s1p_mag_a       <= 23'd0;
+      sub_s1p_mag_b       <= 23'd0;
+      sub_s1p_shift_a     <= 8'd0;
+      sub_s1p_shift_b     <= 8'd0;
+      sub_s1p_func        <= CVO_EXP;
+      sub_s1p_flags       <= '0;
+      sub_s1p_length      <= 16'd0;
+    end else begin
+      sub_s1p_valid <= sub_s0_valid;
+      if (sub_s0_valid) begin
+        sub_s1p_do_sub      <= sub_s0_do_sub;
+        sub_s1p_passthrough <= sub_s0_passthrough;
+        sub_s1p_emax        <= sub_s0_emax;
+        sub_s1p_sign_a      <= sub_s0_a.sign;
+        sub_s1p_sign_b      <= sub_s0_b.sign;
+        sub_s1p_mag_a       <= sub_s1p_mag_a_wire;
+        sub_s1p_mag_b       <= sub_s1p_mag_b_wire;
+        sub_s1p_shift_a     <= sub_s1p_shift_a_wire;
+        sub_s1p_shift_b     <= sub_s1p_shift_b_wire;
+        sub_s1p_func        <= sub_s0_func;
+        sub_s1p_flags       <= sub_s0_flags;
+        sub_s1p_length      <= sub_s0_length;
+      end
+    end
+  end
+
+  logic [22:0] sub_shifted_a_wire;
+  logic [22:0] sub_shifted_b_wire;
+  logic [23:0] sub_aligned_a_wire;
+  logic [23:0] sub_aligned_b_wire;
+
+  always_comb begin : comb_sub_emax_align
+    sub_shifted_a_wire = sub_s1p_mag_a >> sub_s1p_shift_a;
+    sub_shifted_b_wire = sub_s1p_mag_b >> sub_s1p_shift_b;
+    sub_aligned_a_wire = sub_s1p_sign_a ? (~{1'b0, sub_shifted_a_wire} + 24'd1) :
+                                          {1'b0, sub_shifted_a_wire};
+    sub_aligned_b_wire = sub_s1p_sign_b ? (~{1'b0, sub_shifted_b_wire} + 24'd1) :
+                                          {1'b0, sub_shifted_b_wire};
+  end
+
+  logic        sub_s1_valid;
+  logic        sub_s1_do_sub;
+  logic [15:0] sub_s1_passthrough;
+  logic [7:0]  sub_s1_emax;
+  logic [23:0] sub_s1_aligned_a;
+  logic [23:0] sub_s1_aligned_b;
+  cvo_func_e   sub_s1_func;
+  cvo_flags_t  sub_s1_flags;
+  logic [15:0] sub_s1_length;
+
+  always_ff @(posedge clk) begin
+    if (!rst_n || i_clear) begin
+      sub_s1_valid       <= 1'b0;
+      sub_s1_do_sub      <= 1'b0;
+      sub_s1_passthrough <= 16'd0;
+      sub_s1_emax        <= 8'd0;
+      sub_s1_aligned_a   <= 24'd0;
+      sub_s1_aligned_b   <= 24'd0;
+      sub_s1_func        <= CVO_EXP;
+      sub_s1_flags       <= '0;
+      sub_s1_length      <= 16'd0;
+    end else begin
+      sub_s1_valid <= sub_s1p_valid;
+      if (sub_s1p_valid) begin
+        sub_s1_do_sub      <= sub_s1p_do_sub;
+        sub_s1_passthrough <= sub_s1p_passthrough;
+        sub_s1_emax        <= sub_s1p_emax;
+        sub_s1_aligned_a   <= sub_aligned_a_wire;
+        sub_s1_aligned_b   <= sub_aligned_b_wire;
+        sub_s1_func        <= sub_s1p_func;
+        sub_s1_flags       <= sub_s1p_flags;
+        sub_s1_length      <= sub_s1p_length;
+      end
+    end
+  end
+
+  logic              sub_s2_valid;
+  logic              sub_s2_do_sub;
+  logic [15:0]       sub_s2_passthrough;
+  logic [7:0]        sub_s2_emax;
+  logic signed [24:0] sub_s2_sum;
+  cvo_func_e         sub_s2_func;
+  cvo_flags_t        sub_s2_flags;
+  logic [15:0]       sub_s2_length;
+
+  always_ff @(posedge clk) begin
+    if (!rst_n || i_clear) begin
+      sub_s2_valid       <= 1'b0;
+      sub_s2_do_sub      <= 1'b0;
+      sub_s2_passthrough <= 16'd0;
+      sub_s2_emax        <= 8'd0;
+      sub_s2_sum         <= 25'sd0;
+      sub_s2_func        <= CVO_EXP;
+      sub_s2_flags       <= '0;
+      sub_s2_length      <= 16'd0;
+    end else begin
+      sub_s2_valid <= sub_s1_valid;
+      if (sub_s1_valid) begin
+        sub_s2_do_sub      <= sub_s1_do_sub;
+        sub_s2_passthrough <= sub_s1_passthrough;
+        sub_s2_emax        <= sub_s1_emax;
+        sub_s2_sum         <= $signed({sub_s1_aligned_a[23], sub_s1_aligned_a}) +
+                              $signed({sub_s1_aligned_b[23], sub_s1_aligned_b});
+        sub_s2_func        <= sub_s1_func;
+        sub_s2_flags       <= sub_s1_flags;
+        sub_s2_length      <= sub_s1_length;
+      end
+	    end
+	  end
+
+  logic        sub_s3_valid;
+  logic        sub_s3_do_sub;
+  logic [15:0] sub_s3_passthrough;
+  logic [7:0]  sub_s3_emax;
+  logic        sub_s3_sign;
+  logic [23:0] sub_s3_mag;
+  cvo_func_e   sub_s3_func;
+  cvo_flags_t  sub_s3_flags;
+  logic [15:0] sub_s3_length;
+
+  always_ff @(posedge clk) begin
+    if (!rst_n || i_clear) begin
+      sub_s3_valid       <= 1'b0;
+      sub_s3_do_sub      <= 1'b0;
+      sub_s3_passthrough <= 16'd0;
+      sub_s3_emax        <= 8'd0;
+      sub_s3_sign        <= 1'b0;
+      sub_s3_mag         <= 24'd0;
+      sub_s3_func        <= CVO_EXP;
+      sub_s3_flags       <= '0;
+      sub_s3_length      <= 16'd0;
+    end else begin
+      sub_s3_valid <= sub_s2_valid;
+      if (sub_s2_valid) begin
+        sub_s3_do_sub      <= sub_s2_do_sub;
+        sub_s3_passthrough <= sub_s2_passthrough;
+        sub_s3_emax        <= sub_s2_emax;
+        sub_s3_sign        <= sub_s2_sum[24];
+        sub_s3_mag         <= sub_s2_sum[24] ? (~sub_s2_sum[23:0] + 24'd1) :
+                                               sub_s2_sum[23:0];
+        sub_s3_func        <= sub_s2_func;
+        sub_s3_flags       <= sub_s2_flags;
+        sub_s3_length      <= sub_s2_length;
+      end
+    end
+  end
+
+  logic [4:0] sub_s4_lead_wire;
+
+  always_comb begin : comb_sub_emax_pack_prepare
+    sub_s4_lead_wire = lead_index24(sub_s3_mag);
+  end
+
+  logic        sub_s4_valid;
+  logic        sub_s4_do_sub;
+  logic [15:0] sub_s4_passthrough;
+  logic [7:0]  sub_s4_emax;
+  logic        sub_s4_sign;
+  logic [23:0] sub_s4_mag;
+  logic [4:0]  sub_s4_lead;
+  cvo_func_e   sub_s4_func;
+  cvo_flags_t  sub_s4_flags;
+  logic [15:0] sub_s4_length;
+
+  always_ff @(posedge clk) begin
+    if (!rst_n || i_clear) begin
+      sub_s4_valid       <= 1'b0;
+      sub_s4_do_sub      <= 1'b0;
+      sub_s4_passthrough <= 16'd0;
+      sub_s4_emax        <= 8'd0;
+      sub_s4_sign        <= 1'b0;
+      sub_s4_mag         <= 24'd0;
+      sub_s4_lead        <= 5'd0;
+      sub_s4_func        <= CVO_EXP;
+      sub_s4_flags       <= '0;
+      sub_s4_length      <= 16'd0;
+    end else begin
+      sub_s4_valid <= sub_s3_valid;
+      if (sub_s3_valid) begin
+        sub_s4_do_sub      <= sub_s3_do_sub;
+        sub_s4_passthrough <= sub_s3_passthrough;
+        sub_s4_emax        <= sub_s3_emax;
+        sub_s4_sign        <= sub_s3_sign;
+        sub_s4_mag         <= sub_s3_mag;
+        sub_s4_lead        <= sub_s4_lead_wire;
+        sub_s4_func        <= sub_s3_func;
+        sub_s4_flags       <= sub_s3_flags;
+        sub_s4_length      <= sub_s3_length;
+      end
+    end
+  end
+
+	  // ===| Input to sub-units (after optional e_max subtraction) |=================
+	  logic        data_valid_to_unit_wire;
+	  logic [15:0] unit_data;
+	  logic        unit_valid;
+  cvo_func_e   unit_func;
+  cvo_flags_t  unit_flags;
+  logic [15:0] unit_length;
 
   always_comb begin
-    data_to_unit_wire    = uop_flags.sub_emax ? sub_emax_result_wire : IN_data;
-    data_valid_to_unit_wire = (state == ST_RUNNING) && IN_data_valid;
+    data_valid_to_unit_wire = unit_valid;
+  end
+
+  always_ff @(posedge clk) begin
+    if (!rst_n || i_clear) begin
+      unit_valid  <= 1'b0;
+      unit_data   <= 16'd0;
+      unit_func   <= CVO_EXP;
+      unit_flags  <= '0;
+      unit_length <= 16'd0;
+    end else begin
+      unit_valid <= sub_s4_valid;
+      if (sub_s4_valid) begin
+        unit_data   <= sub_s4_do_sub ? pack_bf16_mag_with_lead(sub_s4_sign, sub_s4_emax,
+                                                               sub_s4_mag, sub_s4_lead) :
+                                       sub_s4_passthrough;
+        unit_func   <= sub_s4_func;
+        unit_flags  <= sub_s4_flags;
+        unit_length <= sub_s4_length;
+      end
+    end
   end
 
   // ===| Opcode Routing (declared ahead of units that use it as a gating term) |
   logic is_cordic_op_wire;
   always_comb begin
-    is_cordic_op_wire = (uop_func == CVO_SIN) || (uop_func == CVO_COS);
+    is_cordic_op_wire = (unit_func == CVO_SIN) || (unit_func == CVO_COS);
   end
 
   // ===| SFU Instantiation |=====================================================
@@ -118,11 +476,11 @@ module CVO_top (
       .rst_n           (rst_n),
       .i_clear         (i_clear),
 
-      .IN_func         (uop_func),
-      .IN_length       (uop_length),
-      .IN_flags        (uop_flags),
+      .IN_func         (unit_func),
+      .IN_length       (unit_length),
+      .IN_flags        (unit_flags),
 
-      .IN_data         (data_to_unit_wire),
+      .IN_data         (unit_data),
       .IN_valid        (data_valid_to_unit_wire && !is_cordic_op_wire),
       .OUT_data_ready  (sfu_ready),
 
@@ -139,7 +497,7 @@ module CVO_top (
       .clk          (clk),
       .rst_n        (rst_n),
 
-      .IN_angle_bf16(data_to_unit_wire),
+      .IN_angle_bf16(unit_data),
       .IN_valid     (data_valid_to_unit_wire && is_cordic_op_wire),
 
       .OUT_sin_bf16 (cordic_sin),

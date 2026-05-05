@@ -10,8 +10,9 @@ Target device: **Kria KV260 SOM, `xck26-sfvc784-2LV-c` (ZU5EV)**.
 | `filelist.f`            | Ordered SystemVerilog source list, read by both `xvlog -f` and the Vivado TCL. |
 | `create_project.tcl`    | Build the Vivado project (part, sources, includes, XDC). |
 | `synth.tcl`             | Out-of-context synthesis of `NPU_top`. Reports into `build/reports/`. |
-| `impl.tcl`              | Opt / place / route / `write_bitstream`. Long job — only run once synth is clean. |
-| `build.sh`              | Wrapper: `./build.sh {project\|synth\|impl\|clean}`. |
+| `impl.tcl`              | OOC opt/place/route evidence. The bitstream mode is blocked for OOC modules. |
+| `top_level_status.tcl`  | Full KV260 top-level / BD bitstream-flow prerequisite gate. |
+| `build.sh`              | Wrapper: `./build.sh {project\|synth\|impl\|bitstream\|top-status\|top-bitstream\|clean}`. |
 | `npu_core_wrapper.sv`   | Plain-signal shim around `NPU_top`'s SV-interface ports, used by the BD / IP packager. |
 
 ## Quick start
@@ -25,8 +26,11 @@ cd hw
 # Out-of-context synthesis (minutes to tens of minutes, depending on machine)
 ./vivado/build.sh synth
 
-# Full implementation + bitstream (hour-scale)
+# Routed OOC implementation evidence (long job)
 ./vivado/build.sh impl
+
+# Full KV260 top-level / BD bitstream-flow prerequisite status (lightweight)
+./vivado/build.sh top-status
 
 # Wipe all generated state
 ./vivado/build.sh clean
@@ -40,9 +44,10 @@ cd hw
 | `xelab` on `GEMV_top`, `CVO_top`, `GEMM_systolic_top` | ✅ clean |
 | `xelab` on `NPU_top` standalone | ⚪ expected fail — interface ports need a wrapper; see `npu_core_wrapper.sv` |
 | `create_project.tcl` | ✅ runs green |
-| `synth.tcl` (out-of-context) | 🟡 attempted locally; no completed report yet. Use `PCCX_VIVADO_JOBS=1` on memory-constrained hosts |
-| `impl.tcl` (write_bitstream) | 🔴 not attempted yet — gated on completed synth evidence |
-| Block design / Zynq PS integration | 🔴 not written yet (see §Next steps) |
+| `synth.tcl` (out-of-context) | ✅ current PR #79 evidence: runs to reports with post-synth timing clean |
+| `impl.tcl` (out-of-context route) | 🟡 current PR #79 evidence: route completes, post-impl setup still violates by a small margin |
+| OOC `bitstream` mode | 🔴 blocked by Vivado HDOOC-3; OOC route evidence is not a KV260 bitstream |
+| Full top-level / Zynq PS integration | 🔴 not written yet (see §Next steps and `top-status`) |
 | Device-tree overlay | 🔴 not written yet |
 | Driver smoke test on board | 🔴 not attempted yet |
 
@@ -72,17 +77,22 @@ evidence, not a timing-closure claim.
    - unresolved `XPM_*` references needing `-L xpm` in synth
    - untied output ports on placeholder modules
    - multi-driver or ambiguous interface modport warnings
-2. **Block design** — create `vivado/system_bd.tcl` that drops:
+2. **Block design** — create `vivado/system_bd.tcl` or set
+   `PCCX_TOP_BD_TCL` to a board-design script that drops:
    - Zynq UltraScale+ MPSoC IP (KV260 preset)
    - `npu_core_wrapper` as a packaged IP
    - AXI Interconnect / Smart Connect between PS HP/HPC/HPM and the NPU
    - Clock Wizard for the 400 MHz core clock
-3. **`write_bitstream`** — only run after (1) and (2) are green; otherwise
-   you burn an hour for nothing.
-4. **Device-tree overlay** — see `sw/dtbo/` (to be created) for the
+3. **Top-level status gate** — run `./vivado/build.sh top-status` to
+   record whether the full top-level prerequisites exist. This writes
+   `build/reports/top_level_bitstream_status.txt`.
+4. **`write_bitstream`** — only run after full top-level implementation is
+   valid and post-implementation timing is clean; otherwise this is not board
+   evidence.
+5. **Device-tree overlay** — see `sw/dtbo/` (to be created) for the
    Ubuntu 22.04 FPGA Manager flow. Files: `pccx_npu.dtsi`,
    `shell.json`, `Makefile`.
-5. **KV260 deploy**:
+6. **KV260 deploy**:
    ```bash
    sudo xmutil unloadapp
    sudo cp build/pccx_v002_kv260.bit.bin \
@@ -92,7 +102,7 @@ evidence, not a timing-closure claim.
    sudo xmutil loadapp pccx_npu
    dmesg | tail -30     # look for successful overlay + no AXI timeouts
    ```
-6. **Driver smoke** — `sw/driver/` is still skeleton per the repo's
+7. **Driver smoke** — `sw/driver/` is still skeleton per the repo's
    implementation-status table; bring that up in parallel with the
    board-side work.
 

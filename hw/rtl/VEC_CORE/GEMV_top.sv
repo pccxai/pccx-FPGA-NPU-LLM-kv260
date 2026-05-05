@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 pccxai
 `timescale 1ns / 1ps
 
 `include "GEMV_Vec_Matrix_MUL.svh"
@@ -83,6 +85,25 @@ module GEMV_top
   logic signed [param.fixed_mant_width+2:0] fmap_LUT_wire[0:param.fmap_cache_out_cnt-1][0:(1<<param.weight_width)-1];
 
   logic fmap_ready_wire;
+  logic fmap_broadcast_valid_q;
+
+  // GEMV_generate_lut is combinational. The recurrent accumulator needs a
+  // one-cycle batch-start pulse, so generate it at the clocked GEMV boundary
+  // from the level-valid fmap broadcast.
+  always_ff @(posedge clk) begin
+    if (!rst_n) begin
+      fmap_broadcast_valid_q <= 1'b0;
+      fmap_ready_wire        <= 1'b0;
+    end else begin
+      fmap_ready_wire        <= IN_fmap_broadcast_valid & ~fmap_broadcast_valid_q;
+      fmap_broadcast_valid_q <= IN_fmap_broadcast_valid;
+    end
+  end
+
+  assign OUT_weight_ready_A = IN_activated_lane[A] & IN_weight_valid_A;
+  assign OUT_weight_ready_B = IN_activated_lane[B] & IN_weight_valid_B;
+  assign OUT_weight_ready_C = IN_activated_lane[C] & IN_weight_valid_C;
+  assign OUT_weight_ready_D = IN_activated_lane[D] & IN_weight_valid_D;
 
   GEMV_generate_lut #(
       .param(VecCoreDefaultCfg)
@@ -91,8 +112,7 @@ module GEMV_top
       .IN_fmap_broadcast_valid(IN_fmap_broadcast_valid),
       .IN_cached_emax_out(IN_cached_emax_out),
 
-      .OUT_fmap_LUT  (fmap_LUT_wire),
-      .OUT_fmap_ready(fmap_ready_wire)
+      .OUT_fmap_LUT(fmap_LUT_wire)
   );
 
 

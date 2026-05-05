@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 pccxai
 `timescale 1ns / 1ps
 `include "GEMM_Array.svh"
 `include "GLOBAL_CONST.svh"
@@ -43,6 +45,7 @@ module mem_dispatcher #() (
     // ===| AXI-Stream ACP (external) |==========================================
     axis_if.slave  S_AXIS_ACP_FMAP,
     axis_if.master M_AXIS_ACP_RESULT,
+    axis_if.master M_AXIS_L1_FMAP,
 
     // ===| Engine uop inputs |===================================================
     input  memory_control_uop_t IN_LOAD_uop,
@@ -183,78 +186,191 @@ module mem_dispatcher #() (
       .rd_xyz(weight_shape_rd_xyz)
   );
 
-  // ===| Shape totals (word counts for DMA) |====================================
-  logic [16:0] fmap_word_total;
-  logic [16:0] weight_word_total;
-
-  // Total BF16 elements → 128-bit words: ceil(X*Y*Z / 8)
-  assign fmap_word_total   = (fmap_read_arr_shape_X   * fmap_read_arr_shape_Y   * fmap_read_arr_shape_Z   + 7) >> 3;
-  assign weight_word_total = (weight_read_arr_shape_X * weight_read_arr_shape_Y * weight_read_arr_shape_Z + 7) >> 3;
-
   // ===| LOAD uop → ACP / NPU command translation |==============================
-  logic    IN_acp_rdy;
+  // The shape RAM returns BF16 element dimensions, but ACP/NPU commands need
+  // 128-bit word counts. Keep that arithmetic behind a registered boundary:
+  //   s1: capture route/base/shape
+  //   s2: compute X*Y
+  //   s3: keep the low product operands required by the 17-bit word contract
+  //   s4: register low X*Y and Z from the first product DSP
+  //   s5: register operands at the second product DSP input boundary
+  //   s6: compute low 20 bits of X*Y*Z
+  //   s7: compute ceil(X*Y*Z/8) and enqueue descriptor
+  //   issue: enqueue ACP/NPU descriptor
+  // This removes the prior shape_const_ram -> DSP -> DSP -> descriptor path
+  // from the 400 MHz core cycle while preserving the external command contract.
+  logic        IN_acp_rdy;
   acp_uop_t acp_uop;
-  logic    acp_rx_start;
+  logic        acp_rx_start;
 
-  logic    IN_npu_rdy;
+  logic        IN_npu_rdy;
   npu_uop_t npu_uop;
-  logic    npu_rx_start;
+  logic        npu_rx_start;
+
+  logic        load_s1_valid;
+  logic        load_s1_to_acp;
+  logic        load_s1_to_npu;
+  logic        load_s1_write_en;
+  logic [16:0] load_s1_base_addr;
+  logic [16:0] load_s1_shape_x;
+  logic [16:0] load_s1_shape_y;
+  logic [16:0] load_s1_shape_z;
+
+  logic        load_s2_valid;
+  logic        load_s2_to_acp;
+  logic        load_s2_to_npu;
+  logic        load_s2_write_en;
+  logic [16:0] load_s2_base_addr;
+  logic [33:0] load_s2_shape_xy;
+  logic [16:0] load_s2_shape_z;
+
+  logic        load_s3_valid;
+  logic        load_s3_to_acp;
+  logic        load_s3_to_npu;
+  logic        load_s3_write_en;
+  logic [16:0] load_s3_base_addr;
+  logic [19:0] load_s3_shape_xy_low;
+  logic [16:0] load_s3_shape_z;
+
+  logic        load_s4_valid;
+  logic        load_s4_to_acp;
+  logic        load_s4_to_npu;
+  logic        load_s4_write_en;
+  logic [16:0] load_s4_base_addr;
+  logic [19:0] load_s4_shape_xy_low;
+  logic [16:0] load_s4_shape_z;
+
+  logic        load_s5_valid;
+  logic        load_s5_to_acp;
+  logic        load_s5_to_npu;
+  logic        load_s5_write_en;
+  logic [16:0] load_s5_base_addr;
+  logic [19:0] load_s5_shape_xy_low;
+  logic [16:0] load_s5_shape_z;
+  logic [36:0] load_s5_elem_low_product;
+
+  logic        load_s6_valid;
+  logic        load_s6_to_acp;
+  logic        load_s6_to_npu;
+  logic        load_s6_write_en;
+  logic [16:0] load_s6_base_addr;
+  logic [19:0] load_s6_elem_low20;
+  logic [16:0] load_s6_word_floor;
+  logic        load_s6_word_round;
+
+  logic        load_s7_valid;
+  logic        load_s7_to_acp;
+  logic        load_s7_to_npu;
+  logic        load_s7_write_en;
+  logic [16:0] load_s7_base_addr;
+  logic [16:0] load_s7_word_total;
+
+  assign load_s5_elem_low_product = load_s5_shape_xy_low * load_s5_shape_z;
+  assign load_s6_word_floor       = load_s6_elem_low20[19:3];
+  assign load_s6_word_round       = |load_s6_elem_low20[2:0];
 
   always_ff @(posedge clk_core) begin
     if (!rst_n_core) begin
-      acp_rx_start <= 1'b0;
-      npu_rx_start <= 1'b0;
-      IN_acp_rdy   <= 1'b0;
-      IN_npu_rdy   <= 1'b0;
+      acp_rx_start      <= 1'b0;
+      npu_rx_start      <= 1'b0;
+      IN_acp_rdy        <= 1'b0;
+      IN_npu_rdy        <= 1'b0;
+      acp_uop           <= '0;
+      npu_uop           <= '0;
+      load_s1_valid     <= 1'b0;
+      load_s1_to_acp    <= 1'b0;
+      load_s1_to_npu    <= 1'b0;
+      load_s1_write_en  <= 1'b0;
+      load_s1_base_addr <= '0;
+      load_s1_shape_x   <= '0;
+      load_s1_shape_y   <= '0;
+      load_s1_shape_z   <= '0;
+      load_s2_valid     <= 1'b0;
+      load_s2_to_acp    <= 1'b0;
+      load_s2_to_npu    <= 1'b0;
+      load_s2_write_en  <= 1'b0;
+      load_s2_base_addr <= '0;
+      load_s2_shape_xy  <= '0;
+      load_s2_shape_z   <= '0;
+      load_s3_valid     <= 1'b0;
+      load_s3_to_acp    <= 1'b0;
+      load_s3_to_npu    <= 1'b0;
+      load_s3_write_en  <= 1'b0;
+      load_s3_base_addr <= '0;
+      load_s3_shape_xy_low <= '0;
+      load_s3_shape_z      <= '0;
+      load_s4_valid      <= 1'b0;
+      load_s4_to_acp     <= 1'b0;
+      load_s4_to_npu     <= 1'b0;
+      load_s4_write_en   <= 1'b0;
+      load_s4_base_addr  <= '0;
+      load_s4_shape_xy_low <= '0;
+      load_s4_shape_z      <= '0;
+      load_s5_valid      <= 1'b0;
+      load_s5_to_acp     <= 1'b0;
+      load_s5_to_npu     <= 1'b0;
+      load_s5_write_en   <= 1'b0;
+      load_s5_base_addr  <= '0;
+      load_s5_shape_xy_low <= '0;
+      load_s5_shape_z      <= '0;
+      load_s6_valid      <= 1'b0;
+      load_s6_to_acp     <= 1'b0;
+      load_s6_to_npu     <= 1'b0;
+      load_s6_write_en   <= 1'b0;
+      load_s6_base_addr  <= '0;
+      load_s6_elem_low20 <= '0;
+      load_s7_valid      <= 1'b0;
+      load_s7_to_acp     <= 1'b0;
+      load_s7_to_npu     <= 1'b0;
+      load_s7_write_en   <= 1'b0;
+      load_s7_base_addr  <= '0;
+      load_s7_word_total <= '0;
     end else begin
       acp_rx_start <= 1'b0;
       npu_rx_start <= 1'b0;
       IN_acp_rdy   <= 1'b0;
       IN_npu_rdy   <= 1'b0;
 
+      load_s1_valid     <= 1'b0;
+      load_s1_to_acp    <= 1'b0;
+      load_s1_to_npu    <= 1'b0;
+      load_s1_write_en  <= 1'b0;
+      load_s1_base_addr <= '0;
+      load_s1_shape_x   <= fmap_read_arr_shape_X;
+      load_s1_shape_y   <= fmap_read_arr_shape_Y;
+      load_s1_shape_z   <= fmap_read_arr_shape_Z;
+
       case (IN_LOAD_uop.data_dest)
         // Host DDR4 → L2 (feature map DMA in)
         from_host_to_L2: begin
-          acp_uop <= '{
-              write_en  : `PORT_MOD_E_WRITE,
-              base_addr : IN_LOAD_uop.dest_addr,
-              end_addr  : IN_LOAD_uop.dest_addr + 17'(fmap_word_total)
-          };
-          acp_rx_start <= 1'b1;
-          IN_acp_rdy   <= 1'b1;
+          load_s1_valid     <= 1'b1;
+          load_s1_to_acp    <= 1'b1;
+          load_s1_write_en  <= `PORT_MOD_E_WRITE;
+          load_s1_base_addr <= IN_LOAD_uop.dest_addr;
         end
 
         // L2 → host DDR4 (result DMA out)
         from_L2_to_host: begin
-          acp_uop <= '{
-              write_en  : `PORT_MOD_E_READ,
-              base_addr : IN_LOAD_uop.src_addr,
-              end_addr  : IN_LOAD_uop.src_addr + 17'(fmap_word_total)
-          };
-          acp_rx_start <= 1'b1;
-          IN_acp_rdy   <= 1'b1;
+          load_s1_valid     <= 1'b1;
+          load_s1_to_acp    <= 1'b1;
+          load_s1_write_en  <= `PORT_MOD_E_READ;
+          load_s1_base_addr <= IN_LOAD_uop.src_addr;
         end
 
         // L2 → GEMM fmap broadcast
         from_L2_to_L1_GEMM: begin
-          npu_uop <= '{
-              write_en  : `PORT_MOD_E_READ,
-              base_addr : IN_LOAD_uop.src_addr,
-              end_addr  : IN_LOAD_uop.src_addr + 17'(fmap_word_total)
-          };
-          npu_rx_start <= 1'b1;
-          IN_npu_rdy   <= 1'b1;
+          load_s1_valid     <= 1'b1;
+          load_s1_to_npu    <= 1'b1;
+          load_s1_write_en  <= `PORT_MOD_E_READ;
+          load_s1_base_addr <= IN_LOAD_uop.src_addr;
         end
 
         // L2 → GEMV fmap broadcast
         from_L2_to_L1_GEMV: begin
-          npu_uop <= '{
-              write_en  : `PORT_MOD_E_READ,
-              base_addr : IN_LOAD_uop.src_addr,
-              end_addr  : IN_LOAD_uop.src_addr + 17'(fmap_word_total)
-          };
-          npu_rx_start <= 1'b1;
-          IN_npu_rdy   <= 1'b1;
+          load_s1_valid     <= 1'b1;
+          load_s1_to_npu    <= 1'b1;
+          load_s1_write_en  <= `PORT_MOD_E_READ;
+          load_s1_base_addr <= IN_LOAD_uop.src_addr;
         end
 
         // L2 → CVO input (handled by mem_CVO_stream_bridge below)
@@ -262,6 +378,72 @@ module mem_dispatcher #() (
 
         default: ;
       endcase
+
+      load_s2_valid     <= load_s1_valid;
+      load_s2_to_acp    <= load_s1_to_acp;
+      load_s2_to_npu    <= load_s1_to_npu;
+      load_s2_write_en  <= load_s1_write_en;
+      load_s2_base_addr <= load_s1_base_addr;
+      load_s2_shape_xy  <= load_s1_shape_x * load_s1_shape_y;
+      load_s2_shape_z   <= load_s1_shape_z;
+
+      load_s3_valid      <= load_s2_valid;
+      load_s3_to_acp     <= load_s2_to_acp;
+      load_s3_to_npu     <= load_s2_to_npu;
+      load_s3_write_en   <= load_s2_write_en;
+      load_s3_base_addr  <= load_s2_base_addr;
+      load_s3_shape_xy_low <= load_s2_shape_xy[19:0];
+      load_s3_shape_z      <= load_s2_shape_z;
+
+      load_s4_valid      <= load_s3_valid;
+      load_s4_to_acp     <= load_s3_to_acp;
+      load_s4_to_npu     <= load_s3_to_npu;
+      load_s4_write_en   <= load_s3_write_en;
+      load_s4_base_addr  <= load_s3_base_addr;
+      load_s4_shape_xy_low <= load_s3_shape_xy_low;
+      load_s4_shape_z      <= load_s3_shape_z;
+
+      load_s5_valid      <= load_s4_valid;
+      load_s5_to_acp     <= load_s4_to_acp;
+      load_s5_to_npu     <= load_s4_to_npu;
+      load_s5_write_en   <= load_s4_write_en;
+      load_s5_base_addr  <= load_s4_base_addr;
+      load_s5_shape_xy_low <= load_s4_shape_xy_low;
+      load_s5_shape_z      <= load_s4_shape_z;
+
+      load_s6_valid      <= load_s5_valid;
+      load_s6_to_acp     <= load_s5_to_acp;
+      load_s6_to_npu     <= load_s5_to_npu;
+      load_s6_write_en   <= load_s5_write_en;
+      load_s6_base_addr  <= load_s5_base_addr;
+      load_s6_elem_low20 <= load_s5_elem_low_product[19:0];
+
+      load_s7_valid      <= load_s6_valid;
+      load_s7_to_acp     <= load_s6_to_acp;
+      load_s7_to_npu     <= load_s6_to_npu;
+      load_s7_write_en   <= load_s6_write_en;
+      load_s7_base_addr  <= load_s6_base_addr;
+      load_s7_word_total <= load_s6_word_floor + 17'(load_s6_word_round);
+
+      if (load_s7_valid && load_s7_to_acp) begin
+        acp_uop <= '{
+            write_en  : load_s7_write_en,
+            base_addr : load_s7_base_addr,
+            end_addr  : load_s7_base_addr + load_s7_word_total
+        };
+        acp_rx_start <= 1'b1;
+        IN_acp_rdy   <= 1'b1;
+      end
+
+      if (load_s7_valid && load_s7_to_npu) begin
+        npu_uop <= '{
+            write_en  : load_s7_write_en,
+            base_addr : load_s7_base_addr,
+            end_addr  : load_s7_base_addr + load_s7_word_total
+        };
+        npu_rx_start <= 1'b1;
+        IN_npu_rdy   <= 1'b1;
+      end
     end
   end
 
@@ -293,32 +475,19 @@ module mem_dispatcher #() (
   // ===| L2 cache controller |===================================================
   // CVO bridge drives L2 port B when active; otherwise port B is driven by
   // the NPU DMA state machine in mem_GLOBAL_cache.
+  logic        cvo_l2_valid;
   logic        cvo_l2_we;
   logic [16:0] cvo_l2_addr;
   logic [127:0] cvo_l2_wdata;
   logic [127:0] cvo_l2_rdata;
 
-  logic        npu_l2_we;
-  logic [16:0] npu_l2_addr;
   logic [127:0] npu_l2_wdata;
   logic [127:0] npu_l2_rdata;
 
-  // Port B arbitration: CVO bridge wins when busy
-  logic        final_npu_we;
-  logic [16:0] final_npu_addr;
-  logic [127:0] final_npu_wdata;
-
-  always_comb begin
-    if (cvo_bridge_busy) begin
-      final_npu_we    = cvo_l2_we;
-      final_npu_addr  = cvo_l2_addr;
-      final_npu_wdata = cvo_l2_wdata;
-    end else begin
-      final_npu_we    = npu_l2_we;
-      final_npu_addr  = npu_l2_addr;
-      final_npu_wdata = npu_l2_wdata;
-    end
-  end
+  // Direct NPU writes into L2 are reserved for the result-writeback phase.
+  // Until that producer is wired, keep the inactive write data deterministic;
+  // final_npu_we remains deasserted for current L2->L1 read routes.
+  assign npu_l2_wdata = '0;
 
   // Route L2 rdata to the appropriate consumer
   assign cvo_l2_rdata = npu_l2_rdata;  // shared read bus
@@ -331,6 +500,7 @@ module mem_dispatcher #() (
 
       .S_AXIS_ACP_FMAP  (S_AXIS_ACP_FMAP),
       .M_AXIS_ACP_RESULT(M_AXIS_ACP_RESULT),
+      .M_AXIS_NPU_FMAP  (M_AXIS_L1_FMAP),
 
       // ACP control
       .IN_acp_write_en  (OUT_acp_cmd.write_en),
@@ -346,7 +516,14 @@ module mem_dispatcher #() (
       .IN_npu_rx_start  (OUT_npu_cmd_valid),
       .OUT_npu_is_busy  (npu_is_busy_wire),
 
-      .IN_npu_wdata     (final_npu_wdata),
+      // Direct port-B owner for CVO L2 read/write bursts.
+      .IN_npu_direct_en   (cvo_bridge_busy),
+      .IN_npu_direct_valid(cvo_l2_valid),
+      .IN_npu_direct_we   (cvo_l2_we),
+      .IN_npu_direct_addr (cvo_l2_addr),
+      .IN_npu_direct_wdata(cvo_l2_wdata),
+
+      .IN_npu_wdata     (npu_l2_wdata),
       .OUT_npu_rdata    (npu_l2_rdata)
   );
 
@@ -363,6 +540,7 @@ module mem_dispatcher #() (
       .OUT_done           (cvo_bridge_done),
 
       // L2 port B direct access
+      .OUT_l2_valid       (cvo_l2_valid),
       .OUT_l2_we          (cvo_l2_we),
       .OUT_l2_addr        (cvo_l2_addr),
       .OUT_l2_wdata       (cvo_l2_wdata),

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 pccxai
 `timescale 1ns / 1ps
 `include "GLOBAL_CONST.svh"
 
@@ -12,8 +14,8 @@ import bf16_math_pkg::*;
 // Internal fmt : Q4.12 signed fixed-point (16-bit). 1.0 = 0x1000 = 4096,
 //                π ≈ 0x3244 = 12868.
 // CORDIC gain K: 14 iterations ≈ 0.60725. Pre-baked into x0 = K * 4096 = 0x09B8.
-// Pipeline     : 16 clocks  (1 convert-in + 14 CORDIC + 1 convert-out).
-// Latency      : 16 cycles total.
+// Pipeline     : 17 clocks  (1 convert-in + 14 CORDIC + 2 convert-out).
+// Latency      : 17 cycles total.
 // Throughput   : 1 sin/cos pair per cycle in steady state.
 // Handshake    : Push-only; OUT_valid mirrors the input pipeline.
 // Reset state  : All pipeline registers cleared; OUT_valid = 0.
@@ -154,57 +156,76 @@ module CVO_cordic_unit (
     end
   endgenerate
 
-  // ===| Stage 15: Q4.12 → BF16 Conversion |=====================================
+  // ===| Stages 15-16: Q4.12 → BF16 Conversion |================================
   // cos result = cx[14], sin result = cy[14]
 
-  function automatic logic [15:0] q412_to_bf16(input logic signed [15:0] val);
-    automatic logic        sign_out;
-    automatic logic [14:0] mag;
-    automatic logic [ 3:0] leading;
-    automatic logic [ 7:0] exp_out;
-    automatic logic [ 6:0] mant_out;
+  typedef struct packed {
+    logic        sign;
+    logic [14:0] mag;
+    logic [ 3:0] leading;
+  } q412_pack_prep_t;
 
-    sign_out = val[15];
-    mag      = sign_out ? 15'(-$signed(val)) : 15'(val);
+  function automatic q412_pack_prep_t q412_prepare(input logic signed [15:0] val);
+    automatic q412_pack_prep_t prep;
+
+    prep.sign    = val[15];
+    prep.mag     = prep.sign ? 15'(-$signed(val)) : 15'(val);
+    prep.leading = 4'd0;
 
     // Find leading 1 position (bit 14 = highest in 15-bit magnitude)
-    leading = 4'd0;
     for (int b = 14; b >= 0; b--) begin
-      if (mag[b]) begin
-        leading = 4'(b);
+      if (prep.mag[b]) begin
+        prep.leading = 4'(b);
         break;
       end
     end
 
-    if (mag == 0) begin
+    return prep;
+  endfunction
+
+  function automatic logic [15:0] q412_pack_bf16(input q412_pack_prep_t prep);
+    automatic logic [ 7:0] exp_out;
+    automatic logic [ 6:0] mant_out;
+
+    if (prep.mag == 0) begin
       return 16'd0;
     end else begin
       // biased exponent: value_in_Q412 = mag * 2^(leading-12)
       // BF16 exponent bias = 127; real exp = leading - 12
-      exp_out = 8'd127 + leading - 8'd12;
+      exp_out = 8'd127 + prep.leading - 8'd12;
 
       // 7 mantissa bits below the leading 1
-      if (leading >= 7)
-        mant_out = mag[leading-1 -: 7];
+      if (prep.leading >= 7)
+        mant_out = prep.mag[prep.leading-1 -: 7];
       else
         // SV disallows variable part-selects, so shift the full magnitude
         // left to align its `leading` significant bits into the top 7
         // positions, then truncate to 7 bits.
-        mant_out = 7'(mag << (7 - leading));
+        mant_out = 7'(prep.mag << (7 - prep.leading));
 
-      return {sign_out, exp_out, mant_out};
+      return {prep.sign, exp_out, mant_out};
     end
   endfunction
 
+  q412_pack_prep_t sin_pack_prep;
+  q412_pack_prep_t cos_pack_prep;
+  logic            pack_valid;
+
   always_ff @(posedge clk) begin
     if (!rst_n) begin
+      sin_pack_prep <= '0;
+      cos_pack_prep <= '0;
+      pack_valid    <= 1'b0;
       OUT_cos_bf16 <= 16'd0;
       OUT_sin_bf16 <= 16'd0;
       OUT_valid    <= 1'b0;
     end else begin
-      OUT_valid    <= cv[14];
-      OUT_cos_bf16 <= q412_to_bf16(cx[14]);
-      OUT_sin_bf16 <= q412_to_bf16(cy[14]);
+      sin_pack_prep <= q412_prepare(cy[14]);
+      cos_pack_prep <= q412_prepare(cx[14]);
+      pack_valid    <= cv[14];
+      OUT_valid     <= pack_valid;
+      OUT_cos_bf16  <= q412_pack_bf16(cos_pack_prep);
+      OUT_sin_bf16  <= q412_pack_bf16(sin_pack_prep);
     end
   end
 

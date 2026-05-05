@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 pccxai
 `timescale 1ns / 1ps
 
 `include "GEMV_Vec_Matrix_MUL.svh"
@@ -34,16 +36,7 @@ module GEMV_generate_lut
     // exponent field is carried here; matches GEMV_top's port width.
     input logic [dtype_pkg::Bf16ExpWidth-1:0] IN_cached_emax_out[0:param.fmap_cache_out_cnt-1],
     // LUT depth = 2^weight_width (one entry per signed INT4 value, -8..+7).
-    output logic signed [param.fixed_mant_width+2:0] OUT_fmap_LUT[0:param.fmap_cache_out_cnt-1][0:(1<<param.weight_width)-1],
-    // OUT_fmap_ready feeds GEMV_accumulate.init, which the reduction_branch
-    // header documents as a one-cycle pulse opening a new GEMV batch. This
-    // module is pure-combinational with no clk/rst_n, so it cannot produce
-    // such a pulse on its own; fmap_cache.rd_valid is also a level held
-    // high across the 2048-cycle broadcast burst. Driving this port from
-    // the level-valid signal would gate the accumulator off for the whole
-    // burst. Left undriven until a clocked edge-detector lands at the
-    // consumer side.
-    output logic OUT_fmap_ready
+    output logic signed [param.fixed_mant_width+2:0] OUT_fmap_LUT[0:param.fmap_cache_out_cnt-1][0:(1<<param.weight_width)-1]
 );
   genvar idx, w;
   generate

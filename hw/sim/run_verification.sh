@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 pccxai
 # Unified verification runner for pccx-FPGA.
 #
 # Runs every known testbench in deterministic order and reports a one-line
@@ -34,6 +36,7 @@ declare -A TB_DEPS=(
     [tb_FROM_mat_result_packer]="MAT_CORE/FROM_mat_result_packer.sv"
     [tb_barrel_shifter_BF16]="barrel_shifter_BF16.sv"
     [tb_ctrl_npu_decoder]="NPU_Controller/NPU_Control_Unit/ISA_PACKAGE/isa_pkg.sv NPU_Controller/NPU_Control_Unit/ctrl_npu_decoder.sv"
+    [tb_CVO_sfu_reduce_sum]="NPU_Controller/NPU_Control_Unit/ISA_PACKAGE/isa_pkg.sv Library/Algorithms/BF16_math.sv CVO_CORE/CVO_sfu_unit.sv"
     [tb_mem_u_operation_queue]="Constants/compilePriority_Order/E_obs_pkg/perf_counter_pkg.sv NPU_Controller/NPU_Control_Unit/ISA_PACKAGE/isa_pkg.sv MEM_control/IO/mem_u_operation_queue.sv"
     [tb_GEMM_fmap_staggered_delay]="MAT_CORE/GEMM_fmap_staggered_delay.sv"
     [tb_v002_runtime_smoke_program]="NPU_Controller/NPU_Control_Unit/ISA_PACKAGE/isa_pkg.sv NPU_Controller/NPU_Control_Unit/ctrl_npu_decoder.sv NPU_Controller/Global_Scheduler.sv"
@@ -50,9 +53,10 @@ declare -A TB_CORE=(
     [tb_FROM_mat_result_packer]=5
     [tb_barrel_shifter_BF16]=6
     [tb_ctrl_npu_decoder]=7
-    [tb_mem_u_operation_queue]=8
-    [tb_GEMM_fmap_staggered_delay]=9
-    [tb_v002_runtime_smoke_program]=10
+    [tb_CVO_sfu_reduce_sum]=8
+    [tb_mem_u_operation_queue]=9
+    [tb_GEMM_fmap_staggered_delay]=10
+    [tb_v002_runtime_smoke_program]=11
 )
 
 TB_LIST=(
@@ -64,6 +68,7 @@ TB_LIST=(
     tb_FROM_mat_result_packer
     tb_barrel_shifter_BF16
     tb_ctrl_npu_decoder
+    tb_CVO_sfu_reduce_sum
     tb_mem_u_operation_queue
     tb_GEMM_fmap_staggered_delay
     tb_v002_runtime_smoke_program
@@ -130,6 +135,12 @@ while (($#)); do
 done
 
 mkdir -p "$WORK_ROOT"
+
+# Keep concurrent local-candidate / direct-regression invocations from sharing
+# the same xsim work directories at the same time. The per-TB work paths stay
+# stable for evidence, but only one runner mutates them at once.
+exec 8>"$WORK_ROOT/.run_verification.lock"
+flock 8
 
 # Build the pccx-lab bridge binary if stale / missing.
 if [[ ! -x "$PCCX_CLI_BIN" ]]; then

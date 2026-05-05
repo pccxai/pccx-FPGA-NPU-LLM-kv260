@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 pccxai
 `timescale 1ns / 1ps
 
 `include "GLOBAL_CONST.svh"
@@ -176,28 +178,33 @@ module GEMM_systolic_top #(
 
   // ===| e_max Delay Pipe for Normalization alignment |=======
   localparam TOTAL_LATENCY = `SYSTOLIC_TOTAL_LATENCY;
-  logic [`BF16_EXP_WIDTH-1:0] emax_pipe[0:`ARRAY_SIZE_H-1][0:TOTAL_LATENCY-1];
+  localparam int EMAX_PIPE_WIDTH = `ARRAY_SIZE_H * `BF16_EXP_WIDTH;
+  logic [EMAX_PIPE_WIDTH-1:0] emax_pipe[0:TOTAL_LATENCY-1];
+  logic [EMAX_PIPE_WIDTH-1:0] emax_pipe_in;
+
+  always_comb begin
+    for (int c = 0; c < `ARRAY_SIZE_H; c++) begin
+      emax_pipe_in[c*`BF16_EXP_WIDTH+:`BF16_EXP_WIDTH] = IN_cached_emax_out[c];
+    end
+  end
 
   always_ff @(posedge clk) begin
     if (!rst_n) begin
-      for (int c = 0; c < `ARRAY_SIZE_H; c++) begin
-        for (int d = 0; d < TOTAL_LATENCY; d++) begin
-          emax_pipe[c][d] <= 0;
-        end
+      for (int d = 0; d < TOTAL_LATENCY; d++) begin
+        emax_pipe[d] <= '0;
       end
     end else begin
-      for (int c = 0; c < `ARRAY_SIZE_H; c++) begin
-        emax_pipe[c][0] <= IN_cached_emax_out[c];
-        for (int d = 1; d < TOTAL_LATENCY; d++) begin
-          emax_pipe[c][d] <= emax_pipe[c][d-1];
-        end
+      emax_pipe[0] <= emax_pipe_in;
+      for (int d = 1; d < TOTAL_LATENCY; d++) begin
+        emax_pipe[d] <= emax_pipe[d-1];
       end
     end
   end
 
   always_comb begin
     for (int c = 0; c < `ARRAY_SIZE_H; c++) begin
-      delayed_emax_32[c] = emax_pipe[c][TOTAL_LATENCY-1];
+      delayed_emax_32[c] =
+        emax_pipe[TOTAL_LATENCY-1][c*`BF16_EXP_WIDTH+:`BF16_EXP_WIDTH];
     end
   end
 
