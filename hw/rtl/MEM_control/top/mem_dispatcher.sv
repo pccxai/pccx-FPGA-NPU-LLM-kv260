@@ -383,8 +383,6 @@ module mem_dispatcher #() (
   logic [127:0] cvo_l2_wdata;
   logic [127:0] cvo_l2_rdata;
 
-  logic        npu_l2_we;
-  logic [16:0] npu_l2_addr;
   logic [127:0] npu_l2_wdata;
   logic [127:0] npu_l2_rdata;
 
@@ -392,23 +390,6 @@ module mem_dispatcher #() (
   // Until that producer is wired, keep the inactive write data deterministic;
   // final_npu_we remains deasserted for current L2->L1 read routes.
   assign npu_l2_wdata = '0;
-
-  // Port B arbitration: CVO bridge wins when busy
-  logic        final_npu_we;
-  logic [16:0] final_npu_addr;
-  logic [127:0] final_npu_wdata;
-
-  always_comb begin
-    if (cvo_bridge_busy) begin
-      final_npu_we    = cvo_l2_we;
-      final_npu_addr  = cvo_l2_addr;
-      final_npu_wdata = cvo_l2_wdata;
-    end else begin
-      final_npu_we    = npu_l2_we;
-      final_npu_addr  = npu_l2_addr;
-      final_npu_wdata = npu_l2_wdata;
-    end
-  end
 
   // Route L2 rdata to the appropriate consumer
   assign cvo_l2_rdata = npu_l2_rdata;  // shared read bus
@@ -437,7 +418,13 @@ module mem_dispatcher #() (
       .IN_npu_rx_start  (OUT_npu_cmd_valid),
       .OUT_npu_is_busy  (npu_is_busy_wire),
 
-      .IN_npu_wdata     (final_npu_wdata),
+      // Direct port-B owner for CVO L2 read/write bursts.
+      .IN_npu_direct_en   (cvo_bridge_busy),
+      .IN_npu_direct_we   (cvo_l2_we),
+      .IN_npu_direct_addr (cvo_l2_addr),
+      .IN_npu_direct_wdata(cvo_l2_wdata),
+
+      .IN_npu_wdata     (npu_l2_wdata),
       .OUT_npu_rdata    (npu_l2_rdata)
   );
 

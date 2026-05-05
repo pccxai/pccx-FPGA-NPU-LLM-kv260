@@ -19,8 +19,8 @@ import isa_pkg::*;
 //   Port A — ACP DMA : host DDR4 ↔ L2 via AXI-Stream (CDC via mem_BUFFER).
 //   Port B — NPU     : compute engines (GEMM / GEMV / CVO) streaming R/W.
 // Arbitration  : Port B is driven externally via IN_npu_* signals; the
-//                upstream mem_dispatcher mux (final_npu_*) decides which
-//                producer (NPU FSM vs CVO bridge) wins port B per cycle.
+//                upstream mem_dispatcher drives IN_npu_direct_* when the CVO
+//                bridge owns port B; otherwise the local NPU FSM owns it.
 // Latency      : ACP/NPU read = URAM_LATENCY cycles after read issue;
 //                tracked via acp_rd_valid_pipe.
 // Throughput   : 1 ACP transaction + 1 NPU transaction in flight in parallel.
@@ -55,6 +55,13 @@ module mem_GLOBAL_cache (
     input  logic         IN_npu_rx_start,
     input  logic  [16:0] IN_npu_end_addr,
     output logic         OUT_npu_is_busy,
+
+    // Direct port-B owner: CVO bridge in mem_dispatcher. When asserted, the
+    // local NPU FSM is held so the bridge can issue explicit L2 reads/writes.
+    input  logic         IN_npu_direct_en,
+    input  logic         IN_npu_direct_we,
+    input  logic  [16:0] IN_npu_direct_addr,
+    input  logic [127:0] IN_npu_direct_wdata,
 
     input  logic [127:0] IN_npu_wdata,
     output logic [127:0] OUT_npu_rdata
@@ -139,10 +146,15 @@ module mem_GLOBAL_cache (
   logic [URAM_LATENCY-1:0] npu_rd_last_pipe;
   logic        npu_read_fire;
   logic        npu_write_fire;
+  logic        npu_direct_active;
+  logic        l2_npu_we;
+  logic [16:0] l2_npu_addr;
+  logic [127:0] l2_npu_wdata;
 
   assign OUT_npu_is_busy = npu_is_busy;
-  assign npu_read_fire   = npu_is_busy & ~npu_write_en & M_AXIS_NPU_FMAP.tready;
-  assign npu_write_fire  = npu_is_busy &  npu_write_en;
+  assign npu_direct_active = IN_npu_direct_en;
+  assign npu_read_fire   = npu_is_busy & ~npu_write_en & M_AXIS_NPU_FMAP.tready & ~npu_direct_active;
+  assign npu_write_fire  = npu_is_busy &  npu_write_en & ~npu_direct_active;
 
   assign M_AXIS_NPU_FMAP.tdata  = OUT_npu_rdata;
   assign M_AXIS_NPU_FMAP.tvalid = npu_rd_valid_pipe[URAM_LATENCY-1];
@@ -180,6 +192,18 @@ module mem_GLOBAL_cache (
     end
   end
 
+  always_comb begin
+    l2_npu_we    = npu_write_fire;
+    l2_npu_addr  = npu_ptr;
+    l2_npu_wdata = IN_npu_wdata;
+
+    if (npu_direct_active) begin
+      l2_npu_we    = IN_npu_direct_we;
+      l2_npu_addr  = IN_npu_direct_addr;
+      l2_npu_wdata = IN_npu_direct_wdata;
+    end
+  end
+
   // ===| L2 URAM (port B shared between ACP read-out and NPU compute) |=========
   // Port A → ACP DMA (write when host→L2, read when L2→host)
   // Port B → NPU compute (fmap broadcast, CVO streaming)
@@ -196,9 +220,9 @@ module mem_GLOBAL_cache (
       .OUT_acp_rdata(core_acp_tx_bus.tdata),
 
       // Port B — NPU compute
-      .IN_npu_we    (npu_write_fire),
-      .IN_npu_addr  (npu_ptr),
-      .IN_npu_wdata (IN_npu_wdata),
+      .IN_npu_we    (l2_npu_we),
+      .IN_npu_addr  (l2_npu_addr),
+      .IN_npu_wdata (l2_npu_wdata),
       .OUT_npu_rdata(OUT_npu_rdata)
   );
 

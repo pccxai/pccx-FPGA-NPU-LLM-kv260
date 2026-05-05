@@ -93,8 +93,11 @@ module mem_CVO_stream_bridge (
   logic [127:0] rd_deser_buf;  // latched 128-bit L2 word
   logic         rd_buf_valid;  // deser buffer holds valid data
   logic [ 15:0] elems_fed;  // elements delivered to CVO
+  logic         rd_word_valid;  // registered one-cycle L2 read command
+  logic [ 16:0] rd_word_addr;  // registered source word address
 
-  // 7-cycle read latency tracking
+  // 7-cycle read latency tracking after the registered address command is
+  // presented to the synchronous URAM port-B input.
   logic [  6:0] rd_lat_pipe;  // shift register: [6]=oldest, [0]=newest
 
   // ===| Write-side state |======================================================
@@ -147,6 +150,8 @@ module mem_CVO_stream_bridge (
       rd_elem_idx  <= '0;
       rd_deser_buf <= '0;
       rd_buf_valid <= 1'b0;
+      rd_word_valid <= 1'b0;
+      rd_word_addr  <= '0;
       rd_lat_pipe  <= 7'b0;
       elems_fed    <= '0;
       wr_elem_idx  <= '0;
@@ -172,6 +177,8 @@ module mem_CVO_stream_bridge (
             rd_word_cnt  <= '0;
             rd_elem_idx  <= '0;
             rd_buf_valid <= 1'b0;
+            rd_word_valid <= 1'b0;
+            rd_word_addr  <= 17'(IN_cvo_uop.src_addr >> 3);
             rd_lat_pipe  <= 7'b0;
             elems_fed    <= '0;
             wr_elem_idx  <= '0;
@@ -185,13 +192,18 @@ module mem_CVO_stream_bridge (
 
         // ===| READ: stream L2 → CVO; capture results in FIFO |================
         ST_READ: begin
-          // Advance latency shift register
-          rd_lat_pipe <= {rd_lat_pipe[5:0], 1'b0};
+          rd_word_valid <= 1'b0;
 
-          // Issue next L2 read when deser buffer is empty (pre-fetch when 3 left)
+          // Advance latency shift register
+          rd_lat_pipe <= {rd_lat_pipe[5:0], rd_word_valid};
+
+          // Issue next L2 read from a registered address boundary.  The prior
+          // combinational rd_base+rd_word_cnt path drove the URAM cascade
+          // address directly and became the post-synth top setup path.
           if (!rd_buf_valid && rd_word_cnt < 13'(total_words)) begin
-            rd_lat_pipe[0] <= 1'b1;  // mark new read outstanding
-            rd_word_cnt    <= rd_word_cnt + 13'd1;
+            rd_word_addr  <= 17'(rd_base + rd_word_cnt);
+            rd_word_valid <= 1'b1;
+            rd_word_cnt   <= rd_word_cnt + 13'd1;
           end
 
           // Capture L2 data 7 cycles after read issued
@@ -265,10 +277,10 @@ module mem_CVO_stream_bridge (
       OUT_l2_we    = 1'b1;
       OUT_l2_addr  = wr_word_addr;
       OUT_l2_wdata = wr_word_data;
-    end else if (state == ST_READ && rd_lat_pipe[0]) begin
-      // Issue read for next 128-bit word from src
+    end else if (state == ST_READ && rd_word_valid) begin
+      // Issue registered read for next 128-bit word from src.
       OUT_l2_we   = 1'b0;
-      OUT_l2_addr = 17'(rd_base + (rd_word_cnt - 13'd1));
+      OUT_l2_addr = rd_word_addr;
     end
   end
 

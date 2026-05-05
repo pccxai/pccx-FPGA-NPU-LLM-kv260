@@ -67,6 +67,11 @@ STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 COMMIT_SHORT="$(git -C "$ROOT_DIR" rev-parse --short=12 HEAD 2>/dev/null || printf 'nogit')"
 COMMIT_FULL="$(git -C "$ROOT_DIR" rev-parse HEAD 2>/dev/null || printf 'unknown')"
 BRANCH="$(git -C "$ROOT_DIR" branch --show-current 2>/dev/null || printf 'unknown')"
+GIT_STATUS_SHORT="$(git -C "$ROOT_DIR" status --short 2>/dev/null || true)"
+WORKTREE_DIRTY=0
+if [[ -n "$GIT_STATUS_SHORT" ]]; then
+    WORKTREE_DIRTY=1
+fi
 if [[ -z "$RUN_ID" ]]; then
     RUN_ID="$STAMP-$COMMIT_SHORT"
 fi
@@ -213,6 +218,7 @@ FULL_TOP_LEVEL_FLOW="$(field_from_status_file "$TOP_LEVEL_STATUS_FILE" 'full_top
     printf 'run_id=%s\n' "$RUN_ID"
     printf 'branch=%s\n' "$BRANCH"
     printf 'git_commit=%s\n' "$COMMIT_FULL"
+    printf 'worktree_dirty=%s\n' "$WORKTREE_DIRTY"
     printf 'dry_run=%s\n' "$DRY_RUN"
     printf 'run_synth=%s\n' "$RUN_SYNTH"
     printf 'require_impl_clean=%s\n' "$REQUIRE_IMPL_CLEAN"

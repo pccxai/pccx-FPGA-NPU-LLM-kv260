@@ -18,6 +18,10 @@
 //   shape address left behind by a previous MEMSET or LOAD. The descriptor
 //   contract is a registered timing boundary: a one-cycle LOAD pulse produces
 //   one ACP/NPU command after the mem_dispatcher shape-word pipeline.
+//
+//   The TB also checks the CVO bridge path owns the L2 port-B address/write
+//   boundary when a CVO uop is active. That catches a wiring class where the
+//   bridge computes OUT_l2_* correctly but the URAM wrapper never sees it.
 // ===============================================================================
 
 module tb_mem_dispatcher_shape_lookup;
@@ -259,6 +263,66 @@ module tb_mem_dispatcher_shape_lookup;
     end
   endtask
 
+  task automatic issue_cvo_l2_direct_read_smoke;
+    int wait_cycles;
+    begin
+      set_load_idle();
+      set_memset_idle();
+
+      cvo_uop = '{
+          cvo_func : CVO_SCALE,
+          src_addr : 17'd32,  // element address -> L2 word 4
+          dst_addr : 17'd96,
+          length   : 16'd8,
+          flags    : '0,
+          async    : SYNC_OP
+      };
+
+      cvo_uop_valid = 1'b1;
+      @(posedge clk_core);
+      #1;
+      cvo_uop_valid = 1'b0;
+
+      @(posedge clk_core);
+      #1;
+
+      checks++;
+      if (dut.u_l2_cache.IN_npu_direct_en !== 1'b1) begin
+        errors++;
+        $display("[%0t] mismatch cvo direct: direct_en=%0b exp 1",
+                 $time, dut.u_l2_cache.IN_npu_direct_en);
+      end
+
+      checks++;
+      if (dut.u_l2_cache.u_l2_uram.IN_npu_we !== 1'b0 ||
+          dut.u_l2_cache.u_l2_uram.IN_npu_addr !== 17'd4) begin
+        errors++;
+        $display("[%0t] mismatch cvo direct read: we=%0b addr=%0d exp we=0 addr=4",
+                 $time,
+                 dut.u_l2_cache.u_l2_uram.IN_npu_we,
+                 dut.u_l2_cache.u_l2_uram.IN_npu_addr);
+      end
+
+      // Feed one result per accepted CVO input so the bridge can drain and
+      // return to IDLE; the payload is not checked in this wiring smoke.
+      wait_cycles = 0;
+      while (cvo_busy && wait_cycles < 200) begin
+        cvo_result_valid <= cvo_valid && cvo_result_ready;
+        cvo_result       <= cvo_data;
+        @(posedge clk_core);
+        wait_cycles++;
+      end
+      cvo_result_valid <= 1'b0;
+      #1;
+
+      checks++;
+      if (cvo_busy !== 1'b0) begin
+        errors++;
+        $display("[%0t] mismatch cvo direct: bridge did not return idle", $time);
+      end
+    end
+  endtask
+
   // ===| Stimulus |=============================================================
   initial begin
     rst_n_core = 1'b0;
@@ -318,6 +382,8 @@ module tb_mem_dispatcher_shape_lookup;
                    6'd9,
                    17'd400,
                    ceil_words(4, 4, 4));
+
+    issue_cvo_l2_direct_read_smoke();
 
     if (errors == 0) begin
       $display("PASS: %0d cycles, mem_dispatcher shape lookup matches golden.", checks);
