@@ -37,6 +37,7 @@ declare -A TB_DEPS=(
     [tb_mem_u_operation_queue]="Constants/compilePriority_Order/E_obs_pkg/perf_counter_pkg.sv NPU_Controller/NPU_Control_Unit/ISA_PACKAGE/isa_pkg.sv MEM_control/IO/mem_u_operation_queue.sv"
     [tb_GEMM_fmap_staggered_delay]="MAT_CORE/GEMM_fmap_staggered_delay.sv"
     [tb_v002_runtime_smoke_program]="NPU_Controller/NPU_Control_Unit/ISA_PACKAGE/isa_pkg.sv NPU_Controller/NPU_Control_Unit/ctrl_npu_decoder.sv NPU_Controller/Global_Scheduler.sv"
+    [tb_gemv_reduction_pipeline_mux]="Constants/compilePriority_Order/B_device_pkg/device_pkg.sv Constants/compilePriority_Order/C_type_pkg/dtype_pkg.sv Constants/compilePriority_Order/C_type_pkg/mem_pkg.sv Constants/compilePriority_Order/D_pipeline_pkg/vec_core_pkg.sv NPU_Controller/NPU_Control_Unit/ISA_PACKAGE/isa_pkg.sv Library/Algorithms/BF16_math.sv VEC_CORE/GEMV_reduction.sv CVO_CORE/CVO_sfu_unit.sv CVO_CORE/CVO_cordic_unit.sv CVO_CORE/CVO_top.sv MEM_control/top/mem_CVO_stream_bridge.sv"
 )
 
 # Core-id assigned to a tb's emitted pccx trace. Kept contiguous so the UI
@@ -53,6 +54,7 @@ declare -A TB_CORE=(
     [tb_mem_u_operation_queue]=8
     [tb_GEMM_fmap_staggered_delay]=9
     [tb_v002_runtime_smoke_program]=10
+    [tb_gemv_reduction_pipeline_mux]=11
 )
 
 TB_LIST=(
@@ -67,6 +69,7 @@ TB_LIST=(
     tb_mem_u_operation_queue
     tb_GEMM_fmap_staggered_delay
     tb_v002_runtime_smoke_program
+    tb_gemv_reduction_pipeline_mux
 )
 
 QUICK_TB_LIST=(
