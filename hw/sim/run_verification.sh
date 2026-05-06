@@ -33,6 +33,7 @@ declare -A TB_DEPS=(
     [tb_GEMM_weight_dispatcher]="MAT_CORE/GEMM_weight_dispatcher.sv"
     [tb_FROM_mat_result_packer]="MAT_CORE/FROM_mat_result_packer.sv"
     [tb_barrel_shifter_BF16]="barrel_shifter_BF16.sv"
+    [tb_preprocess_bf16_to_int8_golden]="PREPROCESS/preprocess_bf16_fixed_pipeline.sv"
     [tb_ctrl_npu_decoder]="NPU_Controller/NPU_Control_Unit/ISA_PACKAGE/isa_pkg.sv NPU_Controller/NPU_Control_Unit/ctrl_npu_decoder.sv"
     [tb_mem_u_operation_queue]="Constants/compilePriority_Order/E_obs_pkg/perf_counter_pkg.sv NPU_Controller/NPU_Control_Unit/ISA_PACKAGE/isa_pkg.sv MEM_control/IO/mem_u_operation_queue.sv"
     [tb_GEMM_fmap_staggered_delay]="MAT_CORE/GEMM_fmap_staggered_delay.sv"
@@ -53,6 +54,7 @@ declare -A TB_CORE=(
     [tb_mem_u_operation_queue]=8
     [tb_GEMM_fmap_staggered_delay]=9
     [tb_v002_runtime_smoke_program]=10
+    [tb_preprocess_bf16_to_int8_golden]=11
 )
 
 TB_LIST=(
@@ -67,6 +69,7 @@ TB_LIST=(
     tb_mem_u_operation_queue
     tb_GEMM_fmap_staggered_delay
     tb_v002_runtime_smoke_program
+    tb_preprocess_bf16_to_int8_golden
 )
 
 QUICK_TB_LIST=(
