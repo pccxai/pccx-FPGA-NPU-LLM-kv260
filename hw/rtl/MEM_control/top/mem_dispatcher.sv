@@ -46,6 +46,8 @@ module mem_dispatcher #() (
 
     // ===| Engine uop inputs |===================================================
     input  memory_control_uop_t IN_LOAD_uop,
+    input  memory_control_uop_t IN_STORE_uop,
+    input  logic                IN_store_uop_valid,
     input  memory_set_uop_t     IN_mem_set_uop,
     input  cvo_control_uop_t    IN_CVO_uop,
     input  logic                IN_cvo_uop_valid,
@@ -59,9 +61,16 @@ module mem_dispatcher #() (
     input  logic        IN_cvo_result_valid,
     output logic        OUT_cvo_result_ready,
 
+    // ===| Packed compute results (from GEMM result packer) |======================
+    input  logic [`AXI_STREAM_WIDTH-1:0] IN_gemm_result_data,
+    input  logic                         IN_gemm_result_valid,
+    output logic                         OUT_gemm_result_ready,
+
     // ===| Status |=============================================================
     output logic OUT_fifo_full,
-    output logic OUT_cvo_busy
+    output logic OUT_cvo_busy,
+    output logic OUT_store_busy,
+    output logic OUT_store_done
 );
 
   // ===| FIFO full aggregation |=================================================
@@ -290,33 +299,102 @@ module mem_dispatcher #() (
       .IN_npu_is_busy       (npu_is_busy_wire)
   );
 
+  // ===| STORE writeback engine |================================================
+  // GEMM currently emits one 32-lane BF16 row through FROM_gemm_result_packer:
+  // 32 lanes × 16 bit / 128 bit = 4 L2 words. The packer holds valid/data
+  // while OUT_gemm_result_ready is low, so no extra FIFO is needed here.
+  localparam int GemmStoreWords = (`ARRAY_SIZE_H * `BF16_WIDTH) / `AXI_STREAM_WIDTH;
+  localparam int StoreWordCntW  = $clog2(GemmStoreWords + 1);
+
+  logic                    store_active;
+  logic [16:0]             store_base_addr;
+  logic [StoreWordCntW-1:0] store_word_count;
+  logic                    store_l2_we;
+  logic [16:0]             store_l2_addr;
+  logic [127:0]            store_l2_wdata;
+  logic                    store_port_ready;
+  logic                    store_accept;
+  logic                    store_done_pending;
+
+  assign OUT_store_busy        = store_active;
+  assign store_port_ready      = store_active & ~cvo_bridge_busy & ~npu_is_busy_wire;
+  assign OUT_gemm_result_ready = store_port_ready;
+  assign store_accept          = store_port_ready & IN_gemm_result_valid;
+
+  always_ff @(posedge clk_core) begin
+    if (!rst_n_core) begin
+      store_active       <= 1'b0;
+      store_base_addr    <= '0;
+      store_word_count   <= '0;
+      store_l2_we        <= 1'b0;
+      store_l2_addr      <= '0;
+      store_l2_wdata     <= '0;
+      store_done_pending <= 1'b0;
+      OUT_store_done     <= 1'b0;
+    end else begin
+      store_l2_we    <= 1'b0;
+      OUT_store_done <= 1'b0;
+
+      if (store_done_pending) begin
+        OUT_store_done     <= 1'b1;
+        store_done_pending <= 1'b0;
+      end
+
+      if (IN_store_uop_valid) begin
+        store_word_count   <= '0;
+        store_base_addr    <= IN_STORE_uop.dest_addr;
+        store_active       <= (IN_STORE_uop.data_dest == from_GEMM_res_to_L2);
+        store_done_pending <= 1'b0;
+      end else if (store_accept) begin
+        store_l2_we    <= 1'b1;
+        store_l2_addr  <= store_base_addr + 17'(store_word_count);
+        store_l2_wdata <= IN_gemm_result_data;
+
+        if (store_word_count == StoreWordCntW'(GemmStoreWords - 1)) begin
+          store_word_count <= '0;
+          store_active     <= 1'b0;
+          store_done_pending <= 1'b1;
+        end else begin
+          store_word_count <= store_word_count + StoreWordCntW'(1);
+        end
+      end
+    end
+  end
+
   // ===| L2 cache controller |===================================================
-  // CVO bridge drives L2 port B when active; otherwise port B is driven by
-  // the NPU DMA state machine in mem_GLOBAL_cache.
+  // CVO bridge drives L2 port B when active. GEMM STORE writes use the same
+  // direct port when the bridge and NPU DMA state machine are idle; otherwise
+  // the NPU DMA state machine in mem_GLOBAL_cache owns port B.
   logic        cvo_l2_we;
   logic [16:0] cvo_l2_addr;
   logic [127:0] cvo_l2_wdata;
   logic [127:0] cvo_l2_rdata;
 
-  logic        npu_l2_we;
-  logic [16:0] npu_l2_addr;
-  logic [127:0] npu_l2_wdata;
   logic [127:0] npu_l2_rdata;
 
-  // Port B arbitration: CVO bridge wins when busy
+  // Port B arbitration: CVO bridge wins when busy; STORE writes only fire when
+  // both CVO and the NPU command FSM are idle.
+  logic        final_npu_direct_en;
   logic        final_npu_we;
   logic [16:0] final_npu_addr;
   logic [127:0] final_npu_wdata;
 
   always_comb begin
     if (cvo_bridge_busy) begin
+      final_npu_direct_en = 1'b1;
       final_npu_we    = cvo_l2_we;
       final_npu_addr  = cvo_l2_addr;
       final_npu_wdata = cvo_l2_wdata;
+    end else if (store_l2_we) begin
+      final_npu_direct_en = 1'b1;
+      final_npu_we    = 1'b1;
+      final_npu_addr  = store_l2_addr;
+      final_npu_wdata = store_l2_wdata;
     end else begin
-      final_npu_we    = npu_l2_we;
-      final_npu_addr  = npu_l2_addr;
-      final_npu_wdata = npu_l2_wdata;
+      final_npu_direct_en = 1'b0;
+      final_npu_we    = 1'b0;
+      final_npu_addr  = '0;
+      final_npu_wdata = '0;
     end
   end
 
@@ -346,8 +424,12 @@ module mem_dispatcher #() (
       .IN_npu_rx_start  (OUT_npu_cmd_valid),
       .OUT_npu_is_busy  (npu_is_busy_wire),
 
-      .IN_npu_wdata     (final_npu_wdata),
-      .OUT_npu_rdata    (npu_l2_rdata)
+      .IN_npu_wdata       ('0),
+      .IN_npu_direct_en   (final_npu_direct_en),
+      .IN_npu_direct_we   (final_npu_we),
+      .IN_npu_direct_addr (final_npu_addr),
+      .IN_npu_direct_wdata(final_npu_wdata),
+      .OUT_npu_rdata      (npu_l2_rdata)
   );
 
   // ===| CVO Stream Bridge |=====================================================
