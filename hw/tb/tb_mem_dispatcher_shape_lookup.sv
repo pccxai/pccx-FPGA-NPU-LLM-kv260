@@ -2,18 +2,22 @@
 
 // ===============================================================================
 // Testbench: tb_mem_dispatcher_shape_lookup
-// Phase : pccx v002 - MEM_control dispatcher shape lookup
+// Phase : pccx v002 - MEM_control dispatcher MEMCPY + shape lookup
 //
 // Purpose
 // -------
-//   Smoke-validates the higher-level MEMSET -> LOAD path that consumes
-//   shape_const_ram inside mem_dispatcher. The TB writes fmap shape entries via
-//   the public IN_mem_set_uop port, then issues ACP and NPU LOAD routes and
-//   checks the generated command bounds against a small golden model.
+//   Validates the public mem_dispatcher MEMSET -> MEMCPY path with a
+//   SystemVerilog golden model:
 //
-//   The key regression surface is pointer selection: a LOAD must use its own
-//   shape_ptr_addr for the command generated on that clock, not a stale
-//   shape address left behind by a previous MEMSET or LOAD.
+//     - shape_ptr_addr based length decode through shape_const_ram
+//     - Host -> L2 ingress over S_AXIS_ACP_FMAP
+//     - L2 -> Host egress over M_AXIS_ACP_RESULT
+//     - multi-tile sequencing with split stream traffic
+//
+//   The key regression surfaces are bit-exact data preservation through L2 and
+//   pointer selection: a LOAD must use its own shape_ptr_addr for the command
+//   generated on that clock, not a stale shape address left behind by a previous
+//   MEMSET or LOAD.
 // ===============================================================================
 
 module tb_mem_dispatcher_shape_lookup;
@@ -70,11 +74,24 @@ module tb_mem_dispatcher_shape_lookup;
       .OUT_cvo_busy        (cvo_busy)
   );
 
+  // ===| Test vectors |=========================================================
+  localparam ptr_addr_t Tile0ShapePtr = 6'd3;
+  localparam ptr_addr_t Tile1ShapePtr = 6'd9;
+  localparam ptr_addr_t Tile2ShapePtr = 6'd12;
+
+  localparam dest_addr_t Tile0Base = 17'd100;
+  localparam dest_addr_t Tile1Base = 17'd220;
+  localparam dest_addr_t Tile2Base = 17'd360;
+
+  localparam int unsigned Tile0Id = 0;
+  localparam int unsigned Tile1Id = 1;
+  localparam int unsigned Tile2Id = 2;
+
   // ===| Scoreboard |===========================================================
   int errors = 0;
   int checks = 0;
 
-  function automatic logic [16:0] ceil_words(
+  function automatic logic [16:0] golden_word_total(
       input int unsigned x_val,
       input int unsigned y_val,
       input int unsigned z_val
@@ -82,9 +99,84 @@ module tb_mem_dispatcher_shape_lookup;
     int unsigned elems;
     begin
       elems = x_val * y_val * z_val;
-      ceil_words = 17'((elems + 7) >> 3);
+      golden_word_total = 17'((elems + 7) >> 3);
     end
   endfunction
+
+  function automatic logic [127:0] golden_tile_word(
+      input int unsigned tile_id,
+      input int unsigned word_idx
+  );
+    logic [127:0] word;
+    begin
+      word[ 15:  0] = 16'(16'h1000 + (tile_id << 8) + word_idx);
+      word[ 31: 16] = 16'(16'h2100 + (tile_id << 7) + (word_idx * 3));
+      word[ 47: 32] = 16'(16'h3200 ^ (tile_id << 5) ^ word_idx);
+      word[ 63: 48] = 16'(16'h4300 + (word_idx << 1));
+      word[ 79: 64] = 16'(16'h5400 ^ (tile_id << 9) ^ (word_idx * 5));
+      word[ 95: 80] = 16'(16'h6500 + tile_id + (word_idx << 2));
+      word[111: 96] = 16'(16'h7600 ^ (tile_id << 3) ^ (word_idx * 7));
+      word[127:112] = 16'(16'h8700 + (tile_id << 4) + word_idx);
+      golden_tile_word = word;
+    end
+  endfunction
+
+  function automatic logic [16:0] golden_acp_base(
+      input data_route_e route,
+      input dest_addr_t dest_addr,
+      input src_addr_t src_addr
+  );
+    begin
+      if (route == from_host_to_L2) begin
+        golden_acp_base = dest_addr;
+      end else begin
+        golden_acp_base = src_addr;
+      end
+    end
+  endfunction
+
+  task automatic check_bit(
+      input string tag,
+      input logic got,
+      input logic exp
+  );
+    begin
+      checks++;
+      if (got !== exp) begin
+        errors++;
+        $display("[%0t] mismatch %s: got=%0b exp=%0b", $time, tag, got, exp);
+      end
+    end
+  endtask
+
+  task automatic check_17(
+      input string tag,
+      input logic [16:0] got,
+      input logic [16:0] exp
+  );
+    begin
+      checks++;
+      if (got !== exp) begin
+        errors++;
+        $display("[%0t] mismatch %s: got=%0d exp=%0d", $time, tag, got, exp);
+      end
+    end
+  endtask
+
+  task automatic check_128(
+      input string tag,
+      input logic [127:0] got,
+      input logic [127:0] exp
+  );
+    begin
+      checks++;
+      if (got !== exp) begin
+        errors++;
+        $display("[%0t] mismatch %s: got=0x%032h exp=0x%032h",
+                 $time, tag, got, exp);
+      end
+    end
+  endtask
 
   task automatic set_load_idle;
     begin
@@ -162,45 +254,32 @@ module tb_mem_dispatcher_shape_lookup;
       input ptr_addr_t shape_ptr,
       input dest_addr_t dest_addr,
       input src_addr_t src_addr,
+      input async_e async_mode,
       input logic exp_write_en,
-      input logic [16:0] exp_base,
       input logic [16:0] exp_words
   );
+    logic [16:0] exp_base;
     logic [16:0] exp_end;
     begin
-      exp_end = exp_base + exp_words;
+      exp_base = golden_acp_base(route, dest_addr, src_addr);
+      exp_end  = exp_base + exp_words;
       set_memset_idle();
       load_uop = '{
           data_dest      : route,
           dest_addr      : dest_addr,
           src_addr       : src_addr,
           shape_ptr_addr : shape_ptr,
-          async          : SYNC_OP
+          async          : async_mode
       };
       @(posedge clk_core);
       #1;
 
-      checks++;
-      if (dut.acp_rx_start !== 1'b1) begin
-        errors++;
-        $display("[%0t] mismatch %s: acp_rx_start=%0b exp 1",
-                 $time, tag, dut.acp_rx_start);
-      end
-
-      checks++;
-      if (dut.acp_uop.write_en !== exp_write_en ||
-          dut.acp_uop.base_addr !== exp_base ||
-          dut.acp_uop.end_addr  !== exp_end) begin
-        errors++;
-        $display("[%0t] mismatch %s: acp cmd got we=%0b base=%0d end=%0d exp we=%0b base=%0d end=%0d",
-                 $time, tag,
-                 dut.acp_uop.write_en, dut.acp_uop.base_addr, dut.acp_uop.end_addr,
-                 exp_write_en, exp_base, exp_end);
-      end
+      check_bit({tag, " acp_rx_start"}, dut.acp_rx_start, 1'b1);
+      check_bit({tag, " acp_write_en"}, dut.acp_uop.write_en, exp_write_en);
+      check_17 ({tag, " acp_base"},     dut.acp_uop.base_addr, exp_base);
+      check_17 ({tag, " acp_end"},      dut.acp_uop.end_addr,  exp_end);
 
       set_load_idle();
-      @(posedge clk_core);
-      #1;
     end
   endtask
 
@@ -225,32 +304,237 @@ module tb_mem_dispatcher_shape_lookup;
       @(posedge clk_core);
       #1;
 
-      checks++;
-      if (dut.npu_rx_start !== 1'b1) begin
-        errors++;
-        $display("[%0t] mismatch %s: npu_rx_start=%0b exp 1",
-                 $time, tag, dut.npu_rx_start);
-      end
-
-      checks++;
-      if (dut.npu_uop.write_en !== 1'b0 ||
-          dut.npu_uop.base_addr !== src_addr ||
-          dut.npu_uop.end_addr  !== exp_end) begin
-        errors++;
-        $display("[%0t] mismatch %s: npu cmd got we=%0b base=%0d end=%0d exp we=0 base=%0d end=%0d",
-                 $time, tag,
-                 dut.npu_uop.write_en, dut.npu_uop.base_addr, dut.npu_uop.end_addr,
-                 src_addr, exp_end);
-      end
+      check_bit({tag, " npu_rx_start"}, dut.npu_rx_start, 1'b1);
+      check_bit({tag, " npu_write_en"}, dut.npu_uop.write_en, 1'b0);
+      check_17 ({tag, " npu_base"},     dut.npu_uop.base_addr, src_addr);
+      check_17 ({tag, " npu_end"},      dut.npu_uop.end_addr,  exp_end);
 
       set_load_idle();
       @(posedge clk_core);
       #1;
+      check_bit({tag, " npu_rx_start clears"}, dut.npu_rx_start, 1'b0);
+    end
+  endtask
+
+  task automatic wait_acp_started(input string tag);
+    int guard;
+    begin
+      guard = 0;
+      while (dut.u_l2_cache.acp_is_busy !== 1'b1 && guard < 1000) begin
+        @(posedge clk_core);
+        guard++;
+      end
+      #1;
+      checks++;
+      if (dut.u_l2_cache.acp_is_busy !== 1'b1) begin
+        errors++;
+        $display("[%0t] mismatch %s: ACP transfer did not start", $time, tag);
+      end
+    end
+  endtask
+
+  task automatic wait_acp_done(input string tag);
+    int guard;
+    begin
+      guard = 0;
+      while (dut.u_l2_cache.acp_is_busy === 1'b1 && guard < 4000) begin
+        @(posedge clk_core);
+        guard++;
+      end
+      #1;
+      checks++;
+      if (dut.u_l2_cache.acp_is_busy !== 1'b0) begin
+        errors++;
+        $display("[%0t] mismatch %s: ACP transfer did not complete", $time, tag);
+      end
+    end
+  endtask
+
+  task automatic wait_acp_idle(input string tag);
+    int guard;
+    begin
+      guard = 0;
+      while (dut.u_l2_cache.acp_is_busy !== 1'b0 && guard < 4000) begin
+        @(posedge clk_core);
+        guard++;
+      end
+      #1;
+      checks++;
+      if (dut.u_l2_cache.acp_is_busy !== 1'b0) begin
+        errors++;
+        $display("[%0t] mismatch %s: ACP did not return idle", $time, tag);
+      end
+    end
+  endtask
+
+  task automatic wait_npu_done(input string tag);
+    int guard;
+    begin
+      guard = 0;
+      while (dut.u_l2_cache.npu_is_busy !== 1'b1 && guard < 1000) begin
+        @(posedge clk_core);
+        guard++;
+      end
+      checks++;
+      if (dut.u_l2_cache.npu_is_busy !== 1'b1) begin
+        errors++;
+        $display("[%0t] mismatch %s: NPU transfer did not start", $time, tag);
+      end
+
+      guard = 0;
+      while (dut.u_l2_cache.npu_is_busy === 1'b1 && guard < 4000) begin
+        @(posedge clk_core);
+        guard++;
+      end
+      checks++;
+      if (dut.u_l2_cache.npu_is_busy !== 1'b0) begin
+        errors++;
+        $display("[%0t] mismatch %s: NPU transfer did not complete", $time, tag);
+      end
+    end
+  endtask
+
+  task automatic drive_host_tile(
+      input string tag,
+      input int unsigned tile_id,
+      input int unsigned word_count,
+      input int split_after
+  );
+    int unsigned sent;
+    int guard;
+    begin
+      sent = 0;
+      while (sent < word_count) begin
+        @(negedge clk_axi);
+        s_axis_acp_fmap.tdata  = golden_tile_word(tile_id, sent);
+        s_axis_acp_fmap.tvalid = 1'b1;
+        s_axis_acp_fmap.tlast  = (sent == word_count - 1);
+        s_axis_acp_fmap.tkeep  = '1;
+
+        guard = 0;
+        do begin
+          @(posedge clk_axi);
+          guard++;
+        end while (s_axis_acp_fmap.tready !== 1'b1 && guard < 1000);
+        checks++;
+        if (s_axis_acp_fmap.tready !== 1'b1) begin
+          errors++;
+          $display("[%0t] mismatch %s: host ingress tready timeout at word %0d",
+                   $time, tag, sent);
+        end
+
+        sent++;
+
+        if (split_after >= 0 && sent == int'(split_after)) begin
+          @(negedge clk_axi);
+          s_axis_acp_fmap.tvalid = 1'b0;
+          s_axis_acp_fmap.tlast  = 1'b0;
+          s_axis_acp_fmap.tdata  = '0;
+          repeat (5) @(posedge clk_axi);
+        end
+      end
+
+      @(negedge clk_axi);
+      s_axis_acp_fmap.tvalid = 1'b0;
+      s_axis_acp_fmap.tlast  = 1'b0;
+      s_axis_acp_fmap.tdata  = '0;
+      @(posedge clk_axi);
+    end
+  endtask
+
+  task automatic capture_host_tile(
+      input string tag,
+      input int unsigned tile_id,
+      input int unsigned word_count
+  );
+    int unsigned got;
+    int guard;
+    begin
+      got = 0;
+      guard = 0;
+      m_axis_acp_result.tready = 1'b1;
+
+      while (got < word_count && guard < 8000) begin
+        @(posedge clk_axi);
+        guard++;
+        if (m_axis_acp_result.tvalid && m_axis_acp_result.tready) begin
+          check_128({tag, " egress word"}, m_axis_acp_result.tdata,
+                    golden_tile_word(tile_id, got));
+          got++;
+        end
+      end
+
+      m_axis_acp_result.tready = 1'b1;
+      checks++;
+      if (got != word_count) begin
+        errors++;
+        $display("[%0t] mismatch %s: captured %0d/%0d result words",
+                 $time, tag, got, word_count);
+      end
+
+      guard = 0;
+      while (m_axis_acp_result.tvalid === 1'b1 && guard < 1000) begin
+        @(posedge clk_axi);
+        guard++;
+      end
+    end
+  endtask
+
+  task automatic host_to_l2_tile(
+      input string tag,
+      input int unsigned tile_id,
+      input ptr_addr_t shape_ptr,
+      input dest_addr_t base_addr,
+      input logic [16:0] word_count,
+      input async_e async_mode,
+      input int split_after
+  );
+    begin
+      wait_acp_idle({tag, " pre"});
+      fork
+        begin
+          issue_acp_load(tag, from_host_to_L2, shape_ptr, base_addr, '0,
+                         async_mode, 1'b1, word_count);
+          wait_acp_started({tag, " host_to_L2"});
+          wait_acp_done({tag, " host_to_L2"});
+        end
+        begin
+          drive_host_tile(tag, tile_id, word_count, split_after);
+        end
+      join
+    end
+  endtask
+
+  task automatic l2_to_host_tile(
+      input string tag,
+      input int unsigned tile_id,
+      input ptr_addr_t shape_ptr,
+      input src_addr_t base_addr,
+      input logic [16:0] word_count,
+      input async_e async_mode
+  );
+    begin
+      wait_acp_idle({tag, " pre"});
+      fork
+        begin
+          issue_acp_load(tag, from_L2_to_host, shape_ptr, '0, base_addr,
+                         async_mode, 1'b0, word_count);
+          wait_acp_started({tag, " L2_to_host"});
+          wait_acp_done({tag, " L2_to_host"});
+        end
+        begin
+          capture_host_tile(tag, tile_id, word_count);
+        end
+      join
     end
   endtask
 
   // ===| Stimulus |=============================================================
   initial begin
+    logic [16:0] tile0_words;
+    logic [16:0] tile1_words;
+    logic [16:0] tile2_words;
+
     rst_n_core = 1'b0;
     rst_axi_n  = 1'b0;
 
@@ -270,46 +554,42 @@ module tb_mem_dispatcher_shape_lookup;
     repeat (4) @(posedge clk_core);
     rst_n_core = 1'b1;
     rst_axi_n  = 1'b1;
-    repeat (3) @(posedge clk_core);
+    repeat (8) @(posedge clk_core);
     #1;
 
-    program_fmap_shape(6'd3, 16'd3, 16'd5, 16'd5);  // 75 elems -> 10 words
-    program_fmap_shape(6'd9, 16'd4, 16'd4, 16'd4);  // 64 elems -> 8 words
+    // Shape golden:
+    //   tile0: 75 BF16 elems -> 10 128-bit words
+    //   tile1: 64 BF16 elems ->  8 128-bit words
+    //   tile2: 30 BF16 elems ->  4 128-bit words (ceil edge / async route)
+    tile0_words = golden_word_total(3, 5, 5);
+    tile1_words = golden_word_total(4, 4, 4);
+    tile2_words = golden_word_total(2, 3, 5);
 
-    issue_acp_load("host_to_L2 uses ptr3",
-                   from_host_to_L2,
-                   6'd3,
-                   17'd100,
-                   17'd0,
-                   1'b1,
-                   17'd100,
-                   ceil_words(3, 5, 5));
+    program_fmap_shape(Tile0ShapePtr, 16'd3, 16'd5, 16'd5);
+    program_fmap_shape(Tile1ShapePtr, 16'd4, 16'd4, 16'd4);
+    program_fmap_shape(Tile2ShapePtr, 16'd2, 16'd3, 16'd5);
 
-    issue_acp_load("L2_to_host uses ptr9",
-                   from_L2_to_host,
-                   6'd9,
-                   17'd0,
-                   17'd200,
-                   1'b0,
-                   17'd200,
-                   ceil_words(4, 4, 4));
+    host_to_l2_tile("tile0 host_to_L2", Tile0Id, Tile0ShapePtr,
+                    Tile0Base, tile0_words, SYNC_OP, 1);
+    host_to_l2_tile("tile1 host_to_L2 split", Tile1Id, Tile1ShapePtr,
+                    Tile1Base, tile1_words, SYNC_OP, 3);
+    host_to_l2_tile("tile2 async host_to_L2 ceil", Tile2Id, Tile2ShapePtr,
+                    Tile2Base, tile2_words, ASYNC_OP, 1);
 
-    program_fmap_shape(6'd3, 16'd1, 16'd1, 16'd9);  // overwrite: 9 elems -> 2 words
+    l2_to_host_tile("tile0 L2_to_host", Tile0Id, Tile0ShapePtr,
+                    Tile0Base, tile0_words, SYNC_OP);
+    l2_to_host_tile("tile1 L2_to_host", Tile1Id, Tile1ShapePtr,
+                    Tile1Base, tile1_words, SYNC_OP);
+    issue_npu_load("L2_to_L1_GEMM tile0 shape", from_L2_to_L1_GEMM,
+                   Tile0ShapePtr, Tile0Base, tile0_words);
+    wait_npu_done("L2_to_L1_GEMM tile0 shape");
 
-    issue_npu_load("L2_to_L1_GEMM uses overwritten ptr3",
-                   from_L2_to_L1_GEMM,
-                   6'd3,
-                   17'd300,
-                   ceil_words(1, 1, 9));
-
-    issue_npu_load("L2_to_L1_GEMV uses ptr9",
-                   from_L2_to_L1_GEMV,
-                   6'd9,
-                   17'd400,
-                   ceil_words(4, 4, 4));
+    issue_npu_load("L2_to_L1_GEMV tile1 shape", from_L2_to_L1_GEMV,
+                   Tile1ShapePtr, Tile1Base, tile1_words);
+    wait_npu_done("L2_to_L1_GEMV tile1 shape");
 
     if (errors == 0) begin
-      $display("PASS: %0d cycles, mem_dispatcher shape lookup matches golden.", checks);
+      $display("PASS: %0d checks, mem_dispatcher MEMCPY paths match SV golden.", checks);
     end else begin
       $display("FAIL: %0d mismatches over %0d checks.", errors, checks);
     end
@@ -317,7 +597,7 @@ module tb_mem_dispatcher_shape_lookup;
   end
 
   initial begin
-    #100000 $display("FAIL: mem_dispatcher shape lookup timeout"); $finish;
+    #200000 $display("FAIL: mem_dispatcher comprehensive timeout"); $finish;
   end
 
 endmodule
