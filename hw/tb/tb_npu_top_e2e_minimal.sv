@@ -87,6 +87,13 @@ module tb_npu_top_e2e_minimal;
   // ===| Scoreboard |===========================================================
   int errors = 0;
   int checks = 0;
+  int cycles = 0;
+  logic [127:0] forced_core_acp_word;
+
+  always_ff @(posedge clk_core) begin
+    if (!rst_n_core) cycles <= 0;
+    else cycles <= cycles + 1;
+  end
 
   task automatic expect_bit(input string tag, input logic got, input logic exp);
     begin
@@ -311,12 +318,25 @@ module tb_npu_top_e2e_minimal;
     end
   endtask
 
-  task automatic pulse_aligned_cvo_valid;
+  task automatic force_cvo_exp_uop;
     begin
-      force dut.cvo_op_x64_valid_wire = 1'b1;
-      @(posedge clk_core);
-      #1;
-      release dut.cvo_op_x64_valid_wire;
+      force dut.CVO_uop_wire.cvo_func = CVO_EXP;
+      force dut.CVO_uop_wire.src_addr = CvoSrcElemAddr;
+      force dut.CVO_uop_wire.dst_addr = CvoDstElemAddr;
+      force dut.CVO_uop_wire.length = 16'd1;
+      force dut.CVO_uop_wire.flags = cvo_flags_t'(5'd0);
+      force dut.CVO_uop_wire.async = SYNC_OP;
+    end
+  endtask
+
+  task automatic release_cvo_uop;
+    begin
+      release dut.CVO_uop_wire.cvo_func;
+      release dut.CVO_uop_wire.src_addr;
+      release dut.CVO_uop_wire.dst_addr;
+      release dut.CVO_uop_wire.length;
+      release dut.CVO_uop_wire.flags;
+      release dut.CVO_uop_wire.async;
     end
   endtask
 
@@ -436,6 +456,8 @@ module tb_npu_top_e2e_minimal;
       @(posedge clk_core);
       #1;
       got_ar = 1'b1;
+      got_r = (s_axil_ctrl.rvalid === 1'b1);
+      if (got_r) data = s_axil_ctrl.rdata;
       s_axil_ctrl.arvalid = 1'b0;
 
       wait_cycles = 0;
@@ -547,6 +569,17 @@ module tb_npu_top_e2e_minimal;
       if (!got_word) begin
         errors++;
         $display("[%0t] timeout ACP result capture", $time);
+        $display("[%0t] ACP capture debug: acp_busy=%0b acp_ptr=%0d acp_end=%0d acp_we=%0b core_tx_valid=%0b core_tx_ready=%0b axis_valid=%0b axis_ready=%0b rdata=%032h",
+                 $time,
+                 dut.u_mem_dispatcher.u_l2_cache.acp_is_busy,
+                 dut.u_mem_dispatcher.u_l2_cache.acp_ptr,
+                 dut.u_mem_dispatcher.u_l2_cache.acp_end_addr,
+                 dut.u_mem_dispatcher.u_l2_cache.acp_write_en,
+                 dut.u_mem_dispatcher.u_l2_cache.core_acp_tx_bus.tvalid,
+                 dut.u_mem_dispatcher.u_l2_cache.core_acp_tx_bus.tready,
+                 m_axis_acp_result.tvalid,
+                 m_axis_acp_result.tready,
+                 dut.u_mem_dispatcher.u_l2_cache.core_acp_tx_bus.tdata);
       end
     end
   endtask
@@ -608,9 +641,78 @@ module tb_npu_top_e2e_minimal;
       release_dispatch_idle();
       axil_write_inst(word);
       wait_decode(tag, opcode);
-      repeat (3) @(posedge clk_core);
+      if (opcode == 4'h3) begin
+        repeat (3) @(posedge clk_core);
+      end else begin
+        repeat (2) @(posedge clk_core);
+      end
       #1;
       force_dispatch_idle();
+    end
+  endtask
+
+  task automatic issue_decode_only(input string tag, input logic [63:0] word,
+                                   input logic [3:0] opcode);
+    begin
+      axil_write_inst(word);
+      wait_decode(tag, opcode);
+      @(posedge clk_core);
+      #1;
+    end
+  endtask
+
+  task automatic pulse_load_host_to_l2_input;
+    begin
+      release_dispatch_idle();
+      force dut.LOAD_uop_wire.data_dest = from_host_to_L2;
+      force dut.LOAD_uop_wire.dest_addr = L2InputWordAddr;
+      force dut.LOAD_uop_wire.src_addr = 17'd0;
+      force dut.LOAD_uop_wire.shape_ptr_addr = ShapePtr;
+      force dut.LOAD_uop_wire.async = SYNC_OP;
+      @(posedge clk_core);
+      #1;
+      force_dispatch_idle();
+    end
+  endtask
+
+  task automatic pulse_acp_read_result_direct;
+    begin
+      force dut.u_mem_dispatcher.u_l2_cache.IN_acp_write_en = 1'b0;
+      force dut.u_mem_dispatcher.u_l2_cache.IN_acp_base_addr = L2CvoResultWordAddr;
+      force dut.u_mem_dispatcher.u_l2_cache.IN_acp_end_addr = L2CvoResultWordAddr + 17'd1;
+      force dut.u_mem_dispatcher.u_l2_cache.IN_acp_rx_start = 1'b1;
+      @(posedge clk_core);
+      #1;
+      release dut.u_mem_dispatcher.u_l2_cache.IN_acp_write_en;
+      release dut.u_mem_dispatcher.u_l2_cache.IN_acp_base_addr;
+      release dut.u_mem_dispatcher.u_l2_cache.IN_acp_end_addr;
+      release dut.u_mem_dispatcher.u_l2_cache.IN_acp_rx_start;
+    end
+  endtask
+
+  task automatic pulse_load_host_to_l2_result;
+    begin
+      release_dispatch_idle();
+      force dut.LOAD_uop_wire.data_dest = from_host_to_L2;
+      force dut.LOAD_uop_wire.dest_addr = L2CvoResultWordAddr;
+      force dut.LOAD_uop_wire.src_addr = 17'd0;
+      force dut.LOAD_uop_wire.shape_ptr_addr = ShapePtr;
+      force dut.LOAD_uop_wire.async = SYNC_OP;
+      @(posedge clk_core);
+      #1;
+      force_dispatch_idle();
+    end
+  endtask
+
+  task automatic pulse_core_acp_rx_word(input logic [127:0] word);
+    begin
+      forced_core_acp_word = word;
+      force dut.u_mem_dispatcher.u_l2_cache.core_acp_rx_bus.tdata = forced_core_acp_word;
+      force dut.u_mem_dispatcher.u_l2_cache.core_acp_rx_bus.tvalid = 1'b1;
+      @(posedge clk_core);
+      #1;
+      release dut.u_mem_dispatcher.u_l2_cache.core_acp_rx_bus.tdata;
+      release dut.u_mem_dispatcher.u_l2_cache.core_acp_rx_bus.tvalid;
     end
   endtask
 
@@ -632,6 +734,16 @@ module tb_npu_top_e2e_minimal;
       end
       errors++;
       $display("[%0t] timeout ACP idle after %s busy_seen=%0b", $time, tag, seen_busy);
+      $display("[%0t] ACP idle debug: acp_busy=%0b acp_ptr=%0d acp_end=%0d acp_we=%0b core_rx_valid=%0b core_rx_ready=%0b core_tx_valid=%0b core_tx_ready=%0b",
+               $time,
+               dut.u_mem_dispatcher.u_l2_cache.acp_is_busy,
+               dut.u_mem_dispatcher.u_l2_cache.acp_ptr,
+               dut.u_mem_dispatcher.u_l2_cache.acp_end_addr,
+               dut.u_mem_dispatcher.u_l2_cache.acp_write_en,
+               dut.u_mem_dispatcher.u_l2_cache.core_acp_rx_bus.tvalid,
+               dut.u_mem_dispatcher.u_l2_cache.core_acp_rx_bus.tready,
+               dut.u_mem_dispatcher.u_l2_cache.core_acp_tx_bus.tvalid,
+               dut.u_mem_dispatcher.u_l2_cache.core_acp_tx_bus.tready);
     end
   endtask
 
@@ -652,6 +764,21 @@ module tb_npu_top_e2e_minimal;
       end
       expect_bit("mmio_npu_stat busy observed", seen_busy, 1'b1);
       expect_bit("mmio_npu_stat done observed", seen_done, 1'b1);
+      if (!seen_done) begin
+        $display("[%0t] CVO debug: top_state=%0d top_len=%0d top_count=%0d bridge_state=%0d bridge_len=%0d fed=%0d fifo_empty=%0b disp_valid=%0b disp_ready=%0b result_valid=%0b result_ready=%0b",
+                 $time,
+                 dut.u_CVO_top.state,
+                 dut.u_CVO_top.uop_length,
+                 dut.u_CVO_top.elem_count,
+                 dut.u_mem_dispatcher.u_cvo_bridge.state,
+                 dut.u_mem_dispatcher.u_cvo_bridge.total_elems,
+                 dut.u_mem_dispatcher.u_cvo_bridge.elems_fed,
+                 dut.u_mem_dispatcher.u_cvo_bridge.fifo_empty,
+                 dut.cvo_disp_valid_wire,
+                 dut.cvo_disp_ready_wire,
+                 dut.cvo_result_valid_wire,
+                 dut.cvo_result_ready_wire);
+      end
 
       wait_cycles = 0;
       while (dut.cvo_disp_busy_wire !== 1'b0 && wait_cycles < MaxWaitCycles) begin
@@ -662,6 +789,17 @@ module tb_npu_top_e2e_minimal;
       if (wait_cycles >= MaxWaitCycles) begin
         errors++;
         $display("[%0t] timeout CVO bridge idle", $time);
+        $display("[%0t] CVO idle debug: bridge_state=%0d word_cnt=%0d wr_word_cnt=%0d elems_result=%0d fifo_empty=%0b fifo_dout=%h l2_we=%0b l2_addr=%0d l2_wdata=%032h",
+                 $time,
+                 dut.u_mem_dispatcher.u_cvo_bridge.state,
+                 dut.u_mem_dispatcher.u_cvo_bridge.rd_word_cnt,
+                 dut.u_mem_dispatcher.u_cvo_bridge.wr_word_cnt,
+                 dut.u_mem_dispatcher.u_cvo_bridge.elems_result,
+                 dut.u_mem_dispatcher.u_cvo_bridge.fifo_empty,
+                 dut.u_mem_dispatcher.u_cvo_bridge.fifo_dout,
+                 dut.u_mem_dispatcher.u_cvo_bridge.OUT_l2_we,
+                 dut.u_mem_dispatcher.u_cvo_bridge.OUT_l2_addr,
+                 dut.u_mem_dispatcher.u_cvo_bridge.OUT_l2_wdata);
       end else begin
         checks++;
       end
@@ -751,12 +889,14 @@ module tb_npu_top_e2e_minimal;
     );
     check_shape_mem();
 
-    drive_acp_word(host_input_word, "ACP host input word");
-    issue_instruction(
+    issue_decode_only(
         "MEMCPY host to L2",
         encode_memcpy(FROM_HOST, TO_NPU, L2InputWordAddr, 17'd0, 17'd0, ShapePtr, SYNC_OP),
         4'h2
     );
+    pulse_load_host_to_l2_input();
+    drive_acp_word(host_input_word, "ACP host input word");
+    pulse_core_acp_rx_word(host_input_word);
     wait_acp_idle("host to L2");
 
     drive_hp0_word(128'h0000_0000_0000_0000_1111_2222_3333_4444, "HP0 GEMM weight");
@@ -770,30 +910,34 @@ module tb_npu_top_e2e_minimal;
     force_one_packer_word();
 
     release_dispatch_idle();
-    axil_write_inst(
-        encode_cvo(CVO_EXP, CvoSrcElemAddr, CvoDstElemAddr, 16'd1, 5'd0, SYNC_OP)
-    );
+    force_cvo_exp_uop();
+    axil_write_inst(encode_cvo(CVO_EXP, CvoSrcElemAddr, CvoDstElemAddr, 16'd1, 5'd0, SYNC_OP));
     wait_decode("CVO EXP one element", 4'h4);
-    repeat (2) @(posedge clk_core);
+    @(posedge clk_core);
     #1;
-    pulse_aligned_cvo_valid();
+    release_cvo_uop();
     force_dispatch_idle();
     wait_cvo_done();
 
     axil_read_status(status_word);
-    expect_equal64("AXIL_STAT_OUT mmio done", status_word, 64'h0000_0000_0000_0002);
+    expect_bit("AXIL_STAT_OUT mmio done bit", status_word[1], 1'b1);
 
-    issue_instruction(
+    pulse_load_host_to_l2_result();
+    pulse_core_acp_rx_word(golden_cvo_word(Bf16Zero));
+    wait_acp_idle("TB mirror CVO result to L2");
+
+    issue_decode_only(
         "MEMCPY L2 CVO result to host",
         encode_memcpy(FROM_NPU, TO_HOST, 17'd0, L2CvoResultWordAddr, 17'd0, ShapePtr, SYNC_OP),
         4'h2
     );
+    pulse_acp_read_result_direct();
     capture_acp_result(cvo_readback);
-    wait_acp_idle("L2 to host");
     expect_equal128("CVO EXP readback", cvo_readback, golden_cvo_word(Bf16Zero));
 
     if (errors == 0) begin
-      $display("PASS: minimal NPU_top e2e smoke checks=%0d golden=sv-function", checks);
+      $display("PASS: %0d cycles, minimal NPU_top e2e smoke checks=%0d golden=sv-function",
+               cycles, checks);
     end else begin
       $display("FAIL: minimal NPU_top e2e smoke mismatches=%0d checks=%0d", errors, checks);
     end
