@@ -28,6 +28,7 @@ GLBL_V="${VIVADO_ROOT:+$VIVADO_ROOT/ids_lite/ISE/verilog/src/glbl.v}"
 declare -A TB_DEPS=(
     [tb_shape_const_ram]="NPU_Controller/NPU_Control_Unit/ISA_PACKAGE/isa_pkg.sv MEM_control/memory/Constant_Memory/shape_const_ram.sv"
     [tb_mem_dispatcher_shape_lookup]="NPU_Controller/NPU_Control_Unit/ISA_PACKAGE/isa_pkg.sv Constants/compilePriority_Order/E_obs_pkg/perf_counter_pkg.sv NPU_Controller/npu_interfaces.svh MEM_control/memory/Constant_Memory/shape_const_ram.sv MEM_control/IO/mem_u_operation_queue.sv MEM_control/memory/mem_BUFFER.sv MEM_control/top/mem_L2_cache_fmap.sv MEM_control/memory/mem_GLOBAL_cache.sv MEM_control/top/mem_CVO_stream_bridge.sv MEM_control/top/mem_dispatcher.sv"
+    [tb_mem_l2_uram_mapping_arbitration]="MEM_control/top/mem_L2_cache_fmap.sv"
     [tb_GEMM_dsp_packer_sign_recovery]="MAT_CORE/GEMM_dsp_packer.sv MAT_CORE/GEMM_sign_recovery.sv"
     [tb_mat_result_normalizer]="Constants/compilePriority_Order/C_type_pkg/dtype_pkg.sv MAT_CORE/mat_result_normalizer.sv"
     [tb_GEMM_weight_dispatcher]="MAT_CORE/GEMM_weight_dispatcher.sv"
@@ -44,20 +45,22 @@ declare -A TB_DEPS=(
 declare -A TB_CORE=(
     [tb_shape_const_ram]=0
     [tb_mem_dispatcher_shape_lookup]=1
-    [tb_GEMM_dsp_packer_sign_recovery]=2
-    [tb_mat_result_normalizer]=3
-    [tb_GEMM_weight_dispatcher]=4
-    [tb_FROM_mat_result_packer]=5
-    [tb_barrel_shifter_BF16]=6
-    [tb_ctrl_npu_decoder]=7
-    [tb_mem_u_operation_queue]=8
-    [tb_GEMM_fmap_staggered_delay]=9
-    [tb_v002_runtime_smoke_program]=10
+    [tb_mem_l2_uram_mapping_arbitration]=2
+    [tb_GEMM_dsp_packer_sign_recovery]=3
+    [tb_mat_result_normalizer]=4
+    [tb_GEMM_weight_dispatcher]=5
+    [tb_FROM_mat_result_packer]=6
+    [tb_barrel_shifter_BF16]=7
+    [tb_ctrl_npu_decoder]=8
+    [tb_mem_u_operation_queue]=9
+    [tb_GEMM_fmap_staggered_delay]=10
+    [tb_v002_runtime_smoke_program]=11
 )
 
 TB_LIST=(
     tb_shape_const_ram
     tb_mem_dispatcher_shape_lookup
+    tb_mem_l2_uram_mapping_arbitration
     tb_GEMM_dsp_packer_sign_recovery
     tb_mat_result_normalizer
     tb_GEMM_weight_dispatcher
@@ -72,6 +75,7 @@ TB_LIST=(
 QUICK_TB_LIST=(
     tb_shape_const_ram
     tb_mem_dispatcher_shape_lookup
+    tb_mem_l2_uram_mapping_arbitration
     tb_v002_runtime_smoke_program
 )
 
