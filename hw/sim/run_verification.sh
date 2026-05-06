@@ -36,6 +36,7 @@ declare -A TB_DEPS=(
     [tb_ctrl_npu_decoder]="NPU_Controller/NPU_Control_Unit/ISA_PACKAGE/isa_pkg.sv NPU_Controller/NPU_Control_Unit/ctrl_npu_decoder.sv"
     [tb_mem_u_operation_queue]="Constants/compilePriority_Order/E_obs_pkg/perf_counter_pkg.sv NPU_Controller/NPU_Control_Unit/ISA_PACKAGE/isa_pkg.sv MEM_control/IO/mem_u_operation_queue.sv"
     [tb_GEMM_fmap_staggered_delay]="MAT_CORE/GEMM_fmap_staggered_delay.sv"
+    [tb_GEMV_lane_mask]="Constants/compilePriority_Order/B_device_pkg/device_pkg.sv Constants/compilePriority_Order/C_type_pkg/dtype_pkg.sv Constants/compilePriority_Order/C_type_pkg/mem_pkg.sv Constants/compilePriority_Order/D_pipeline_pkg/vec_core_pkg.sv NPU_Controller/NPU_Control_Unit/ISA_PACKAGE/isa_pkg.sv VEC_CORE/GEMV_lane_mask_decode.sv VEC_CORE/GEMV_reduction.sv"
     [tb_v002_runtime_smoke_program]="NPU_Controller/NPU_Control_Unit/ISA_PACKAGE/isa_pkg.sv NPU_Controller/NPU_Control_Unit/ctrl_npu_decoder.sv NPU_Controller/Global_Scheduler.sv"
 )
 
@@ -52,7 +53,8 @@ declare -A TB_CORE=(
     [tb_ctrl_npu_decoder]=7
     [tb_mem_u_operation_queue]=8
     [tb_GEMM_fmap_staggered_delay]=9
-    [tb_v002_runtime_smoke_program]=10
+    [tb_GEMV_lane_mask]=10
+    [tb_v002_runtime_smoke_program]=11
 )
 
 TB_LIST=(
@@ -66,6 +68,7 @@ TB_LIST=(
     tb_ctrl_npu_decoder
     tb_mem_u_operation_queue
     tb_GEMM_fmap_staggered_delay
+    tb_GEMV_lane_mask
     tb_v002_runtime_smoke_program
 )
 

@@ -52,6 +52,7 @@ rtl/MAT_CORE/mat_result_normalizer.sv
 # ===| VEC_CORE |==============================================================
 rtl/VEC_CORE/GEMV_accumulate.sv
 rtl/VEC_CORE/GEMV_generate_lut.sv
+rtl/VEC_CORE/GEMV_lane_mask_decode.sv
 rtl/VEC_CORE/GEMV_reduction.sv
 rtl/VEC_CORE/GEMV_reduction_branch.sv
 rtl/VEC_CORE/GEMV_top.sv

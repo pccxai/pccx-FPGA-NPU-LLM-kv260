@@ -314,8 +314,14 @@ module NPU_top (
   logic [16:0] gemv_num_recur;
   logic        gemv_activated_lane[0:VecCoreDefaultCfg.num_gemv_pipeline-1];
 
-  assign gemv_num_recur      = {11'b0, GEMV_uop_wire.size_ptr_addr};
-  assign gemv_activated_lane = '{default: 1'b0};
+  assign gemv_num_recur = {11'b0, GEMV_uop_wire.size_ptr_addr};
+
+  GEMV_lane_mask_decode #(
+      .param(VecCoreDefaultCfg)
+  ) u_GEMV_lane_mask_decode (
+      .IN_parallel_lane   (GEMV_uop_wire.parallel_lane),
+      .OUT_activated_lane (gemv_activated_lane)
+  );
 
   GEMV_top #(
       .param(VecCoreDefaultCfg)
