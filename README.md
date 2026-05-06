@@ -356,7 +356,7 @@ PASS verdict rules, and the evidence checklist.
 | `tb_shape_const_ram`                | `shape_const_ram` (reset / write / read contract)        |   15 |
 | `tb_mem_dispatcher_shape_lookup`    | `mem_dispatcher` + `shape_const_ram` LOAD pointer routing |   11 |
 | `tb_GEMM_dsp_packer_sign_recovery` | `GEMM_dsp_packer` + `GEMM_sign_recovery` (W4A8 dual-MAC) | 1024 |
-| `tb_GEMM_fmap_staggered_delay`     | `GEMM_fmap_staggered_dispatch` (column stagger)          |   65 |
+| `tb_GEMM_fmap_staggered_delay`     | `GEMM_fmap_staggered_dispatch` (W4A8 column stagger)     |  780 |
 | `tb_GEMM_weight_dispatcher`        | `GEMM_weight_dispatcher` (upper / lower AND-valid)      |  128 |
 | `tb_mat_result_normalizer`         | `mat_result_normalizer` (48 b 2sC → BF16 4-stage)       |  256 |
 | `tb_FROM_mat_result_packer`        | `FROM_gemm_result_packer` (32 lanes → 4×128 b FSM)      |    4 |
