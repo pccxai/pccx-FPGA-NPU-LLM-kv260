@@ -75,7 +75,7 @@ module tb_mem_u_operation_queue;
 
   // ===| Scoreboard |============================================================
   localparam int NPush         = 32;
-  localparam int OutCountFloor = NPush - 8;  // std-mode FIFO read pipeline slack
+  localparam int OutCountFloor = NPush - 8;  // XPM flag/model slack
   // counters_errors is the only failure surface; pop ordering is intentionally
   // not checked here (see the file header for the rationale).
   int counter_errors = 0;
@@ -116,9 +116,8 @@ module tb_mem_u_operation_queue;
     IN_acp_is_busy = 1'b0;
     IN_npu_is_busy = 1'b0;
 
-    // Drain ~NPush items per channel + xpm_fifo_sync std-mode read latency
-    // (BRAM-backed: needs settling time for the empty flag to propagate
-    // back through the BRAM read pipeline). Generous headroom (~10x NPush)
+    // Drain ~NPush items per channel + XPM flag settling headroom.
+    // Generous headroom (~10x NPush)
     // ensures both channels fully drain before we move on.
     repeat (NPush * 10) @(posedge clk_core);
 
@@ -152,7 +151,7 @@ module tb_mem_u_operation_queue;
     //   Phase 2   : >=NPush pops drained on each channel.
     //   Phase 2b  : 200 push attempts on ACP. The FIFO accepts up to its
     //               prog_full threshold (~100), then gates the rest. The
-    //               accepted count varies slightly with std-mode internal
+    //               accepted count varies slightly with XPM internal
     //               latency, so we just bound it: in_count must increase
     //               by at least 80 and at most 200 above the Phase 1 count;
     //               stall_cycles must be > 0 to prove the SVA path fired.
@@ -170,8 +169,8 @@ module tb_mem_u_operation_queue;
     // out_count uses the existing `~empty` valid contract of the DUT
     // (acp_pop_fire = ~busy & ~empty). xpm_fifo_sync's "std" mode asserts
     // `empty` when the storage queue is drained, even if the BRAM read
-    // pipeline still has 1-3 latched words. So out_count converges a few
-    // cycles short of NPush — the slack is the std-mode read-pipeline depth.
+    // pipeline / flag state can still have a few latched words. So out_count
+    // may converge a few cycles short of NPush depending on the XPM model.
     // We assert "drained at least most of the burst, plus more than zero",
     // which is the contract a Stage D dashboard cares about.
     if (dut.acp_perf.out_count < 32'(OutCountFloor)) begin
