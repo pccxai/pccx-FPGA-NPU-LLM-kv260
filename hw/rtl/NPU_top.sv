@@ -15,7 +15,7 @@ import bf16_math_pkg::*;
 // Clock        : clk_core @ 400 MHz (compute), clk_axi @ 250 MHz (HP/AXIL).
 // Reset        : rst_n_core / rst_axi_n active-low. Synchronous release.
 // Soft-clear   : i_clear (active-high, sync) — combined with reset wherever
-//                state is latched. See CLAUDE.md §3 reset convention.
+//                state is latched per the repo reset convention.
 // Throughput   : Steady-state, dual-lane W4A8 systolic = 32 × 32 × 2 MAC/clk.
 // Backpressure : HP weight FIFOs (mem_HP_buffer) provide CDC + skid; ACP fmap
 //                FIFO (preprocess_fmap) holds at boundary when broadcast stalls.
@@ -35,7 +35,7 @@ import bf16_math_pkg::*;
 //
 // Status word (mmio_npu_stat[31:0], surfaced to AXIL_STAT_OUT):
 //   bit 0 : BUSY  = fifo_full | cvo_busy | cvo_disp_busy
-//   bit 1 : DONE  = CVO operation complete pulse (one cycle)
+//   bit 1 : DONE  = CVO dispatcher operation complete pulse (one cycle)
 //   bit 31:2 reserved.
 // ===============================================================================
 
@@ -82,6 +82,7 @@ module NPU_top (
   instruction_op_x64_t instruction;
 
   logic                fifo_full_wire;
+  logic [31:0]         mmio_npu_stat;
 
   // ===| [1] NPU Controller |====================================================
   npu_controller_top #() u_npu_controller_top (
@@ -90,6 +91,9 @@ module NPU_top (
       .i_clear(i_clear),
 
       .S_AXIL_CTRL(S_AXIL_CTRL),
+
+      .IN_enc_stat ({32'd0, mmio_npu_stat}),
+      .IN_enc_valid(mmio_npu_stat[1]),
 
       .OUT_GEMV_op_x64_valid  (GEMV_op_x64_valid_wire),
       .OUT_GEMM_op_x64_valid  (GEMM_op_x64_valid_wire),
@@ -139,6 +143,7 @@ module NPU_top (
   logic        cvo_result_valid_wire;
   logic        cvo_result_ready_wire;
   logic        cvo_disp_busy_wire;
+  logic        cvo_disp_done_wire;
 
   mem_dispatcher #() u_mem_dispatcher (
       .clk_core  (clk_core),
@@ -164,7 +169,8 @@ module NPU_top (
       .OUT_cvo_result_ready(cvo_result_ready_wire),
 
       .OUT_fifo_full(fifo_full_wire),
-      .OUT_cvo_busy (cvo_disp_busy_wire)
+      .OUT_cvo_busy (cvo_disp_busy_wire),
+      .OUT_cvo_done (cvo_disp_done_wire)
   );
 
   // ===| [4] HP Weight Buffer (CDC FIFO: AXI → Core clock) |====================
@@ -361,7 +367,6 @@ module NPU_top (
   //   Packed as BF16: {sign=0, exp=delayed_emax_32[0], mant=7'b0}.
   logic [15:0] cvo_emax_bf16;
   logic        cvo_busy_wire;
-  logic        cvo_done_wire;
 
   assign cvo_emax_bf16 = {1'b0, delayed_emax_32[0], 7'b0};
 
@@ -386,17 +391,16 @@ module NPU_top (
       .IN_e_max(cvo_emax_bf16),
 
       .OUT_busy(cvo_busy_wire),
-      .OUT_done(cvo_done_wire),
+      .OUT_done(),
       .OUT_accm()
   );
 
   // ===| Status |================================================================
   // Aggregated NPU busy/done flags — intended for ctrl_npu_frontend IN_enc_stat.
   // Bit 0 : BUSY  (memory FIFO full | CVO engine active | CVO DMA bridge active)
-  // Bit 1 : DONE  (CVO operation complete pulse)
-  logic [31:0] mmio_npu_stat;
+  // Bit 1 : DONE  (CVO dispatcher operation complete pulse)
   assign mmio_npu_stat[0]    = fifo_full_wire | cvo_busy_wire | cvo_disp_busy_wire;
-  assign mmio_npu_stat[1]    = cvo_done_wire;
+  assign mmio_npu_stat[1]    = cvo_disp_done_wire;
   assign mmio_npu_stat[31:2] = 30'd0;
 
 endmodule

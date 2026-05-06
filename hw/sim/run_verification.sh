@@ -37,6 +37,7 @@ declare -A TB_DEPS=(
     [tb_mem_u_operation_queue]="Constants/compilePriority_Order/E_obs_pkg/perf_counter_pkg.sv NPU_Controller/NPU_Control_Unit/ISA_PACKAGE/isa_pkg.sv MEM_control/IO/mem_u_operation_queue.sv"
     [tb_GEMM_fmap_staggered_delay]="MAT_CORE/GEMM_fmap_staggered_delay.sv"
     [tb_v002_runtime_smoke_program]="NPU_Controller/NPU_Control_Unit/ISA_PACKAGE/isa_pkg.sv NPU_Controller/NPU_Control_Unit/ctrl_npu_decoder.sv NPU_Controller/Global_Scheduler.sv"
+    [tb_npu_top_e2e_minimal]="__FULL_NPU_TOP__"
 )
 
 # Core-id assigned to a tb's emitted pccx trace. Kept contiguous so the UI
@@ -53,6 +54,7 @@ declare -A TB_CORE=(
     [tb_mem_u_operation_queue]=8
     [tb_GEMM_fmap_staggered_delay]=9
     [tb_v002_runtime_smoke_program]=10
+    [tb_npu_top_e2e_minimal]=11
 )
 
 TB_LIST=(
@@ -67,6 +69,7 @@ TB_LIST=(
     tb_mem_u_operation_queue
     tb_GEMM_fmap_staggered_delay
     tb_v002_runtime_smoke_program
+    tb_npu_top_e2e_minimal
 )
 
 QUICK_TB_LIST=(
@@ -143,9 +146,15 @@ run_tb() {
     mkdir -p "$work"
 
     local -a rtl_args=()
-    for rel in ${TB_DEPS[$tb]}; do
-        rtl_args+=("$HW_DIR/rtl/$rel")
-    done
+    if [[ "${TB_DEPS[$tb]}" == "__FULL_NPU_TOP__" ]]; then
+        while IFS= read -r rel; do
+            rtl_args+=("$HW_DIR/$rel")
+        done < <(sed -n 's|^rtl/||p' "$HW_DIR/vivado/filelist.f" | sed 's|^|rtl/|')
+    else
+        for rel in ${TB_DEPS[$tb]}; do
+            rtl_args+=("$HW_DIR/rtl/$rel")
+        done
+    fi
     local -a glbl_src_args=()
     local -a glbl_top_args=()
     if [[ -n "$GLBL_V" && -f "$GLBL_V" ]]; then
@@ -170,6 +179,7 @@ run_tb() {
         xvlog -sv \
             -i "$HW_DIR/rtl/Constants/compilePriority_Order/A_const_svh" \
             -i "$HW_DIR/rtl/MAT_CORE" \
+            -i "$HW_DIR/rtl/VEC_CORE" \
             -i "$HW_DIR/rtl/MEM_control/IO" \
             -i "$HW_DIR/rtl/NPU_Controller" \
             "${rtl_args[@]}" \
