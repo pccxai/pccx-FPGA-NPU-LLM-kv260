@@ -29,6 +29,7 @@ declare -A TB_DEPS=(
     [tb_shape_const_ram]="NPU_Controller/NPU_Control_Unit/ISA_PACKAGE/isa_pkg.sv MEM_control/memory/Constant_Memory/shape_const_ram.sv"
     [tb_mem_dispatcher_shape_lookup]="NPU_Controller/NPU_Control_Unit/ISA_PACKAGE/isa_pkg.sv Constants/compilePriority_Order/E_obs_pkg/perf_counter_pkg.sv NPU_Controller/npu_interfaces.svh MEM_control/memory/Constant_Memory/shape_const_ram.sv MEM_control/IO/mem_u_operation_queue.sv MEM_control/memory/mem_BUFFER.sv MEM_control/top/mem_L2_cache_fmap.sv MEM_control/memory/mem_GLOBAL_cache.sv MEM_control/top/mem_CVO_stream_bridge.sv MEM_control/top/mem_dispatcher.sv"
     [tb_GEMM_dsp_packer_sign_recovery]="MAT_CORE/GEMM_dsp_packer.sv MAT_CORE/GEMM_sign_recovery.sv"
+    [tb_gemm_w4a8_dsp_dual_mac]="Constants/compilePriority_Order/C_type_pkg/dtype_pkg.sv MAT_CORE/GEMM_dsp_packer.sv MAT_CORE/GEMM_sign_recovery.sv MAT_CORE/GEMM_dsp_unit.sv MAT_CORE/GEMM_dsp_unit_last_ROW.sv"
     [tb_mat_result_normalizer]="Constants/compilePriority_Order/C_type_pkg/dtype_pkg.sv MAT_CORE/mat_result_normalizer.sv"
     [tb_GEMM_weight_dispatcher]="MAT_CORE/GEMM_weight_dispatcher.sv"
     [tb_FROM_mat_result_packer]="MAT_CORE/FROM_mat_result_packer.sv"
@@ -53,12 +54,14 @@ declare -A TB_CORE=(
     [tb_mem_u_operation_queue]=8
     [tb_GEMM_fmap_staggered_delay]=9
     [tb_v002_runtime_smoke_program]=10
+    [tb_gemm_w4a8_dsp_dual_mac]=11
 )
 
 TB_LIST=(
     tb_shape_const_ram
     tb_mem_dispatcher_shape_lookup
     tb_GEMM_dsp_packer_sign_recovery
+    tb_gemm_w4a8_dsp_dual_mac
     tb_mat_result_normalizer
     tb_GEMM_weight_dispatcher
     tb_FROM_mat_result_packer
