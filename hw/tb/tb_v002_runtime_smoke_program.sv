@@ -58,6 +58,7 @@ module tb_v002_runtime_smoke_program;
   GEMV_control_uop_t   OUT_GEMV_uop;
   memory_control_uop_t OUT_LOAD_uop;
   memory_control_uop_t OUT_STORE_uop;
+  logic                OUT_STORE_uop_valid;
   memory_set_uop_t     OUT_mem_set_uop;
   cvo_control_uop_t    OUT_CVO_uop;
   logic                OUT_sram_rd_start;
@@ -75,6 +76,7 @@ module tb_v002_runtime_smoke_program;
       .OUT_GEMV_uop           (OUT_GEMV_uop),
       .OUT_LOAD_uop           (OUT_LOAD_uop),
       .OUT_STORE_uop          (OUT_STORE_uop),
+      .OUT_STORE_uop_valid    (OUT_STORE_uop_valid),
       .OUT_mem_set_uop        (OUT_mem_set_uop),
       .OUT_CVO_uop            (OUT_CVO_uop),
       .OUT_sram_rd_start      (OUT_sram_rd_start)
@@ -182,9 +184,11 @@ module tb_v002_runtime_smoke_program;
       input int index,
       input data_route_e exp_route,
       input dest_addr_t exp_dest,
-      input ptr_addr_t exp_shape_ptr
+      input ptr_addr_t exp_shape_ptr,
+      input logic exp_valid
   );
     begin
+      expect_bit($sformatf("scheduler[%0d].store_valid", index), OUT_STORE_uop_valid, exp_valid);
       checks++;
       if (OUT_STORE_uop.data_dest      !== exp_route ||
           OUT_STORE_uop.dest_addr      !== exp_dest ||
@@ -204,19 +208,22 @@ module tb_v002_runtime_smoke_program;
       case (index)
         0: begin
           expect_memset(index, data_to_fmap_shape, 6'd3, 16'd1, 16'd1, 16'd9);
+          expect_bit("scheduler[0].store_valid", OUT_STORE_uop_valid, 1'b0);
           expect_bit("scheduler[0].sram_start", OUT_sram_rd_start, 1'b0);
         end
         1: begin
           expect_memset(index, data_to_fmap_shape, 6'd9, 16'd4, 16'd4, 16'd4);
+          expect_bit("scheduler[1].store_valid", OUT_STORE_uop_valid, 1'b0);
           expect_bit("scheduler[1].sram_start", OUT_sram_rd_start, 1'b0);
         end
         2: begin
           expect_load(index, from_host_to_L2, 17'd100, 17'd0, 6'd3, SYNC_OP);
+          expect_bit("scheduler[2].store_valid", OUT_STORE_uop_valid, 1'b0);
           expect_bit("scheduler[2].sram_start", OUT_sram_rd_start, 1'b0);
         end
         3: begin
           expect_load(index, from_L2_to_L1_GEMM, 17'd0, 17'd300, 6'd3, SYNC_OP);
-          expect_store(index, from_GEMM_res_to_L2, 17'd512, 6'd3);
+          expect_store(index, from_GEMM_res_to_L2, 17'd512, 6'd3, 1'b1);
           expect_bit("scheduler[3].gemm.w_scale", OUT_GEMM_uop.flags.w_scale, 1'b1);
           expect_equal64("scheduler[3].gemm.size_lane",
                          {53'd0, OUT_GEMM_uop.size_ptr_addr, OUT_GEMM_uop.parallel_lane},
@@ -225,7 +232,7 @@ module tb_v002_runtime_smoke_program;
         end
         4: begin
           expect_load(index, from_L2_to_L1_GEMV, 17'd0, 17'd400, 6'd9, SYNC_OP);
-          expect_store(index, from_GEMV_res_to_L2, 17'd768, 6'd9);
+          expect_store(index, from_GEMV_res_to_L2, 17'd768, 6'd9, 1'b1);
           expect_bit("scheduler[4].gemv.accm", OUT_GEMV_uop.flags.accm, 1'b1);
           expect_equal64("scheduler[4].gemv.size_lane",
                          {53'd0, OUT_GEMV_uop.size_ptr_addr, OUT_GEMV_uop.parallel_lane},
@@ -234,7 +241,7 @@ module tb_v002_runtime_smoke_program;
         end
         5: begin
           expect_load(index, from_L2_to_CVO, 17'd0, 17'd768, 6'd0, SYNC_OP);
-          expect_store(index, from_CVO_res_to_L2, 17'd896, 6'd0);
+          expect_store(index, from_CVO_res_to_L2, 17'd896, 6'd0, 1'b1);
           checks++;
           if (OUT_CVO_uop.cvo_func !== CVO_REDUCE_SUM ||
               OUT_CVO_uop.src_addr !== 17'd768 ||
@@ -251,6 +258,7 @@ module tb_v002_runtime_smoke_program;
         end
         6: begin
           expect_load(index, from_L2_to_host, 17'd0, 17'd896, 6'd3, SYNC_OP);
+          expect_bit("scheduler[6].store_valid", OUT_STORE_uop_valid, 1'b0);
           expect_bit("scheduler[6].sram_start", OUT_sram_rd_start, 1'b0);
         end
         default: begin

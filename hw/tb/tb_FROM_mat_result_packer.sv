@@ -13,9 +13,8 @@
 //
 //     packed_data @ beat k = {row_res[k*8+7], ..., row_res[k*8]}
 //
-//   packed_ready is held high so the FSM advances every beat without
-//   back-pressure — the goal is functional correctness of the packing
-//   order, not the ready/valid protocol itself.
+//   packed_ready follows a deterministic pseudo-random stall pattern so the
+//   TB checks both packing order and ready/valid hold behavior.
 // ===============================================================================
 
 `include "GLOBAL_CONST.svh"
@@ -57,6 +56,9 @@ module tb_FROM_mat_result_packer;
   logic [127:0] expected_beats [0:N_BEATS-1];
   int           beats_seen = 0;
   int           errors     = 0;
+  int           stall_cycles = 0;
+  int           ready_step = 0;
+  logic         drive_ready;
 
   // Reference packing — must match the DUT's bit-ordering.
   initial begin : build_expected
@@ -76,6 +78,7 @@ module tb_FROM_mat_result_packer;
   initial begin
     rst_n        = 1'b0;
     packed_ready = 1'b0;
+    drive_ready  = 1'b0;
     for (int k = 0; k < ARRAY_SIZE; k++) begin
       row_res[k]       = '0;
       row_res_valid[k] = 1'b0;
@@ -93,7 +96,7 @@ module tb_FROM_mat_result_packer;
     @(posedge clk);
     // Results latched — drop the valids so the FSM reads out the buffer.
     for (int k = 0; k < ARRAY_SIZE; k++) row_res_valid[k] = 1'b0;
-    packed_ready = 1'b1;
+    drive_ready = 1'b1;
 
     // Collect N_BEATS beats with a generous drain window.
     i = 0;
@@ -102,38 +105,59 @@ module tb_FROM_mat_result_packer;
       i++;
     end
 
+    drive_ready = 1'b0;
+    packed_ready = 1'b0;
+
     if (beats_seen != N_BEATS) begin
       $display("FAIL: %0d mismatches over %0d cycles.",
                (N_BEATS - beats_seen) + errors, i);
+    end else if (stall_cycles == 0) begin
+      $display("FAIL: ready/valid stall path was not exercised.");
     end else if (errors == 0) begin
-      $display("PASS: %0d cycles, both channels match golden.", N_BEATS);
+      $display("PASS: %0d beats, packer ready-stall order matches golden.", N_BEATS);
     end else begin
       $display("FAIL: %0d mismatches over %0d cycles.", errors, N_BEATS);
     end
     $finish;
   end
 
-  // Capture every new beat. The DUT keeps packed_valid asserted across the
-  // CHECK_VALID -> SEND_DATA transitions, so a single logical beat persists
-  // on the bus for two clock cycles. We therefore count a beat only when
-  // packed_data actually changes (plus one initial edge).
-  logic [`AXI_STREAM_WIDTH-1:0] prev_packed_data = '0;
-  logic                         seen_first_beat  = 1'b0;
+  always @(negedge clk) begin
+    if (!rst_n || !drive_ready) begin
+      packed_ready = 1'b0;
+      ready_step   = 0;
+    end else begin
+      // Repeatable stall pattern with both single- and multi-cycle bubbles.
+      packed_ready = ((ready_step % 5) != 1) && ((ready_step % 7) != 3);
+      ready_step++;
+    end
+  end
+
+  // Capture every valid/ready beat and ensure data stays stable while stalled.
+  logic [`AXI_STREAM_WIDTH-1:0] stalled_data = '0;
+  logic                         was_stalled  = 1'b0;
 
   always_ff @(posedge clk) begin
     if (rst_n && packed_valid && packed_ready) begin
-      if (!seen_first_beat || packed_data !== prev_packed_data) begin
-        if (beats_seen < N_BEATS) begin
-          if (packed_data !== expected_beats[beats_seen]) begin
-            errors++;
-            $display("[%0t] beat %0d mismatch:\n got=%h\n exp=%h",
-                     $time, beats_seen, packed_data, expected_beats[beats_seen]);
-          end
-          beats_seen++;
+      if (beats_seen < N_BEATS) begin
+        if (packed_data !== expected_beats[beats_seen]) begin
+          errors++;
+          $display("[%0t] beat %0d mismatch:\n got=%h\n exp=%h",
+                   $time, beats_seen, packed_data, expected_beats[beats_seen]);
         end
-        prev_packed_data <= packed_data;
-        seen_first_beat  <= 1'b1;
+        beats_seen++;
       end
+      was_stalled <= 1'b0;
+    end else if (rst_n && packed_valid && !packed_ready) begin
+      stall_cycles++;
+      if (was_stalled && packed_data !== stalled_data) begin
+        errors++;
+        $display("[%0t] stalled data changed: got=%h prev=%h",
+                 $time, packed_data, stalled_data);
+      end
+      stalled_data <= packed_data;
+      was_stalled  <= 1'b1;
+    end else if (rst_n && !packed_valid) begin
+      was_stalled <= 1'b0;
     end
   end
 

@@ -48,6 +48,7 @@ module Global_Scheduler #() (
     output GEMV_control_uop_t   OUT_GEMV_uop,
     output memory_control_uop_t OUT_LOAD_uop,
     output memory_control_uop_t OUT_STORE_uop,
+    output logic                OUT_STORE_uop_valid,
     output memory_set_uop_t     OUT_mem_set_uop,
     output cvo_control_uop_t    OUT_CVO_uop,
 
@@ -148,31 +149,39 @@ module Global_Scheduler #() (
   // Held until the engine signals completion (external handshake, not shown here).
   always_ff @(posedge clk_core) begin
     if (!rst_n_core) begin
-      OUT_STORE_uop <= '0;
-    end else if (IN_GEMM_op_x64_valid) begin
-      OUT_STORE_uop <= '{
-          data_dest      : from_GEMM_res_to_L2,
-          dest_addr      : GEMM_op_x64.dest_reg,
-          src_addr       : '0,
-          shape_ptr_addr : GEMM_op_x64.shape_ptr_addr,
-          async          : SYNC_OP
-      };
-    end else if (IN_GEMV_op_x64_valid) begin
-      OUT_STORE_uop <= '{
-          data_dest      : from_GEMV_res_to_L2,
-          dest_addr      : GEMV_op_x64.dest_reg,
-          src_addr       : '0,
-          shape_ptr_addr : GEMV_op_x64.shape_ptr_addr,
-          async          : SYNC_OP
-      };
-    end else if (IN_cvo_op_x64_valid) begin
-      OUT_STORE_uop <= '{
-          data_dest      : from_CVO_res_to_L2,
-          dest_addr      : cvo_op_x64.dst_addr,
-          src_addr       : '0,
-          shape_ptr_addr : '0,
-          async          : cvo_op_x64.async
-      };
+      OUT_STORE_uop       <= '0;
+      OUT_STORE_uop_valid <= 1'b0;
+    end else begin
+      OUT_STORE_uop_valid <= 1'b0;
+
+      if (IN_GEMM_op_x64_valid) begin
+        OUT_STORE_uop <= '{
+            data_dest      : from_GEMM_res_to_L2,
+            dest_addr      : GEMM_op_x64.dest_reg,
+            src_addr       : '0,
+            shape_ptr_addr : GEMM_op_x64.shape_ptr_addr,
+            async          : SYNC_OP
+        };
+        OUT_STORE_uop_valid <= 1'b1;
+      end else if (IN_GEMV_op_x64_valid) begin
+        OUT_STORE_uop <= '{
+            data_dest      : from_GEMV_res_to_L2,
+            dest_addr      : GEMV_op_x64.dest_reg,
+            src_addr       : '0,
+            shape_ptr_addr : GEMV_op_x64.shape_ptr_addr,
+            async          : SYNC_OP
+        };
+        OUT_STORE_uop_valid <= 1'b1;
+      end else if (IN_cvo_op_x64_valid) begin
+        OUT_STORE_uop <= '{
+            data_dest      : from_CVO_res_to_L2,
+            dest_addr      : cvo_op_x64.dst_addr,
+            src_addr       : '0,
+            shape_ptr_addr : '0,
+            async          : cvo_op_x64.async
+        };
+        OUT_STORE_uop_valid <= 1'b1;
+      end
     end
   end
 

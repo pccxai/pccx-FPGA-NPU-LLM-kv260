@@ -109,23 +109,24 @@ module FROM_gemm_result_packer #(
         end
 
         CHECK_VALID: begin
+          packed_valid <= 1'b0;
           // Wait until BeatsPerWord adjacent rows have produced a valid result
           // (one 128-bit word = 8 BF16 lanes today).
           if (&capture_valid[send_idx+:BeatsPerWord]) begin
-            state <= SEND_DATA;
-          end
-        end
-
-        SEND_DATA: begin
-          if (packed_ready) begin
-            // Lane b of the BeatsPerWord-wide group lands in the
-            // [b*BF16_WIDTH +: BF16_WIDTH] slice — same byte order as
-            // the original 8-lane concat, but tracks BeatsPerWord so
-            // changes to AXI_STREAM_WIDTH or BF16_WIDTH stay in sync.
+            // Drive data before asserting valid so a downstream stall sees a
+            // stable payload until the eventual valid/ready handshake.
             for (int b = 0; b < BeatsPerWord; b++) begin
               packed_data[b*`BF16_WIDTH +: `BF16_WIDTH] <= capture_reg[send_idx+b];
             end
             packed_valid <= 1'b1;
+            state        <= SEND_DATA;
+          end
+        end
+
+        SEND_DATA: begin
+          packed_valid <= 1'b1;  // Keep high until ready
+          if (packed_ready) begin
+            packed_valid <= 1'b0;
 
             if (send_idx >= LastSendIdx) begin
               state    <= IDLE;
@@ -134,8 +135,6 @@ module FROM_gemm_result_packer #(
               send_idx <= send_idx + BeatsPerWord;
               state    <= CHECK_VALID;
             end
-          end else begin
-            packed_valid <= 1'b1;  // Keep high until ready
           end
         end
 

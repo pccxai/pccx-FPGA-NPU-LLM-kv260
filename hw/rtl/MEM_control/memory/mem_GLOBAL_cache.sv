@@ -54,6 +54,10 @@ module mem_GLOBAL_cache (
     output logic         OUT_npu_is_busy,
 
     input  logic [127:0] IN_npu_wdata,
+    input  logic         IN_npu_direct_en,
+    input  logic         IN_npu_direct_we,
+    input  logic  [16:0] IN_npu_direct_addr,
+    input  logic [127:0] IN_npu_direct_wdata,
     output logic [127:0] OUT_npu_rdata
 );
 
@@ -133,6 +137,22 @@ module mem_GLOBAL_cache (
 
   assign OUT_npu_is_busy = npu_is_busy;
 
+  logic        uram_npu_we;
+  logic [16:0] uram_npu_addr;
+  logic [127:0] uram_npu_wdata;
+
+  always_comb begin
+    if (IN_npu_direct_en) begin
+      uram_npu_we    = IN_npu_direct_we;
+      uram_npu_addr  = IN_npu_direct_addr;
+      uram_npu_wdata = IN_npu_direct_wdata;
+    end else begin
+      uram_npu_we    = npu_write_en & npu_is_busy;
+      uram_npu_addr  = npu_ptr;
+      uram_npu_wdata = IN_npu_wdata;
+    end
+  end
+
   always_ff @(posedge clk_core) begin
     if (!rst_n_core) begin
       npu_ptr      <= '0;
@@ -168,9 +188,9 @@ module mem_GLOBAL_cache (
       .OUT_acp_rdata(core_acp_tx_bus.tdata),
 
       // Port B — NPU compute
-      .IN_npu_we    (npu_write_en & npu_is_busy),
-      .IN_npu_addr  (npu_ptr),
-      .IN_npu_wdata (IN_npu_wdata),
+      .IN_npu_we    (uram_npu_we),
+      .IN_npu_addr  (uram_npu_addr),
+      .IN_npu_wdata (uram_npu_wdata),
       .OUT_npu_rdata(OUT_npu_rdata)
   );
 
