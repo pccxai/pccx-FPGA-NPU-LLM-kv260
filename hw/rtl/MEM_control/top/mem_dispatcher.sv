@@ -61,7 +61,8 @@ module mem_dispatcher #() (
 
     // ===| Status |=============================================================
     output logic OUT_fifo_full,
-    output logic OUT_cvo_busy
+    output logic OUT_cvo_busy,
+    output logic OUT_cvo_done
 );
 
   // ===| FIFO full aggregation |=================================================
@@ -352,6 +353,8 @@ module mem_dispatcher #() (
 
   // ===| CVO Stream Bridge |=====================================================
   logic cvo_bridge_done;
+
+  assign OUT_cvo_done = cvo_bridge_done;
 
   mem_CVO_stream_bridge u_cvo_bridge (
       .clk                (clk_core),
