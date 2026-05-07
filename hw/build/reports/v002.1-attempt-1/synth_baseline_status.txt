@@ -1,0 +1,4 @@
+HOOK_STATUS=NOT_RUN_SYNTH_FAILED_BEFORE_POST_SYNTH
+EXPECTED_JSON=hw/build/reports/synth_baseline.json
+JSON_PRESENT=no
+DETAIL=PR #88 recorder was supplied to the Vivado batch after system_bd.tcl, but system_bd.tcl exited on the BD prepare error before the recorder could run.
