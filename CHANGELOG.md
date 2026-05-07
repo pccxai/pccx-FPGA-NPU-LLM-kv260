@@ -7,6 +7,12 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Documentation
+
+- Added explicit pccx v002.1 KV260 acceptance criteria covering
+  bitstream generation, board-run evidence, and a Gemma 3N E4B token
+  observation gate without treating any criterion as complete.
+
 ## v0.1.0-alpha — 2026-05-01
 
 First public RTL preview of the pccx v002 NPU implementation targeting

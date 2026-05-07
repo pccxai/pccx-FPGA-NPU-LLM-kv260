@@ -7,6 +7,8 @@ items are marked **[HW]**.
 
 See also: [`RELEASING.md`](../RELEASING.md) for the tagging process,
 and [`CHANGELOG.md`](../CHANGELOG.md) for the version under preparation.
+For the explicit future pccx v002.1 KV260 release gate, see
+[`docs/releases/v002.1-acceptance-criteria.md`](releases/v002.1-acceptance-criteria.md).
 
 ---
 
@@ -138,3 +140,22 @@ A tag **MUST NOT** be created unless:
 **No production release before full implementation + evidence collection.**
 `v0.2.0` is the earliest realistic target; see EPIC
 [#43](https://github.com/pccxai/pccx-FPGA-NPU-LLM-kv260/issues/43).
+
+## 9. v002.1 KV260 acceptance criteria
+
+The future pccx v002.1 KV260 release gate requires all of the following
+from the same candidate commit, bitstream, board, and Gemma 3N E4B
+runtime fixture:
+
+- [ ] Bitstream generated, with Vivado version, command, post-implementation
+      timing summary, basename, and SHA256 recorded.
+- [ ] KV260 board run captured, with board identifier, programming log,
+      runtime command, sanitized environment, stdout, stderr, console, and
+      summary files retained.
+- [ ] Gemma 3N E4B token observed from the KV260 NPU runtime path, with
+      input fixture, output token excerpt, model fixture identity, commit
+      SHA, bitstream SHA256, and board run evidence tied together.
+
+Blocked, fallback, simulation-only, synthesis-only, or host-only evidence
+does not satisfy the v002.1 gate. This checklist defines the required
+criteria; it does not mark them complete.
