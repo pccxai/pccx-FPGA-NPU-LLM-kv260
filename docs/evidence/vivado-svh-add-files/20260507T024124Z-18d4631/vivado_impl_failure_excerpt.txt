@@ -1,0 +1,22 @@
+Implementation command:
+bash hw/vivado/build.sh impl
+
+Implementation failure excerpt:
+Command: opt_design
+Attempting to get a license for feature 'Implementation' and/or device 'xck26'
+INFO: [Common 17-349] Got license for feature 'Implementation' and/or device 'xck26'
+Running DRC as a precondition to command opt_design
+
+Starting DRC Task
+INFO: [DRC 23-27] Running DRC with 8 threads
+WARNING: [DRC 23-814] Not all possible (connectivity based) DRCs may have been run because this design is seen as Out of Context.
+ERROR: [DRC MDRV-1] Multiple Driver Nets: Net u_mem_dispatcher/u_l2_cache/u_acp_cdc/u_acp_rx_fifo/xpm_fifo_base_inst/full_n has multiple drivers: u_mem_dispatcher/u_l2_cache/u_acp_cdc/u_acp_rx_fifo/xpm_fifo_base_inst/gen_pf_ic_rc.gen_full_rst_val.ram_full_n_reg/Q, and u_fmap_pre/u_fmap_fifo/xpm_fifo_base_inst/gen_pntr_flags_cc.gen_full_rst_val.ram_full_n_reg/Q.
+INFO: [Project 1-461] DRC finished with 1 Errors
+INFO: [Project 1-462] Please refer to the DRC report (report_drc) for more information.
+ERROR: [Vivado_Tcl 4-78] Error(s) found during DRC. Opt_design not run.
+
+INFO: [Common 17-83] Releasing license: Implementation
+13 Infos, 10 Warnings, 5 Critical Warnings and 2 Errors encountered.
+opt_design failed
+ERROR: [Common 17-39] 'opt_design' failed due to earlier errors.
+ERROR: [Vivado 12-13638] Failed runs(s) : 'impl_1'

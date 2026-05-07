@@ -59,6 +59,29 @@ add_files -fileset sources_1 $sv_files
 set_property file_type SystemVerilog [get_files -of [get_filesets sources_1]]
 set_property top $TOP_MODULE [current_fileset]
 
+# Vivado's file manager requires included SystemVerilog headers to be present
+# in the project as Verilog Header files, not only discoverable via include_dirs.
+proc collect_svh_files {root} {
+    set files {}
+    foreach entry [glob -nocomplain -directory $root *] {
+        if {[file isdirectory $entry]} {
+            set files [concat $files [collect_svh_files $entry]]
+        } elseif {[file extension $entry] eq ".svh"} {
+            lappend files [file normalize $entry]
+        }
+    }
+    return $files
+}
+
+set svh_files [lsort [collect_svh_files $HW_ROOT/rtl]]
+if {[llength $svh_files] > 0} {
+    add_files -fileset sources_1 $svh_files
+    foreach svh_file $svh_files {
+        set_property file_type "Verilog Header" [get_files $svh_file]
+    }
+    puts "\[pccx\] registered [llength $svh_files] SystemVerilog headers"
+}
+
 # ----------------------------------------------------------------------------
 # Header / include search paths
 # ----------------------------------------------------------------------------
