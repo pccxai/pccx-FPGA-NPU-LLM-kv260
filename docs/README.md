@@ -16,6 +16,8 @@ Pages, bilingual EN / KO).
   [W4A8_GOLDEN_VECTOR_GATE.md](W4A8_GOLDEN_VECTOR_GATE.md)
 - Repo-local xsim evidence workflow:
   [SIMULATION.md](SIMULATION.md)
+- Repo-local dirty worktree policy:
+  [WORKTREE_DIRTY_STATE_POLICY.md](WORKTREE_DIRTY_STATE_POLICY.md)
 - Repo-local Vivado timing evidence checklist:
   [TIMING_EVIDENCE.md](TIMING_EVIDENCE.md)
 - Repo-local release evidence checklist:
