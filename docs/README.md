@@ -14,6 +14,8 @@ Pages, bilingual EN / KO).
   [GEMMA3N_HANDOFF.md](GEMMA3N_HANDOFF.md)
 - Repo-local W4A8 golden-vector gate:
   [W4A8_GOLDEN_VECTOR_GATE.md](W4A8_GOLDEN_VECTOR_GATE.md)
+- Repo-local `NPU_top` port inventory:
+  [NPU_TOP_PORT_INVENTORY.md](NPU_TOP_PORT_INVENTORY.md)
 - Repo-local xsim evidence workflow:
   [SIMULATION.md](SIMULATION.md)
 - Repo-local Vivado timing evidence checklist:
