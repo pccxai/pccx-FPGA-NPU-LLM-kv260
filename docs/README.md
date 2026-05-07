@@ -18,6 +18,8 @@ Pages, bilingual EN / KO).
   [SIMULATION.md](SIMULATION.md)
 - Repo-local Vivado timing evidence checklist:
   [TIMING_EVIDENCE.md](TIMING_EVIDENCE.md)
+- Repo-local KV260 XDC constraints policy:
+  [KV260_XDC_CONSTRAINTS.md](KV260_XDC_CONSTRAINTS.md)
 - Repo-local release evidence checklist:
   [RELEASE_EVIDENCE_CHECKLIST.md](RELEASE_EVIDENCE_CHECKLIST.md)
 - Documentation root (language picker):

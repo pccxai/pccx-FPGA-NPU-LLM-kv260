@@ -61,8 +61,10 @@ Minimum report set:
 | Post-implementation | `utilization_post_impl.rpt`, `clock_interaction_post_impl.rpt`, `timing_summary_post_impl.rpt`, `drc_post_impl.rpt`, `power_post_impl.rpt` |
 
 See [`../../docs/TIMING_EVIDENCE.md`](../../docs/TIMING_EVIDENCE.md) for
-the review checklist and wording rules. A generated timing report is
-evidence, not a timing-closure claim.
+the review checklist and wording rules, and
+[`../../docs/KV260_XDC_CONSTRAINTS.md`](../../docs/KV260_XDC_CONSTRAINTS.md)
+for the KV260 pin-map, clock, and false-path policy. A generated timing
+report is evidence, not a timing-closure claim.
 
 ## Next steps to reach a running board
 
