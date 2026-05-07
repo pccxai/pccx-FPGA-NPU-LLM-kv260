@@ -64,6 +64,10 @@ See [`../../docs/TIMING_EVIDENCE.md`](../../docs/TIMING_EVIDENCE.md) for
 the review checklist and wording rules. A generated timing report is
 evidence, not a timing-closure claim.
 
+Raw Vivado `.log`, `.jou`, `.str`, project, and build-output files stay
+gitignored. See [`../../docs/VIVADO_LOG_POLICY.md`](../../docs/VIVADO_LOG_POLICY.md)
+for the tracked-vs-ignored log policy and PR evidence format.
+
 ## Next steps to reach a running board
 
 1. **Synth clean** — resolve whatever `synth.tcl` turns up in
