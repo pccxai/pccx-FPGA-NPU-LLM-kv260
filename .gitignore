@@ -138,6 +138,7 @@ formal/sail/build/
 # debug
 ./home/hwkim/Desktop/github/TinyNPU-RTL/Transformer_Accelerator_FPGA-K26_SOM/Transformer_Accelerator/FPGA_debugging.txt
 # Vivado build artifacts
+build/
 hw/build/
 hw/sim/work/
 *.jou
