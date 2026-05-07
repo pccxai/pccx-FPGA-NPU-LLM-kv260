@@ -12,6 +12,7 @@ to show that the constraints are met.
 - Synthesis script: `hw/vivado/synth.tcl`
 - Implementation script: `hw/vivado/impl.tcl`
 - Timing constraints: `hw/constraints/pccx_timing.xdc`
+- XDC policy: `docs/KV260_XDC_CONSTRAINTS.md`
 - Target part: `xck26-sfvc784-2LV-c`
 
 ## Commands
