@@ -47,7 +47,7 @@ report_timing_summary -delay_type min_max -report_unconstrained \
 report_drc            -file                $REPORTS/drc_post_impl.rpt
 report_power          -file                $REPORTS/power_post_impl.rpt
 
-set bit_file [file normalize $PROJ_DIR/pccx_v002_kv260.runs/impl_1/NPU_top.bit]
+set bit_file [file normalize $PROJ_DIR/pccx_v002_kv260.runs/impl_1/pccx_npu_top.bit]
 if {[file exists $bit_file]} {
     file copy -force $bit_file $HW_ROOT/build/pccx_v002_kv260.bit
     puts "\[pccx\] bitstream copied to build/pccx_v002_kv260.bit"

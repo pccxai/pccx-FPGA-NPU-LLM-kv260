@@ -4,11 +4,11 @@
 // Module: npu_core_wrapper
 // Purpose
 // -------
-//   Convert `NPU_top`'s SystemVerilog-interface ports into plain AXI4-Lite
+//   Convert `pccx_npu_top`'s SystemVerilog-interface ports into plain AXI4-Lite
 //   and AXI4-Stream signal bundles so the core can be packaged as a
 //   Vivado IP and dropped into a Block Design alongside the Zynq PS.
 //
-//   NPU_top itself uses `axil_if` / `axis_if` (see `npu_interfaces.svh`).
+//   pccx_npu_top itself uses `axil_if` / `axis_if` (see `npu_interfaces.svh`).
 //   The BD IP packager accepts plain signal ports much more readily; this
 //   wrapper does the one-to-one expansion so the BD / Zynq MPSoC sees
 //   normal AXI4 interfaces.
@@ -78,7 +78,7 @@ module npu_core_wrapper #(
 );
 
   // ---------------------------------------------------------------------------
-  // Interface instances — one per NPU_top port
+  // Interface instances — one per pccx_npu_top port
   // ---------------------------------------------------------------------------
   axil_if #(.ADDR_W(AXIL_ADDR_W), .DATA_W(AXIL_DATA_W)) axil_inst (
     .clk  (clk_axi),
@@ -142,7 +142,7 @@ module npu_core_wrapper #(
   // ---------------------------------------------------------------------------
   // Instantiate the core
   // ---------------------------------------------------------------------------
-  NPU_top u_npu_top (
+  pccx_npu_top u_pccx_npu_top (
     .clk_core          (clk_core),
     .rst_n_core        (rst_n_core),
     .clk_axi           (clk_axi),

@@ -1,5 +1,5 @@
 # =============================================================================
-# synth.tcl — out-of-context synthesis pass for the pccx v002 NPU_top core.
+# synth.tcl — out-of-context synthesis pass for the pccx v002 core.
 #
 # Usage
 # -----
@@ -13,7 +13,7 @@
 #   * emit resource, timing, and clocking reports into build/reports/
 #   * does NOT run opt_design, place_design, route_design, or write_bitstream
 #
-# The out-of-context flag is important: NPU_top uses SV interface ports
+# The out-of-context flag is important: pccx_npu_top uses SV interface ports
 # (axil_if / axis_if) which need a block-design wrapper to terminate. OOC
 # synth lets us synthesise the core in isolation and catch RTL bugs early.
 # =============================================================================
@@ -40,7 +40,7 @@ puts "\[pccx\] synth jobs/threads = $SYNTH_JOBS"
 if {[llength [current_project -quiet]] == 0} {
     open_project $PROJ_DIR/pccx_v002_kv260.xpr
 }
-set_property top NPU_top [current_fileset]
+set_property top pccx_npu_top [current_fileset]
 
 # Remove any stale synth runs so the flow is idempotent.
 foreach r [get_runs -quiet synth_1] {

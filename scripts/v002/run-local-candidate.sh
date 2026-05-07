@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Run local v002 candidate checks that do not require a board.
 #
-# Logs are written under hw/build/ so generated evidence stays out of git.
+# Logs are written under hw/build/ so run evidence stays out of git.
 
 set -Eeuo pipefail
 IFS=$'\n\t'
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 HW_DIR="$ROOT_DIR/hw"
+V002_ROOT="$ROOT_DIR/third_party/pccx-v002"
 
 MODE="full"
 LIST_ONLY=0
@@ -28,7 +29,7 @@ Options:
   --no-vivado               skip Vivado compile and top elaboration checks
   --with-vivado-compile     include Vivado filelist compile when tools exist
   --with-top-elab           include npu_core_wrapper elaboration when tools exist
-  --with-runtime-dry-run    include generated runtime smoke program dry-run
+  --with-runtime-dry-run    include runtime smoke program dry-run
   --run-id <id>             use a deterministic evidence directory suffix
   -h, --help                print this help
 USAGE
@@ -247,13 +248,32 @@ tool_summary() {
 
 make_abs_filelist() {
     local out="$1"
+    local filelist="$HW_DIR/vivado/filelist.v002.f"
+    : >"$out"
     while IFS= read -r line; do
         case "$line" in
+            ""|\#*) continue ;;
+            "-f "*)
+                local nested="${line#-f }"
+                case "$nested" in
+                    ../third_party/pccx-v002/LLM/scripts/filelist.f)
+                        while IFS= read -r subline; do
+                            case "$subline" in
+                                ""|\#*) continue ;;
+                                *) printf '%s/%s\n' "$V002_ROOT" "$subline" ;;
+                            esac
+                        done <"$V002_ROOT/LLM/scripts/filelist.f"
+                        ;;
+                    *)
+                        printf '%s\n' "$line"
+                        ;;
+                esac
+                ;;
             rtl/*)    printf '%s/%s\n' "$HW_DIR" "$line" ;;
             vivado/*) printf '%s/%s\n' "$HW_DIR" "$line" ;;
             *)        printf '%s\n' "$line" ;;
         esac
-    done <"$HW_DIR/vivado/filelist.f" >"$out"
+    done <"$filelist"
 }
 
 run_runtime_dry_run() {
@@ -298,14 +318,14 @@ run_optional_vivado_compile() {
 
     run_shell vivado_filelist_compile \
         "cd '$work' && xvlog -sv \
-          -i '$HW_DIR/rtl' \
-          -i '$HW_DIR/rtl/Constants/compilePriority_Order/A_const_svh' \
-          -i '$HW_DIR/rtl/MAT_CORE' \
-          -i '$HW_DIR/rtl/MEM_control/IO' \
-          -i '$HW_DIR/rtl/NPU_Controller' \
-          -i '$HW_DIR/rtl/NPU_Controller/NPU_Control_Unit' \
-          -i '$HW_DIR/rtl/NPU_Controller/NPU_Control_Unit/ISA_PACKAGE' \
-          -i '$HW_DIR/rtl/VEC_CORE' \
+          -i '$V002_ROOT/common/rtl/packages/legacy' \
+          -i '$V002_ROOT/common/rtl/packages' \
+          -i '$V002_ROOT/common/rtl/interfaces' \
+          -i '$V002_ROOT/LLM/rtl/packages/isa' \
+          -i '$V002_ROOT/LLM/rtl/packages/controller' \
+          -i '$V002_ROOT/LLM/rtl/core/mat' \
+          -i '$V002_ROOT/LLM/rtl/core/vec' \
+          -i '$V002_ROOT/LLM/rtl/interfaces' \
           -f '$abs_filelist'"
 }
 
@@ -336,14 +356,14 @@ run_optional_wrapper_elab() {
 
     run_shell npu_core_wrapper_elab \
         "cd '$work' && xvlog -sv \
-          -i '$HW_DIR/rtl' \
-          -i '$HW_DIR/rtl/Constants/compilePriority_Order/A_const_svh' \
-          -i '$HW_DIR/rtl/MAT_CORE' \
-          -i '$HW_DIR/rtl/MEM_control/IO' \
-          -i '$HW_DIR/rtl/NPU_Controller' \
-          -i '$HW_DIR/rtl/NPU_Controller/NPU_Control_Unit' \
-          -i '$HW_DIR/rtl/NPU_Controller/NPU_Control_Unit/ISA_PACKAGE' \
-          -i '$HW_DIR/rtl/VEC_CORE' \
+          -i '$V002_ROOT/common/rtl/packages/legacy' \
+          -i '$V002_ROOT/common/rtl/packages' \
+          -i '$V002_ROOT/common/rtl/interfaces' \
+          -i '$V002_ROOT/LLM/rtl/packages/isa' \
+          -i '$V002_ROOT/LLM/rtl/packages/controller' \
+          -i '$V002_ROOT/LLM/rtl/core/mat' \
+          -i '$V002_ROOT/LLM/rtl/core/vec' \
+          -i '$V002_ROOT/LLM/rtl/interfaces' \
           -f '$abs_filelist' '$glbl_v' && \
           xelab -L xpm -L unisims_ver -debug typical npu_core_wrapper glbl -s npu_core_wrapper_snap"
 }
@@ -396,7 +416,7 @@ write_footer() {
 }
 
 syntax_files=(
-    "$ROOT_DIR/hw/sim/run_verification.sh"
+    "$ROOT_DIR/scripts/v002/use_submodule_sources.sh"
     "$ROOT_DIR/scripts/kv260/run_gemma3n_e4b_smoke.sh"
     "$ROOT_DIR/scripts/v002/run-local-candidate.sh"
 )
@@ -414,14 +434,14 @@ tool_summary
 
 run_step bash_syntax run_logged bash_syntax bash -n "${syntax_files[@]}"
 run_step runtime_dry_run run_runtime_dry_run
-run_step xsim_list run_logged xsim_list "$ROOT_DIR/hw/sim/run_verification.sh" --list
-run_step xsim_shape_const_ram run_logged xsim_shape_const_ram "$ROOT_DIR/hw/sim/run_verification.sh" --tb tb_shape_const_ram
-run_step xsim_mem_dispatcher_shape_lookup run_logged xsim_mem_dispatcher_shape_lookup "$ROOT_DIR/hw/sim/run_verification.sh" --tb tb_mem_dispatcher_shape_lookup
-run_step xsim_v002_runtime_smoke_program run_logged xsim_v002_runtime_smoke_program "$ROOT_DIR/hw/sim/run_verification.sh" --tb tb_v002_runtime_smoke_program
+run_step xsim_list run_logged xsim_list "$ROOT_DIR/scripts/v002/use_submodule_sources.sh" --list
+run_step xsim_shape_const_ram run_logged xsim_shape_const_ram "$ROOT_DIR/scripts/v002/use_submodule_sources.sh" --tb tb_shape_const_ram
+run_step xsim_mem_dispatcher_shape_lookup run_logged xsim_mem_dispatcher_shape_lookup "$ROOT_DIR/scripts/v002/use_submodule_sources.sh" --tb tb_mem_dispatcher_shape_lookup
+run_step xsim_v002_runtime_smoke_program run_logged xsim_v002_runtime_smoke_program "$ROOT_DIR/scripts/v002/use_submodule_sources.sh" --tb tb_v002_runtime_smoke_program
 
 if [[ "$MODE" == "full" ]]; then
-    run_step xsim_fmap_staggered_delay run_logged xsim_fmap_staggered_delay "$ROOT_DIR/hw/sim/run_verification.sh" --tb tb_GEMM_fmap_staggered_delay
-    run_step xsim_full_regression run_logged xsim_full_regression "$ROOT_DIR/hw/sim/run_verification.sh" --full
+    run_step xsim_fmap_staggered_delay run_logged xsim_fmap_staggered_delay "$ROOT_DIR/scripts/v002/use_submodule_sources.sh" --tb tb_GEMM_fmap_staggered_delay
+    run_step xsim_full_regression run_logged xsim_full_regression "$ROOT_DIR/scripts/v002/use_submodule_sources.sh" --full
 fi
 
 run_step vivado_filelist_compile run_optional_vivado_compile
