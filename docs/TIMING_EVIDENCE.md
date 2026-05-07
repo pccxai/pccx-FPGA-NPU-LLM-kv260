@@ -34,6 +34,12 @@ On memory-constrained hosts, reduce Vivado run parallelism:
 PCCX_VIVADO_JOBS=1 ./vivado/build.sh synth
 ```
 
+See [VIVADO_SYNTH_RESOURCE_POLICY.md](VIVADO_SYNTH_RESOURCE_POLICY.md)
+for RAM, swap, and low-memory runner guidance. A
+`BLOCKED_RESOURCE_TERMINATED` synth attempt is missing synthesis
+evidence; do not infer timing, utilization, DRC, implementation, or
+bitstream status from it.
+
 For bounded status capture without launching Vivado:
 
 ```bash
