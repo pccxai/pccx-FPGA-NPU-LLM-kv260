@@ -16,6 +16,8 @@ Pages, bilingual EN / KO).
   [W4A8_GOLDEN_VECTOR_GATE.md](W4A8_GOLDEN_VECTOR_GATE.md)
 - Repo-local xsim evidence workflow:
   [SIMULATION.md](SIMULATION.md)
+- Repo-local RTL compile order policy:
+  [COMPILE_ORDER_POLICY.md](COMPILE_ORDER_POLICY.md)
 - Repo-local Vivado timing evidence checklist:
   [TIMING_EVIDENCE.md](TIMING_EVIDENCE.md)
 - Repo-local release evidence checklist:

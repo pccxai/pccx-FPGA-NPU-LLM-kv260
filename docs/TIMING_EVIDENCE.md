@@ -8,6 +8,7 @@ to show that the constraints are met.
 ## Inputs
 
 - Source list: `hw/vivado/filelist.f`
+  ([compile order policy](COMPILE_ORDER_POLICY.md))
 - Project script: `hw/vivado/create_project.tcl`
 - Synthesis script: `hw/vivado/synth.tcl`
 - Implementation script: `hw/vivado/impl.tcl`
