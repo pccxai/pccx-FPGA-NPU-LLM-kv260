@@ -20,6 +20,8 @@ Pages, bilingual EN / KO).
   [TIMING_EVIDENCE.md](TIMING_EVIDENCE.md)
 - Repo-local release evidence checklist:
   [RELEASE_EVIDENCE_CHECKLIST.md](RELEASE_EVIDENCE_CHECKLIST.md)
+- M01 v002 correctness & bring-up close criteria:
+  [spec/m01-v002-close-criteria.md](spec/m01-v002-close-criteria.md)
 - Documentation root (language picker):
   <https://pccxai.github.io/pccx/en/index.html>
 - pccx source repository:
