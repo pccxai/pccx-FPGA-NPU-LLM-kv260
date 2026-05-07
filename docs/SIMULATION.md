@@ -15,14 +15,15 @@ closure evidence, or a performance claim.
 From the repository root:
 
 ```bash
-bash hw/sim/run_verification.sh
+bash scripts/v002/use_submodule_sources.sh
 ```
 
-Quick smoke and per-testbench modes:
+The wrapper forwards arguments to the v002 runner inside the
+submodule, so quick smoke and per-testbench modes work the same way:
 
 ```bash
-bash hw/sim/run_verification.sh --quick
-bash hw/sim/run_verification.sh --tb tb_v002_runtime_smoke_program
+bash scripts/v002/use_submodule_sources.sh --quick
+bash scripts/v002/use_submodule_sources.sh --tb tb_v002_runtime_smoke_program
 ```
 
 The runner executes testbenches in deterministic order. A testbench passes
@@ -52,10 +53,10 @@ not model inference, board execution, or throughput evidence.
 
 ## Generated Evidence
 
-Each testbench writes under:
+Each testbench writes under the submodule's sim work directory:
 
 ```text
-hw/sim/work/<tb_name>/
+third_party/pccx-v002/LLM/sim/work/<tb_name>/
 ```
 
 Typical files:
@@ -98,5 +99,5 @@ For a review or release handoff, record:
 - Vivado version.
 - Exact command used.
 - Full runner summary.
-- Any non-PASS verdict and the corresponding `hw/sim/work/<tb_name>/` path.
+- Any non-PASS verdict and the corresponding `third_party/pccx-v002/LLM/sim/work/<tb_name>/` path.
 - Whether `.pccx` traces were retained locally for pccx-lab inspection.

@@ -9,11 +9,11 @@ GEMV RTL.
 
 Treat these areas as arithmetic-sensitive:
 
-- `hw/rtl/PREPROCESS/preprocess_bf16_fixed_pipeline.sv`
+- `third_party/pccx-v002/LLM/rtl/PREPROCESS/preprocess_bf16_fixed_pipeline.sv`
 - future BF16-to-INT8 preprocess pipeline files
-- `hw/rtl/MAT_CORE/GEMM_dsp_unit*.sv`
-- `hw/rtl/MAT_CORE/GEMM_dsp_packer.sv`
-- `hw/rtl/MAT_CORE/GEMM_sign_recovery.sv`
+- `third_party/pccx-v002/LLM/rtl/MAT_CORE/GEMM_dsp_unit*.sv`
+- `third_party/pccx-v002/LLM/rtl/MAT_CORE/GEMM_dsp_packer.sv`
+- `third_party/pccx-v002/LLM/rtl/MAT_CORE/GEMM_sign_recovery.sv`
 - GEMV reduction and accumulation modules
 
 Do not mix W4A8 arithmetic changes into shape RAM cleanup, documentation,
@@ -49,7 +49,7 @@ A W4A8 arithmetic PR should include:
 - A focused RTL change with no unrelated docs or bring-up edits.
 - A testbench that consumes golden vectors or embeds a clearly explained
   deterministic golden model.
-- PASS/FAIL verdict lines compatible with `hw/sim/run_verification.sh`.
+- PASS/FAIL verdict lines compatible with `scripts/v002/use_submodule_sources.sh`.
 - `xvlog` compile evidence for the touched path.
 - A note explaining whether the fixture is public-safe or must remain
   local because it was derived from licensed model weights.

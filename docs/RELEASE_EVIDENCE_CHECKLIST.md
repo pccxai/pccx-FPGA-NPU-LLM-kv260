@@ -29,11 +29,11 @@ For each testbench run include the following.  Current TB inventory:
 `tb_mat_result_normalizer`, `tb_mem_u_operation_queue`,
 `tb_shape_const_ram`.
 
-- [ ] Command used to run: `cd hw/sim && bash run_verification.sh`
+- [ ] Command used to run: `bash scripts/v002/use_submodule_sources.sh`
 - [ ] Vivado / xsim version recorded (currently: Vivado v2025.2)
 - [ ] Per-TB pass/fail summary from the deterministic runner
 - [ ] Known warnings or elaboration errors documented
-- [ ] `.pccx` trace artifacts retained in `hw/sim/work/<tb>/`
+- [ ] `.pccx` trace artifacts retained in `third_party/pccx-v002/LLM/sim/work/<tb>/`
 - [ ] Waveform snapshots (`.wdb`) retained for failed TBs
 - [ ] E2E NPU_top integration TB added and green (tracked: [#37](https://github.com/pccxai/pccx-FPGA-NPU-LLM-kv260/issues/37))
 - [ ] BF16-to-INT8 preprocess golden-model TB added (tracked: [#33](https://github.com/pccxai/pccx-FPGA-NPU-LLM-kv260/issues/33))

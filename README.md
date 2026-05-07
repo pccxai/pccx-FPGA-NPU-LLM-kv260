@@ -61,7 +61,7 @@ issues are welcome.
 | Roadmap (project board) | <https://github.com/orgs/pccxai/projects/1> |
 | Contributing | <https://github.com/pccxai/.github/blob/main/CONTRIBUTING.md> |
 | How to cite | [CITATION.cff](CITATION.cff) |
-| Verification check | `Sail typecheck` + `repo-validate` required on `main` |
+| Verification check | `repo-validate` required on `main`. The v002 Sail typecheck runs in `pccxai/pccx-v002`. |
 | Discussions (board bring-up, RTL Q&A) | <https://github.com/pccxai/pccx-FPGA-NPU-LLM-kv260/discussions> |
 | Good first issues | <https://github.com/pccxai/pccx-FPGA-NPU-LLM-kv260/labels/good%20first%20issue> |
 

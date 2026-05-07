@@ -98,3 +98,4 @@ Source: `pccx-v002/SOURCE_MANIFEST.md`
 | `hw/tb/`, `hw/sim/run_verification.sh` | `610cdd0` | Testbench and sim runner now come from `third_party/pccx-v002/LLM/`. |
 | `formal/sail/` | `4e3ff17` | Formal sources now come from `third_party/pccx-v002/LLM/formal/sail/`. |
 | `hw/vivado/filelist.f` | `596116f` | KV260 Vivado flow now enters through `hw/vivado/filelist.v002.f`. |
+| `.github/workflows/sail-check.yml` | `30fea1f` | Verification job lives with the IP-core in `pccx-v002`. |
