@@ -83,10 +83,19 @@ jobs:
       - name: Phantom .gitmodules check
         run: |
           set -e
+          # Reject phantom submodule URLs only. The previous llm-lite phantom
+          # used a relative-path url; real submodules pointing at
+          # https://github.com/<owner>/<repo>.git or git@ are allowed.
           if [ -f .gitmodules ]; then
-            echo "::error::.gitmodules is present. The previous llm-lite submodule was a phantom and was removed; recreating it requires a real, reachable target."
-            cat .gitmodules
-            exit 1
+            bad=$(grep -E '^[[:space:]]*url[[:space:]]*=' .gitmodules \
+                  | grep -vE '^[[:space:]]*url[[:space:]]*=[[:space:]]*(https://|git@)' \
+                  || true)
+            if [ -n "$bad" ]; then
+              echo "::error::.gitmodules contains phantom submodule entries (url must start with https:// or git@):"
+              echo "$bad"
+              exit 1
+            fi
+            echo "ok: .gitmodules entries point at real remote URLs"
           fi
 
       - name: YAML syntax (workflow files)
