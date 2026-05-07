@@ -1,0 +1,961 @@
+
+*** Running vivado
+    with args -log NPU_top.vds -m64 -product Vivado -mode batch -messageDb vivado.pb -notrace -source NPU_top.tcl
+
+
+****** Vivado v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 12:34:56 MST 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Thu May  7 11:50:38 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source NPU_top.tcl -notrace
+Command: synth_design -top NPU_top -part xck26-sfvc784-2LV-c -mode out_of_context -flatten_hierarchy rebuilt
+Starting synth_design
+Attempting to get a license for feature 'Synthesis' and/or device 'xck26'
+INFO: [Common 17-349] Got license for feature 'Synthesis' and/or device 'xck26'
+INFO: [Device 21-403] Loading part xck26-sfvc784-2LV-c
+INFO: [Synth 8-7079] Multithreading enabled for synth_design using a maximum of 4 processes.
+INFO: [Synth 8-7078] Launching helper process for spawning children vivado processes
+INFO: [Synth 8-7075] Helper process launched with PID 316908
+---------------------------------------------------------------------------------
+Starting RTL Elaboration : Time (s): cpu = 00:00:06 ; elapsed = 00:00:07 . Memory (MB): peak = 2793.895 ; gain = 143.688 ; free physical = 207 ; free virtual = 16821
+---------------------------------------------------------------------------------
+	Parameter IS_TOP_ROW bound to: 0 - type: integer 
+	Parameter BREAK_CASCADE bound to: 1 - type: integer 
+WARNING: [Synth 8-7023] instance 'DSP_HARD_BLOCK' of module 'DSP48E2' has 50 connections declared, but only 30 given [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_dsp_unit.sv:218]
+	Parameter IS_TOP_ROW bound to: 0 - type: integer 
+WARNING: [Synth 8-7023] instance 'DSP_HARD_BLOCK' of module 'DSP48E2' has 50 connections declared, but only 29 given [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_dsp_unit_last_ROW.sv:175]
+	Parameter ACASCREG bound to: 0 - type: integer 
+	Parameter ALUMODEREG bound to: 0 - type: integer 
+	Parameter AREG bound to: 0 - type: integer 
+	Parameter BCASCREG bound to: 0 - type: integer 
+	Parameter BREG bound to: 0 - type: integer 
+	Parameter CREG bound to: 0 - type: integer 
+	Parameter MREG bound to: 0 - type: integer 
+	Parameter OPMODEREG bound to: 0 - type: integer 
+	Parameter PREG bound to: 1 - type: integer 
+	Parameter USE_MULT bound to: NONE - type: string 
+WARNING: [Synth 8-7023] instance 'DSP_ACC' of module 'DSP48E2' has 50 connections declared, but only 27 given [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_accumulator.sv:51]
+	Parameter param[num_gemv_pipeline] bound to: 32'sb00000000000000000000000000000100 
+	Parameter param[throughput] bound to: 32'sb00000000000000000000000000000001 
+	Parameter param[gemv_batch] bound to: 32'sb00000000000000000000001000000000 
+	Parameter param[gemv_cycle] bound to: 32'sb00000000000000000000001000000000 
+	Parameter param[fixed_mant_width] bound to: 32'sb00000000000000000000000000011011 
+	Parameter param[weight_width] bound to: 32'sb00000000000000000000000000000100 
+	Parameter param[weight_cnt] bound to: 32'sb00000000000000000000000000100000 
+	Parameter param[fmap_cache_out_cnt] bound to: 32'sb00000000000000000000000000100000 
+	Parameter param[fmap_type_mixed_precision] bound to: 32'sb00000000000000000000000000100000 
+	Parameter param[num_gemv_pipeline] bound to: 32'sb00000000000000000000000000000100 
+	Parameter param[throughput] bound to: 32'sb00000000000000000000000000000001 
+	Parameter param[gemv_batch] bound to: 32'sb00000000000000000000001000000000 
+	Parameter param[gemv_cycle] bound to: 32'sb00000000000000000000001000000000 
+	Parameter param[fixed_mant_width] bound to: 32'sb00000000000000000000000000011011 
+	Parameter param[weight_width] bound to: 32'sb00000000000000000000000000000100 
+	Parameter param[weight_cnt] bound to: 32'sb00000000000000000000000000100000 
+	Parameter param[fmap_cache_out_cnt] bound to: 32'sb00000000000000000000000000100000 
+	Parameter param[fmap_type_mixed_precision] bound to: 32'sb00000000000000000000000000100000 
+	Parameter param[num_gemv_pipeline] bound to: 32'sb00000000000000000000000000000100 
+	Parameter param[throughput] bound to: 32'sb00000000000000000000000000000001 
+	Parameter param[gemv_batch] bound to: 32'sb00000000000000000000001000000000 
+	Parameter param[gemv_cycle] bound to: 32'sb00000000000000000000001000000000 
+	Parameter param[fixed_mant_width] bound to: 32'sb00000000000000000000000000011011 
+	Parameter param[weight_width] bound to: 32'sb00000000000000000000000000000100 
+	Parameter param[weight_cnt] bound to: 32'sb00000000000000000000000000100000 
+	Parameter param[fmap_cache_out_cnt] bound to: 32'sb00000000000000000000000000100000 
+	Parameter param[fmap_type_mixed_precision] bound to: 32'sb00000000000000000000000000100000 
+	Parameter param[num_gemv_pipeline] bound to: 32'sb00000000000000000000000000000100 
+	Parameter param[throughput] bound to: 32'sb00000000000000000000000000000001 
+	Parameter param[gemv_batch] bound to: 32'sb00000000000000000000001000000000 
+	Parameter param[gemv_cycle] bound to: 32'sb00000000000000000000001000000000 
+	Parameter param[fixed_mant_width] bound to: 32'sb00000000000000000000000000011011 
+	Parameter param[weight_width] bound to: 32'sb00000000000000000000000000000100 
+	Parameter param[weight_cnt] bound to: 32'sb00000000000000000000000000100000 
+	Parameter param[fmap_cache_out_cnt] bound to: 32'sb00000000000000000000000000100000 
+	Parameter param[fmap_type_mixed_precision] bound to: 32'sb00000000000000000000000000100000 
+	Parameter AREG bound to: 0 - type: integer 
+	Parameter BREG bound to: 0 - type: integer 
+	Parameter CREG bound to: 0 - type: integer 
+	Parameter PREG bound to: 1 - type: integer 
+	Parameter USE_SIMD bound to: ONE48 - type: string 
+WARNING: [Synth 8-7023] instance 'u_dsp' of module 'DSP48E2' has 50 connections declared, but only 10 given [/tmp/kv260-mdrv-wt/hw/rtl/VEC_CORE/GEMV_reduction.sv:110]
+WARNING: [Synth 8-7023] instance 'u_dsp' of module 'DSP48E2' has 50 connections declared, but only 10 given [/tmp/kv260-mdrv-wt/hw/rtl/VEC_CORE/GEMV_reduction.sv:110]
+WARNING: [Synth 8-7023] instance 'u_dsp' of module 'DSP48E2' has 50 connections declared, but only 10 given [/tmp/kv260-mdrv-wt/hw/rtl/VEC_CORE/GEMV_reduction.sv:110]
+WARNING: [Synth 8-7023] instance 'u_dsp' of module 'DSP48E2' has 50 connections declared, but only 10 given [/tmp/kv260-mdrv-wt/hw/rtl/VEC_CORE/GEMV_reduction.sv:110]
+WARNING: [Synth 8-7023] instance 'u_dsp' of module 'DSP48E2' has 50 connections declared, but only 10 given [/tmp/kv260-mdrv-wt/hw/rtl/VEC_CORE/GEMV_reduction.sv:110]
+WARNING: [Synth 8-7023] instance 'u_dsp' of module 'DSP48E2' has 50 connections declared, but only 10 given [/tmp/kv260-mdrv-wt/hw/rtl/VEC_CORE/GEMV_reduction.sv:110]
+WARNING: [Synth 8-7023] instance 'u_dsp' of module 'DSP48E2' has 50 connections declared, but only 10 given [/tmp/kv260-mdrv-wt/hw/rtl/VEC_CORE/GEMV_reduction.sv:110]
+WARNING: [Synth 8-7023] instance 'u_dsp' of module 'DSP48E2' has 50 connections declared, but only 10 given [/tmp/kv260-mdrv-wt/hw/rtl/VEC_CORE/GEMV_reduction.sv:110]
+WARNING: [Synth 8-7023] instance 'u_dsp' of module 'DSP48E2' has 50 connections declared, but only 10 given [/tmp/kv260-mdrv-wt/hw/rtl/VEC_CORE/GEMV_reduction.sv:110]
+WARNING: [Synth 8-7023] instance 'u_dsp' of module 'DSP48E2' has 50 connections declared, but only 10 given [/tmp/kv260-mdrv-wt/hw/rtl/VEC_CORE/GEMV_reduction.sv:110]
+WARNING: [Synth 8-7023] instance 'u_dsp' of module 'DSP48E2' has 50 connections declared, but only 10 given [/tmp/kv260-mdrv-wt/hw/rtl/VEC_CORE/GEMV_reduction.sv:110]
+WARNING: [Synth 8-7023] instance 'u_dsp' of module 'DSP48E2' has 50 connections declared, but only 10 given [/tmp/kv260-mdrv-wt/hw/rtl/VEC_CORE/GEMV_reduction.sv:110]
+WARNING: [Synth 8-7023] instance 'u_dsp' of module 'DSP48E2' has 50 connections declared, but only 10 given [/tmp/kv260-mdrv-wt/hw/rtl/VEC_CORE/GEMV_reduction.sv:110]
+WARNING: [Synth 8-7023] instance 'u_dsp' of module 'DSP48E2' has 50 connections declared, but only 10 given [/tmp/kv260-mdrv-wt/hw/rtl/VEC_CORE/GEMV_reduction.sv:110]
+WARNING: [Synth 8-7023] instance 'u_dsp' of module 'DSP48E2' has 50 connections declared, but only 10 given [/tmp/kv260-mdrv-wt/hw/rtl/VEC_CORE/GEMV_reduction.sv:110]
+WARNING: [Synth 8-7023] instance 'u_dsp' of module 'DSP48E2' has 50 connections declared, but only 10 given [/tmp/kv260-mdrv-wt/hw/rtl/VEC_CORE/GEMV_reduction.sv:110]
+	Parameter param[num_gemv_pipeline] bound to: 32'sb00000000000000000000000000000100 
+	Parameter param[throughput] bound to: 32'sb00000000000000000000000000000001 
+	Parameter param[gemv_batch] bound to: 32'sb00000000000000000000001000000000 
+	Parameter param[gemv_cycle] bound to: 32'sb00000000000000000000001000000000 
+	Parameter param[fixed_mant_width] bound to: 32'sb00000000000000000000000000011011 
+	Parameter param[weight_width] bound to: 32'sb00000000000000000000000000000100 
+	Parameter param[weight_cnt] bound to: 32'sb00000000000000000000000000100000 
+	Parameter param[fmap_cache_out_cnt] bound to: 32'sb00000000000000000000000000100000 
+	Parameter param[fmap_type_mixed_precision] bound to: 32'sb00000000000000000000000000100000 
+WARNING: [Synth 8-6014] Unused sequential element acp_perf_reg[in_count] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MEM_control/IO/mem_u_operation_queue.sv:165]
+WARNING: [Synth 8-6014] Unused sequential element acp_perf_reg[out_count] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MEM_control/IO/mem_u_operation_queue.sv:165]
+WARNING: [Synth 8-6014] Unused sequential element acp_perf_reg[stall_cycles] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MEM_control/IO/mem_u_operation_queue.sv:165]
+WARNING: [Synth 8-6014] Unused sequential element acp_perf_reg[busy_cycles] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MEM_control/IO/mem_u_operation_queue.sv:165]
+WARNING: [Synth 8-6014] Unused sequential element npu_perf_reg[in_count] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MEM_control/IO/mem_u_operation_queue.sv:166]
+WARNING: [Synth 8-6014] Unused sequential element npu_perf_reg[out_count] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MEM_control/IO/mem_u_operation_queue.sv:166]
+WARNING: [Synth 8-6014] Unused sequential element npu_perf_reg[stall_cycles] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MEM_control/IO/mem_u_operation_queue.sv:166]
+WARNING: [Synth 8-6014] Unused sequential element npu_perf_reg[busy_cycles] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MEM_control/IO/mem_u_operation_queue.sv:166]
+WARNING: [Synth 8-6014] Unused sequential element gen_rd_b.gen_doutb_pipe.enb_pipe_reg[0] was removed.  [/tools/Xilinx/2025.2/data/ip/xpm/xpm_memory/hdl/xpm_memory.sv:3087]
+WARNING: [Synth 8-6014] Unused sequential element dest_out_bin_ff_reg was removed.  [/tools/Xilinx/2025.2/data/ip/xpm/xpm_cdc/hdl/xpm_cdc.sv:417]
+WARNING: [Synth 8-6014] Unused sequential element dest_out_bin_ff_reg was removed.  [/tools/Xilinx/2025.2/data/ip/xpm/xpm_cdc/hdl/xpm_cdc.sv:417]
+WARNING: [Synth 8-6014] Unused sequential element dest_out_bin_ff_reg was removed.  [/tools/Xilinx/2025.2/data/ip/xpm/xpm_cdc/hdl/xpm_cdc.sv:417]
+WARNING: [Synth 8-6014] Unused sequential element gdvld.data_valid_std_reg was removed.  [/tools/Xilinx/2025.2/data/ip/xpm/xpm_fifo/hdl/xpm_fifo.sv:550]
+WARNING: [Synth 8-6014] Unused sequential element gen_fwft.empty_fwft_fb_reg was removed.  [/tools/Xilinx/2025.2/data/ip/xpm/xpm_fifo/hdl/xpm_fifo.sv:1404]
+WARNING: [Synth 8-3848] Net M_AXIS_ACP_RESULT\.tlast in module/entity mem_BUFFER does not have driver. [/tmp/kv260-mdrv-wt/hw/rtl/MEM_control/memory/mem_BUFFER.sv:31]
+WARNING: [Synth 8-3848] Net M_AXIS_ACP_RESULT\.tkeep in module/entity mem_BUFFER does not have driver. [/tmp/kv260-mdrv-wt/hw/rtl/MEM_control/memory/mem_BUFFER.sv:31]
+WARNING: [Synth 8-3848] Net M_CORE_ACP_RX\.tlast in module/entity mem_BUFFER does not have driver. [/tmp/kv260-mdrv-wt/hw/rtl/MEM_control/memory/mem_BUFFER.sv:33]
+WARNING: [Synth 8-3848] Net M_CORE_ACP_RX\.tkeep in module/entity mem_BUFFER does not have driver. [/tmp/kv260-mdrv-wt/hw/rtl/MEM_control/memory/mem_BUFFER.sv:33]
+WARNING: [Synth 8-6014] Unused sequential element gen_rd_a.gen_douta_pipe.gen_stages.gen_epipe[1].ena_pipe_reg[1] was removed.  [/tools/Xilinx/2025.2/data/ip/xpm/xpm_memory/hdl/xpm_memory.sv:2449]
+WARNING: [Synth 8-6014] Unused sequential element gen_rd_b.gen_doutb_pipe.gen_stages.gen_epipe[1].enb_pipe_reg[1] was removed.  [/tools/Xilinx/2025.2/data/ip/xpm/xpm_memory/hdl/xpm_memory.sv:3139]
+WARNING: [Synth 8-6014] Unused sequential element acp_rx_start_reg was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MEM_control/top/mem_dispatcher.sv:205]
+WARNING: [Synth 8-6014] Unused sequential element npu_rx_start_reg was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MEM_control/top/mem_dispatcher.sv:206]
+WARNING: [Synth 8-3848] Net npu_l2_wdata in module/entity mem_dispatcher does not have driver. [/tmp/kv260-mdrv-wt/hw/rtl/MEM_control/top/mem_dispatcher.sv:303]
+WARNING: [Synth 8-6014] Unused sequential element gen_rd_b.gen_doutb_pipe.enb_pipe_reg[0] was removed.  [/tools/Xilinx/2025.2/data/ip/xpm/xpm_memory/hdl/xpm_memory.sv:3087]
+WARNING: [Synth 8-6014] Unused sequential element dest_out_bin_ff_reg was removed.  [/tools/Xilinx/2025.2/data/ip/xpm/xpm_cdc/hdl/xpm_cdc.sv:417]
+WARNING: [Synth 8-6014] Unused sequential element dest_out_bin_ff_reg was removed.  [/tools/Xilinx/2025.2/data/ip/xpm/xpm_cdc/hdl/xpm_cdc.sv:417]
+WARNING: [Synth 8-6014] Unused sequential element dest_out_bin_ff_reg was removed.  [/tools/Xilinx/2025.2/data/ip/xpm/xpm_cdc/hdl/xpm_cdc.sv:417]
+WARNING: [Synth 8-6014] Unused sequential element gdvld.data_valid_std_reg was removed.  [/tools/Xilinx/2025.2/data/ip/xpm/xpm_fifo/hdl/xpm_fifo.sv:550]
+WARNING: [Synth 8-6014] Unused sequential element gen_fwft.empty_fwft_fb_reg was removed.  [/tools/Xilinx/2025.2/data/ip/xpm/xpm_fifo/hdl/xpm_fifo.sv:1404]
+WARNING: [Synth 8-3848] Net M_CORE_HP0_WEIGHT\.tlast in module/entity mem_HP_buffer does not have driver. [/tmp/kv260-mdrv-wt/hw/rtl/MEM_control/top/mem_HP_buffer.sv:41]
+WARNING: [Synth 8-3848] Net M_CORE_HP0_WEIGHT\.tkeep in module/entity mem_HP_buffer does not have driver. [/tmp/kv260-mdrv-wt/hw/rtl/MEM_control/top/mem_HP_buffer.sv:41]
+WARNING: [Synth 8-3848] Net M_CORE_HP1_WEIGHT\.tlast in module/entity mem_HP_buffer does not have driver. [/tmp/kv260-mdrv-wt/hw/rtl/MEM_control/top/mem_HP_buffer.sv:42]
+WARNING: [Synth 8-3848] Net M_CORE_HP1_WEIGHT\.tkeep in module/entity mem_HP_buffer does not have driver. [/tmp/kv260-mdrv-wt/hw/rtl/MEM_control/top/mem_HP_buffer.sv:42]
+WARNING: [Synth 8-3848] Net M_CORE_HP2_WEIGHT\.tlast in module/entity mem_HP_buffer does not have driver. [/tmp/kv260-mdrv-wt/hw/rtl/MEM_control/top/mem_HP_buffer.sv:43]
+WARNING: [Synth 8-3848] Net M_CORE_HP2_WEIGHT\.tkeep in module/entity mem_HP_buffer does not have driver. [/tmp/kv260-mdrv-wt/hw/rtl/MEM_control/top/mem_HP_buffer.sv:43]
+WARNING: [Synth 8-3848] Net M_CORE_HP3_WEIGHT\.tlast in module/entity mem_HP_buffer does not have driver. [/tmp/kv260-mdrv-wt/hw/rtl/MEM_control/top/mem_HP_buffer.sv:44]
+WARNING: [Synth 8-3848] Net M_CORE_HP3_WEIGHT\.tkeep in module/entity mem_HP_buffer does not have driver. [/tmp/kv260-mdrv-wt/hw/rtl/MEM_control/top/mem_HP_buffer.sv:44]
+WARNING: [Synth 8-6014] Unused sequential element gen_rd_b.gen_doutb_pipe.enb_pipe_reg[0] was removed.  [/tools/Xilinx/2025.2/data/ip/xpm/xpm_memory/hdl/xpm_memory.sv:3087]
+WARNING: [Synth 8-6014] Unused sequential element gdvld.data_valid_std_reg was removed.  [/tools/Xilinx/2025.2/data/ip/xpm/xpm_fifo/hdl/xpm_fifo.sv:550]
+WARNING: [Synth 8-6014] Unused sequential element gen_fwft.empty_fwft_fb_reg was removed.  [/tools/Xilinx/2025.2/data/ip/xpm/xpm_fifo/hdl/xpm_fifo.sv:1404]
+WARNING: [Synth 8-6014] Unused sequential element first_half_valid_reg was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/PREPROCESS/preprocess_bf16_fixed_pipeline.sv:61]
+WARNING: [Synth 8-6014] Unused sequential element gen_wr_a.gen_word_wide.wr_sync.addralsb_reg was removed.  [/tools/Xilinx/2025.2/data/ip/xpm/xpm_memory/hdl/xpm_memory.sv:1456]
+WARNING: [Synth 8-6014] Unused sequential element gen_rd_b.gen_doutb_pipe.enb_pipe_reg[0] was removed.  [/tools/Xilinx/2025.2/data/ip/xpm/xpm_memory/hdl/xpm_memory.sv:3087]
+Info : Asymmetric Ram write pattern identified
+WARNING: [Synth 8-3848] Net OUT_fmap_ready in module/entity GEMV_generate_lut does not have driver. [/tmp/kv260-mdrv-wt/hw/rtl/VEC_CORE/GEMV_generate_lut.sv:46]
+WARNING: [Synth 8-3848] Net OUT_weight_ready_A in module/entity GEMV_top does not have driver. [/tmp/kv260-mdrv-wt/hw/rtl/VEC_CORE/GEMV_top.sv:56]
+WARNING: [Synth 8-3848] Net OUT_weight_ready_B in module/entity GEMV_top does not have driver. [/tmp/kv260-mdrv-wt/hw/rtl/VEC_CORE/GEMV_top.sv:57]
+WARNING: [Synth 8-3848] Net OUT_weight_ready_C in module/entity GEMV_top does not have driver. [/tmp/kv260-mdrv-wt/hw/rtl/VEC_CORE/GEMV_top.sv:58]
+WARNING: [Synth 8-3848] Net OUT_weight_ready_D in module/entity GEMV_top does not have driver. [/tmp/kv260-mdrv-wt/hw/rtl/VEC_CORE/GEMV_top.sv:59]
+WARNING: [Synth 8-6014] Unused sequential element gen_cordic_iter[13].cz_reg[14] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/CVO_CORE/CVO_cordic_unit.sv:137]
+WARNING: [Synth 8-3848] Net S_AXIL_CTRL\.clk in module/entity NPU_top does not have driver. [/tmp/kv260-mdrv-wt/hw/rtl/NPU_top.sv:54]
+WARNING: [Synth 8-3848] Net S_AXIL_CTRL\.rst_n in module/entity NPU_top does not have driver. [/tmp/kv260-mdrv-wt/hw/rtl/NPU_top.sv:54]
+INFO: [Synth 8-5856] 3D RAM emax_cache_mem_reg  for this pattern/configuration is not supported. This will most likely be implemented in registers
+WARNING: [Synth 8-11357] Potential Runtime issue for 3D-RAM or RAM from Record/Structs for RAM  emax_cache_mem_reg with 262144 registers
+INFO: [Synth 8-4471] merging register 'col_gen[1].shift_delay.shift_valid_reg[0]' into 'col_gen[0].no_delay.row_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+INFO: [Synth 8-4471] merging register 'col_gen[1].shift_delay.shift_inst_valid_reg[0]' into 'col_gen[0].no_delay.row_inst_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+INFO: [Synth 8-4471] merging register 'col_gen[1].shift_delay.shift_inst_reg[0][2:0]' into 'col_gen[0].no_delay.row_inst_reg[0][2:0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+INFO: [Synth 8-4471] merging register 'col_gen[2].shift_delay.shift_valid_reg[0]' into 'col_gen[0].no_delay.row_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+INFO: [Synth 8-4471] merging register 'col_gen[2].shift_delay.shift_inst_valid_reg[0]' into 'col_gen[0].no_delay.row_inst_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+INFO: [Synth 8-4471] merging register 'col_gen[2].shift_delay.shift_inst_reg[0][2:0]' into 'col_gen[0].no_delay.row_inst_reg[0][2:0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+INFO: [Synth 8-4471] merging register 'col_gen[3].shift_delay.shift_valid_reg[0]' into 'col_gen[0].no_delay.row_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+INFO: [Synth 8-4471] merging register 'col_gen[3].shift_delay.shift_inst_valid_reg[0]' into 'col_gen[0].no_delay.row_inst_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+INFO: [Synth 8-4471] merging register 'col_gen[3].shift_delay.shift_inst_reg[0][2:0]' into 'col_gen[0].no_delay.row_inst_reg[0][2:0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+INFO: [Synth 8-4471] merging register 'col_gen[4].shift_delay.shift_valid_reg[0]' into 'col_gen[0].no_delay.row_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+INFO: [Synth 8-4471] merging register 'col_gen[4].shift_delay.shift_inst_valid_reg[0]' into 'col_gen[0].no_delay.row_inst_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+INFO: [Synth 8-4471] merging register 'col_gen[4].shift_delay.shift_inst_reg[0][2:0]' into 'col_gen[0].no_delay.row_inst_reg[0][2:0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+INFO: [Synth 8-4471] merging register 'col_gen[5].shift_delay.shift_valid_reg[0]' into 'col_gen[0].no_delay.row_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+INFO: [Synth 8-4471] merging register 'col_gen[5].shift_delay.shift_inst_valid_reg[0]' into 'col_gen[0].no_delay.row_inst_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+INFO: [Synth 8-4471] merging register 'col_gen[5].shift_delay.shift_inst_reg[0][2:0]' into 'col_gen[0].no_delay.row_inst_reg[0][2:0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+INFO: [Synth 8-4471] merging register 'col_gen[6].shift_delay.shift_valid_reg[0]' into 'col_gen[0].no_delay.row_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+INFO: [Synth 8-4471] merging register 'col_gen[6].shift_delay.shift_inst_valid_reg[0]' into 'col_gen[0].no_delay.row_inst_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+INFO: [Synth 8-4471] merging register 'col_gen[6].shift_delay.shift_inst_reg[0][2:0]' into 'col_gen[0].no_delay.row_inst_reg[0][2:0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+INFO: [Synth 8-4471] merging register 'col_gen[7].shift_delay.shift_valid_reg[0]' into 'col_gen[0].no_delay.row_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+INFO: [Synth 8-4471] merging register 'col_gen[7].shift_delay.shift_inst_valid_reg[0]' into 'col_gen[0].no_delay.row_inst_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+INFO: [Synth 8-4471] merging register 'col_gen[7].shift_delay.shift_inst_reg[0][2:0]' into 'col_gen[0].no_delay.row_inst_reg[0][2:0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+INFO: [Synth 8-4471] merging register 'col_gen[8].shift_delay.shift_valid_reg[0]' into 'col_gen[0].no_delay.row_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+INFO: [Synth 8-4471] merging register 'col_gen[8].shift_delay.shift_inst_valid_reg[0]' into 'col_gen[0].no_delay.row_inst_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+INFO: [Synth 8-4471] merging register 'col_gen[8].shift_delay.shift_inst_reg[0][2:0]' into 'col_gen[0].no_delay.row_inst_reg[0][2:0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+INFO: [Synth 8-4471] merging register 'col_gen[9].shift_delay.shift_valid_reg[0]' into 'col_gen[0].no_delay.row_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+INFO: [Synth 8-4471] merging register 'col_gen[9].shift_delay.shift_inst_valid_reg[0]' into 'col_gen[0].no_delay.row_inst_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+INFO: [Synth 8-4471] merging register 'col_gen[9].shift_delay.shift_inst_reg[0][2:0]' into 'col_gen[0].no_delay.row_inst_reg[0][2:0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+INFO: [Synth 8-4471] merging register 'col_gen[10].shift_delay.shift_valid_reg[0]' into 'col_gen[0].no_delay.row_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+INFO: [Synth 8-4471] merging register 'col_gen[10].shift_delay.shift_inst_valid_reg[0]' into 'col_gen[0].no_delay.row_inst_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+INFO: [Synth 8-4471] merging register 'col_gen[10].shift_delay.shift_inst_reg[0][2:0]' into 'col_gen[0].no_delay.row_inst_reg[0][2:0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+INFO: [Synth 8-4471] merging register 'col_gen[11].shift_delay.shift_valid_reg[0]' into 'col_gen[0].no_delay.row_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+INFO: [Synth 8-4471] merging register 'col_gen[11].shift_delay.shift_inst_valid_reg[0]' into 'col_gen[0].no_delay.row_inst_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+INFO: [Synth 8-4471] merging register 'col_gen[11].shift_delay.shift_inst_reg[0][2:0]' into 'col_gen[0].no_delay.row_inst_reg[0][2:0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+INFO: [Synth 8-4471] merging register 'col_gen[12].shift_delay.shift_valid_reg[0]' into 'col_gen[0].no_delay.row_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+INFO: [Synth 8-4471] merging register 'col_gen[12].shift_delay.shift_inst_valid_reg[0]' into 'col_gen[0].no_delay.row_inst_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+INFO: [Synth 8-4471] merging register 'col_gen[12].shift_delay.shift_inst_reg[0][2:0]' into 'col_gen[0].no_delay.row_inst_reg[0][2:0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+INFO: [Synth 8-4471] merging register 'col_gen[13].shift_delay.shift_valid_reg[0]' into 'col_gen[0].no_delay.row_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+INFO: [Synth 8-4471] merging register 'col_gen[13].shift_delay.shift_inst_valid_reg[0]' into 'col_gen[0].no_delay.row_inst_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+INFO: [Synth 8-4471] merging register 'col_gen[13].shift_delay.shift_inst_reg[0][2:0]' into 'col_gen[0].no_delay.row_inst_reg[0][2:0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+INFO: [Synth 8-4471] merging register 'col_gen[14].shift_delay.shift_valid_reg[0]' into 'col_gen[0].no_delay.row_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+INFO: [Synth 8-4471] merging register 'col_gen[14].shift_delay.shift_inst_valid_reg[0]' into 'col_gen[0].no_delay.row_inst_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+INFO: [Synth 8-4471] merging register 'col_gen[14].shift_delay.shift_inst_reg[0][2:0]' into 'col_gen[0].no_delay.row_inst_reg[0][2:0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+INFO: [Synth 8-4471] merging register 'col_gen[15].shift_delay.shift_valid_reg[0]' into 'col_gen[0].no_delay.row_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+INFO: [Synth 8-4471] merging register 'col_gen[15].shift_delay.shift_inst_valid_reg[0]' into 'col_gen[0].no_delay.row_inst_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+INFO: [Synth 8-4471] merging register 'col_gen[15].shift_delay.shift_inst_reg[0][2:0]' into 'col_gen[0].no_delay.row_inst_reg[0][2:0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+INFO: [Synth 8-4471] merging register 'col_gen[16].shift_delay.shift_valid_reg[0]' into 'col_gen[0].no_delay.row_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+INFO: [Synth 8-4471] merging register 'col_gen[16].shift_delay.shift_inst_valid_reg[0]' into 'col_gen[0].no_delay.row_inst_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+INFO: [Synth 8-4471] merging register 'col_gen[16].shift_delay.shift_inst_reg[0][2:0]' into 'col_gen[0].no_delay.row_inst_reg[0][2:0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+INFO: [Synth 8-4471] merging register 'col_gen[17].shift_delay.shift_valid_reg[0]' into 'col_gen[0].no_delay.row_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+INFO: [Synth 8-4471] merging register 'col_gen[17].shift_delay.shift_inst_valid_reg[0]' into 'col_gen[0].no_delay.row_inst_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+INFO: [Synth 8-4471] merging register 'col_gen[17].shift_delay.shift_inst_reg[0][2:0]' into 'col_gen[0].no_delay.row_inst_reg[0][2:0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+INFO: [Synth 8-4471] merging register 'col_gen[18].shift_delay.shift_valid_reg[0]' into 'col_gen[0].no_delay.row_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+INFO: [Synth 8-4471] merging register 'col_gen[18].shift_delay.shift_inst_valid_reg[0]' into 'col_gen[0].no_delay.row_inst_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+INFO: [Synth 8-4471] merging register 'col_gen[18].shift_delay.shift_inst_reg[0][2:0]' into 'col_gen[0].no_delay.row_inst_reg[0][2:0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+INFO: [Synth 8-4471] merging register 'col_gen[19].shift_delay.shift_valid_reg[0]' into 'col_gen[0].no_delay.row_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+INFO: [Synth 8-4471] merging register 'col_gen[19].shift_delay.shift_inst_valid_reg[0]' into 'col_gen[0].no_delay.row_inst_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+INFO: [Synth 8-4471] merging register 'col_gen[19].shift_delay.shift_inst_reg[0][2:0]' into 'col_gen[0].no_delay.row_inst_reg[0][2:0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+INFO: [Synth 8-4471] merging register 'col_gen[20].shift_delay.shift_valid_reg[0]' into 'col_gen[0].no_delay.row_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+INFO: [Synth 8-4471] merging register 'col_gen[20].shift_delay.shift_inst_valid_reg[0]' into 'col_gen[0].no_delay.row_inst_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+INFO: [Synth 8-4471] merging register 'col_gen[20].shift_delay.shift_inst_reg[0][2:0]' into 'col_gen[0].no_delay.row_inst_reg[0][2:0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+INFO: [Synth 8-4471] merging register 'col_gen[21].shift_delay.shift_valid_reg[0]' into 'col_gen[0].no_delay.row_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+INFO: [Synth 8-4471] merging register 'col_gen[21].shift_delay.shift_inst_valid_reg[0]' into 'col_gen[0].no_delay.row_inst_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+INFO: [Synth 8-4471] merging register 'col_gen[21].shift_delay.shift_inst_reg[0][2:0]' into 'col_gen[0].no_delay.row_inst_reg[0][2:0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+INFO: [Synth 8-4471] merging register 'col_gen[22].shift_delay.shift_valid_reg[0]' into 'col_gen[0].no_delay.row_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+INFO: [Synth 8-4471] merging register 'col_gen[22].shift_delay.shift_inst_valid_reg[0]' into 'col_gen[0].no_delay.row_inst_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+INFO: [Synth 8-4471] merging register 'col_gen[22].shift_delay.shift_inst_reg[0][2:0]' into 'col_gen[0].no_delay.row_inst_reg[0][2:0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+INFO: [Synth 8-4471] merging register 'col_gen[23].shift_delay.shift_valid_reg[0]' into 'col_gen[0].no_delay.row_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+INFO: [Synth 8-4471] merging register 'col_gen[23].shift_delay.shift_inst_valid_reg[0]' into 'col_gen[0].no_delay.row_inst_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+INFO: [Synth 8-4471] merging register 'col_gen[23].shift_delay.shift_inst_reg[0][2:0]' into 'col_gen[0].no_delay.row_inst_reg[0][2:0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+INFO: [Synth 8-4471] merging register 'col_gen[24].shift_delay.shift_valid_reg[0]' into 'col_gen[0].no_delay.row_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+INFO: [Synth 8-4471] merging register 'col_gen[24].shift_delay.shift_inst_valid_reg[0]' into 'col_gen[0].no_delay.row_inst_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+INFO: [Synth 8-4471] merging register 'col_gen[24].shift_delay.shift_inst_reg[0][2:0]' into 'col_gen[0].no_delay.row_inst_reg[0][2:0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+INFO: [Synth 8-4471] merging register 'col_gen[25].shift_delay.shift_valid_reg[0]' into 'col_gen[0].no_delay.row_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+INFO: [Synth 8-4471] merging register 'col_gen[25].shift_delay.shift_inst_valid_reg[0]' into 'col_gen[0].no_delay.row_inst_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+INFO: [Synth 8-4471] merging register 'col_gen[25].shift_delay.shift_inst_reg[0][2:0]' into 'col_gen[0].no_delay.row_inst_reg[0][2:0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+INFO: [Synth 8-4471] merging register 'col_gen[26].shift_delay.shift_valid_reg[0]' into 'col_gen[0].no_delay.row_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+INFO: [Synth 8-4471] merging register 'col_gen[26].shift_delay.shift_inst_valid_reg[0]' into 'col_gen[0].no_delay.row_inst_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+INFO: [Synth 8-4471] merging register 'col_gen[26].shift_delay.shift_inst_reg[0][2:0]' into 'col_gen[0].no_delay.row_inst_reg[0][2:0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+INFO: [Synth 8-4471] merging register 'col_gen[27].shift_delay.shift_valid_reg[0]' into 'col_gen[0].no_delay.row_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+INFO: [Synth 8-4471] merging register 'col_gen[27].shift_delay.shift_inst_valid_reg[0]' into 'col_gen[0].no_delay.row_inst_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+INFO: [Synth 8-4471] merging register 'col_gen[27].shift_delay.shift_inst_reg[0][2:0]' into 'col_gen[0].no_delay.row_inst_reg[0][2:0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+INFO: [Synth 8-4471] merging register 'col_gen[28].shift_delay.shift_valid_reg[0]' into 'col_gen[0].no_delay.row_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+INFO: [Synth 8-4471] merging register 'col_gen[28].shift_delay.shift_inst_valid_reg[0]' into 'col_gen[0].no_delay.row_inst_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+INFO: [Synth 8-4471] merging register 'col_gen[28].shift_delay.shift_inst_reg[0][2:0]' into 'col_gen[0].no_delay.row_inst_reg[0][2:0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+INFO: [Synth 8-4471] merging register 'col_gen[29].shift_delay.shift_valid_reg[0]' into 'col_gen[0].no_delay.row_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+INFO: [Synth 8-4471] merging register 'col_gen[29].shift_delay.shift_inst_valid_reg[0]' into 'col_gen[0].no_delay.row_inst_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+INFO: [Synth 8-4471] merging register 'col_gen[29].shift_delay.shift_inst_reg[0][2:0]' into 'col_gen[0].no_delay.row_inst_reg[0][2:0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+INFO: [Synth 8-4471] merging register 'col_gen[30].shift_delay.shift_valid_reg[0]' into 'col_gen[0].no_delay.row_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+INFO: [Synth 8-4471] merging register 'col_gen[30].shift_delay.shift_inst_valid_reg[0]' into 'col_gen[0].no_delay.row_inst_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+INFO: [Synth 8-4471] merging register 'col_gen[30].shift_delay.shift_inst_reg[0][2:0]' into 'col_gen[0].no_delay.row_inst_reg[0][2:0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+INFO: [Synth 8-4471] merging register 'col_gen[31].shift_delay.shift_valid_reg[0]' into 'col_gen[0].no_delay.row_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+INFO: [Synth 8-4471] merging register 'col_gen[31].shift_delay.shift_inst_valid_reg[0]' into 'col_gen[0].no_delay.row_inst_valid_reg[0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+INFO: [Synth 8-4471] merging register 'col_gen[31].shift_delay.shift_inst_reg[0][2:0]' into 'col_gen[0].no_delay.row_inst_reg[0][2:0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+INFO: [Synth 8-4471] merging register 'col_gen[2].shift_delay.shift_valid_reg[1]' into 'col_gen[1].shift_delay.shift_valid_reg[1]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+INFO: [Synth 8-4471] merging register 'col_gen[2].shift_delay.shift_inst_valid_reg[1]' into 'col_gen[1].shift_delay.shift_inst_valid_reg[1]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+INFO: [Synth 8-4471] merging register 'col_gen[2].shift_delay.shift_inst_reg[1][2:0]' into 'col_gen[1].shift_delay.shift_inst_reg[1][2:0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+INFO: [Synth 8-4471] merging register 'col_gen[3].shift_delay.shift_valid_reg[1]' into 'col_gen[1].shift_delay.shift_valid_reg[1]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+INFO: [Synth 8-4471] merging register 'col_gen[3].shift_delay.shift_inst_valid_reg[1]' into 'col_gen[1].shift_delay.shift_inst_valid_reg[1]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+INFO: [Synth 8-4471] merging register 'col_gen[3].shift_delay.shift_inst_reg[1][2:0]' into 'col_gen[1].shift_delay.shift_inst_reg[1][2:0]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+INFO: [Synth 8-4471] merging register 'col_gen[4].shift_delay.shift_valid_reg[1]' into 'col_gen[1].shift_delay.shift_valid_reg[1]' [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+INFO: [Common 17-14] Message 'Synth 8-4471' appears 100 times and further instances of the messages will be disabled. Use the Tcl command set_msg_config to change the current settings.
+INFO: [Common 17-14] Message 'Synth 8-4471' appears 100 times and further instances of the messages will be disabled. Use the Tcl command set_msg_config to change the current settings.
+WARNING: [Synth 8-6014] Unused sequential element col_gen[1].shift_delay.shift_valid_reg[0] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[1].shift_delay.shift_inst_valid_reg[0] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[1].shift_delay.shift_inst_reg[0] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[2].shift_delay.shift_valid_reg[0] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[2].shift_delay.shift_valid_reg[1] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[2].shift_delay.shift_inst_valid_reg[0] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[2].shift_delay.shift_inst_valid_reg[1] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[2].shift_delay.shift_inst_reg[0] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[2].shift_delay.shift_inst_reg[1] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[3].shift_delay.shift_valid_reg[0] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[3].shift_delay.shift_valid_reg[1] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[3].shift_delay.shift_valid_reg[2] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[3].shift_delay.shift_inst_valid_reg[0] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[3].shift_delay.shift_inst_valid_reg[1] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[3].shift_delay.shift_inst_valid_reg[2] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[3].shift_delay.shift_inst_reg[0] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[3].shift_delay.shift_inst_reg[1] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[3].shift_delay.shift_inst_reg[2] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[4].shift_delay.shift_valid_reg[0] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[4].shift_delay.shift_valid_reg[1] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[4].shift_delay.shift_valid_reg[2] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[4].shift_delay.shift_valid_reg[3] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[4].shift_delay.shift_inst_valid_reg[0] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[4].shift_delay.shift_inst_valid_reg[1] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[4].shift_delay.shift_inst_valid_reg[2] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[4].shift_delay.shift_inst_valid_reg[3] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[4].shift_delay.shift_inst_reg[0] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[4].shift_delay.shift_inst_reg[1] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[4].shift_delay.shift_inst_reg[2] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[4].shift_delay.shift_inst_reg[3] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[5].shift_delay.shift_valid_reg[0] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[5].shift_delay.shift_valid_reg[1] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[5].shift_delay.shift_valid_reg[2] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[5].shift_delay.shift_valid_reg[3] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[5].shift_delay.shift_valid_reg[4] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[5].shift_delay.shift_inst_valid_reg[0] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[5].shift_delay.shift_inst_valid_reg[1] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[5].shift_delay.shift_inst_valid_reg[2] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[5].shift_delay.shift_inst_valid_reg[3] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[5].shift_delay.shift_inst_valid_reg[4] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[5].shift_delay.shift_inst_reg[0] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[5].shift_delay.shift_inst_reg[1] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[5].shift_delay.shift_inst_reg[2] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[5].shift_delay.shift_inst_reg[3] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[5].shift_delay.shift_inst_reg[4] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[6].shift_delay.shift_valid_reg[0] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[6].shift_delay.shift_valid_reg[1] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[6].shift_delay.shift_valid_reg[2] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[6].shift_delay.shift_valid_reg[3] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[6].shift_delay.shift_valid_reg[4] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[6].shift_delay.shift_valid_reg[5] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[6].shift_delay.shift_inst_valid_reg[0] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[6].shift_delay.shift_inst_valid_reg[1] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[6].shift_delay.shift_inst_valid_reg[2] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[6].shift_delay.shift_inst_valid_reg[3] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[6].shift_delay.shift_inst_valid_reg[4] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[6].shift_delay.shift_inst_valid_reg[5] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:82]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[6].shift_delay.shift_inst_reg[0] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[6].shift_delay.shift_inst_reg[1] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[6].shift_delay.shift_inst_reg[2] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[6].shift_delay.shift_inst_reg[3] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[6].shift_delay.shift_inst_reg[4] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[6].shift_delay.shift_inst_reg[5] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:84]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[7].shift_delay.shift_valid_reg[0] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[7].shift_delay.shift_valid_reg[1] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[7].shift_delay.shift_valid_reg[2] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[7].shift_delay.shift_valid_reg[3] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[7].shift_delay.shift_valid_reg[4] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+WARNING: [Synth 8-6014] Unused sequential element col_gen[7].shift_delay.shift_valid_reg[5] was removed.  [/tmp/kv260-mdrv-wt/hw/rtl/MAT_CORE/GEMM_fmap_staggered_delay.sv:81]
+INFO: [Common 17-14] Message 'Synth 8-6014' appears 100 times and further instances of the messages will be disabled. Use the Tcl command set_msg_config to change the current settings.
+INFO: [Common 17-14] Message 'Synth 8-6014' appears 100 times and further instances of the messages will be disabled. Use the Tcl command set_msg_config to change the current settings.
+INFO: [Synth 8-5856] 3D RAM emax_pipe_reg  for this pattern/configuration is not supported. This will most likely be implemented in registers
+WARNING: [Synth 8-11357] Potential Runtime issue for 3D-RAM or RAM from Record/Structs for RAM  emax_pipe_reg with 16384 registers
+WARNING: [Synth 8-7129] Port IN_flags[sub_emax] in module CVO_sfu_unit is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_flags[accm] in module CVO_sfu_unit is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_flags[reserved][1] in module CVO_sfu_unit is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_flags[reserved][0] in module CVO_sfu_unit is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_uop[src_addr][16] in module CVO_top is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_uop[src_addr][15] in module CVO_top is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_uop[src_addr][14] in module CVO_top is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_uop[src_addr][13] in module CVO_top is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_uop[src_addr][12] in module CVO_top is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_uop[src_addr][11] in module CVO_top is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_uop[src_addr][10] in module CVO_top is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_uop[src_addr][9] in module CVO_top is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_uop[src_addr][8] in module CVO_top is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_uop[src_addr][7] in module CVO_top is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_uop[src_addr][6] in module CVO_top is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_uop[src_addr][5] in module CVO_top is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_uop[src_addr][4] in module CVO_top is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_uop[src_addr][3] in module CVO_top is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_uop[src_addr][2] in module CVO_top is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_uop[src_addr][1] in module CVO_top is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_uop[src_addr][0] in module CVO_top is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_uop[dst_addr][16] in module CVO_top is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_uop[dst_addr][15] in module CVO_top is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_uop[dst_addr][14] in module CVO_top is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_uop[dst_addr][13] in module CVO_top is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_uop[dst_addr][12] in module CVO_top is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_uop[dst_addr][11] in module CVO_top is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_uop[dst_addr][10] in module CVO_top is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_uop[dst_addr][9] in module CVO_top is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_uop[dst_addr][8] in module CVO_top is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_uop[dst_addr][7] in module CVO_top is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_uop[dst_addr][6] in module CVO_top is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_uop[dst_addr][5] in module CVO_top is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_uop[dst_addr][4] in module CVO_top is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_uop[dst_addr][3] in module CVO_top is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_uop[dst_addr][2] in module CVO_top is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_uop[dst_addr][1] in module CVO_top is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_uop[dst_addr][0] in module CVO_top is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_uop[async] in module CVO_top is either unconnected or has no load
+WARNING: [Synth 8-7129] Port OUT_fmap_ready in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_fmap_broadcast_valid in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[0][7] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[0][6] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[0][5] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[0][4] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[0][3] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[0][2] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[0][1] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[0][0] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[1][7] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[1][6] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[1][5] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[1][4] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[1][3] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[1][2] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[1][1] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[1][0] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[2][7] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[2][6] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[2][5] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[2][4] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[2][3] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[2][2] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[2][1] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[2][0] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[3][7] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[3][6] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[3][5] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[3][4] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[3][3] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[3][2] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[3][1] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[3][0] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[4][7] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[4][6] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[4][5] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[4][4] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[4][3] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[4][2] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[4][1] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[4][0] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[5][7] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[5][6] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[5][5] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[5][4] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[5][3] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[5][2] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[5][1] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[5][0] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[6][7] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[6][6] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[6][5] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[6][4] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[6][3] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[6][2] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[6][1] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[6][0] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[7][7] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[7][6] in module GEMV_generate_lut is either unconnected or has no load
+WARNING: [Synth 8-7129] Port IN_cached_emax_out[7][5] in module GEMV_generate_lut is either unconnected or has no load
+INFO: [Common 17-14] Message 'Synth 8-7129' appears 100 times and further instances of the messages will be disabled. Use the Tcl command set_msg_config to change the current settings.
+---------------------------------------------------------------------------------
+Finished RTL Elaboration : Time (s): cpu = 00:02:47 ; elapsed = 00:04:42 . Memory (MB): peak = 6785.707 ; gain = 4135.500 ; free physical = 1101 ; free virtual = 5663
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Handling Custom Attributes
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Handling Custom Attributes : Time (s): cpu = 00:02:56 ; elapsed = 00:04:51 . Memory (MB): peak = 6785.707 ; gain = 4135.500 ; free physical = 1393 ; free virtual = 5664
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished RTL Optimization Phase 1 : Time (s): cpu = 00:02:56 ; elapsed = 00:04:51 . Memory (MB): peak = 6785.707 ; gain = 4135.500 ; free physical = 1393 ; free virtual = 5664
+---------------------------------------------------------------------------------
+Netlist sorting complete. Time (s): cpu = 00:00:12 ; elapsed = 00:00:12 . Memory (MB): peak = 6785.707 ; gain = 0.000 ; free physical = 2051 ; free virtual = 5486
+INFO: [Netlist 29-17] Analyzing 1120 Unisim elements for replacement
+INFO: [Netlist 29-28] Unisim Transformation completed in 13 CPU seconds
+INFO: [Project 1-570] Preparing netlist for logic optimization
+
+Processing XDC Constraints
+Initializing timing engine
+Parsing XDC File [/tmp/kv260-mdrv-wt/hw/constraints/pccx_timing.xdc]
+create_clock: Time (s): cpu = 00:00:05 ; elapsed = 00:00:05 . Memory (MB): peak = 7799.871 ; gain = 3.203 ; free physical = 1067 ; free virtual = 5427
+WARNING: [Vivado 12-180] No cells matched 'get_cells -hier -filter {NAME =~ */u_reset_sync*/sync_reg_reg[0]}'. [/tmp/kv260-mdrv-wt/hw/constraints/pccx_timing.xdc:34]
+CRITICAL WARNING: [Vivado 12-4739] set_false_path:No valid object(s) found for '-to [get_cells -hier -filter {NAME =~ */u_reset_sync*/sync_reg_reg[0]}]'. [/tmp/kv260-mdrv-wt/hw/constraints/pccx_timing.xdc:34]
+Resolution: Check if the specified object(s) exists in the current design. If it does, ensure that the correct design hierarchy was specified for the object. If you are working with clocks, make sure create_clock was used to create the clock object before it is referenced.
+WARNING: [Vivado 12-180] No cells matched 'get_cells -hier -filter {NAME =~ */wr_pntr_gray_reg*}'. [/tmp/kv260-mdrv-wt/hw/constraints/pccx_timing.xdc:41]
+WARNING: [Vivado 12-180] No cells matched 'get_cells -hier -filter {NAME =~ */wr_pntr_gray_sync_reg*}'. [/tmp/kv260-mdrv-wt/hw/constraints/pccx_timing.xdc:41]
+CRITICAL WARNING: [Vivado 12-4739] set_false_path:No valid object(s) found for '-from [get_cells -hier -filter {NAME =~ */wr_pntr_gray_reg*}]'. [/tmp/kv260-mdrv-wt/hw/constraints/pccx_timing.xdc:41]
+Resolution: Check if the specified object(s) exists in the current design. If it does, ensure that the correct design hierarchy was specified for the object. If you are working with clocks, make sure create_clock was used to create the clock object before it is referenced.
+WARNING: [Vivado 12-180] No cells matched 'get_cells -hier -filter {NAME =~ */rd_pntr_gray_reg*}'. [/tmp/kv260-mdrv-wt/hw/constraints/pccx_timing.xdc:43]
+WARNING: [Vivado 12-180] No cells matched 'get_cells -hier -filter {NAME =~ */rd_pntr_gray_sync_reg*}'. [/tmp/kv260-mdrv-wt/hw/constraints/pccx_timing.xdc:43]
+CRITICAL WARNING: [Vivado 12-4739] set_false_path:No valid object(s) found for '-from [get_cells -hier -filter {NAME =~ */rd_pntr_gray_reg*}]'. [/tmp/kv260-mdrv-wt/hw/constraints/pccx_timing.xdc:43]
+Resolution: Check if the specified object(s) exists in the current design. If it does, ensure that the correct design hierarchy was specified for the object. If you are working with clocks, make sure create_clock was used to create the clock object before it is referenced.
+WARNING: [Vivado 12-180] No cells matched 'get_cells -hier -filter {NAME =~ */GEMM_dsp_unit*/DSP_HARD_BLOCK*}'. [/tmp/kv260-mdrv-wt/hw/constraints/pccx_timing.xdc:53]
+WARNING: [Vivado 12-180] No cells matched 'get_cells -hier -filter {NAME =~ */u_mat_result_normalizer*}'. [/tmp/kv260-mdrv-wt/hw/constraints/pccx_timing.xdc:53]
+CRITICAL WARNING: [Vivado 12-4739] set_multicycle_path:No valid object(s) found for '-from [get_cells -hier -filter {NAME =~ */GEMM_dsp_unit*/DSP_HARD_BLOCK*}]'. [/tmp/kv260-mdrv-wt/hw/constraints/pccx_timing.xdc:53]
+Resolution: Check if the specified object(s) exists in the current design. If it does, ensure that the correct design hierarchy was specified for the object. If you are working with clocks, make sure create_clock was used to create the clock object before it is referenced.
+WARNING: [Vivado 12-180] No cells matched 'get_cells -hier -filter {NAME =~ */GEMM_dsp_unit*/DSP_HARD_BLOCK*}'. [/tmp/kv260-mdrv-wt/hw/constraints/pccx_timing.xdc:56]
+WARNING: [Vivado 12-180] No cells matched 'get_cells -hier -filter {NAME =~ */u_mat_result_normalizer*}'. [/tmp/kv260-mdrv-wt/hw/constraints/pccx_timing.xdc:56]
+CRITICAL WARNING: [Vivado 12-4739] set_multicycle_path:No valid object(s) found for '-from [get_cells -hier -filter {NAME =~ */GEMM_dsp_unit*/DSP_HARD_BLOCK*}]'. [/tmp/kv260-mdrv-wt/hw/constraints/pccx_timing.xdc:56]
+Resolution: Check if the specified object(s) exists in the current design. If it does, ensure that the correct design hierarchy was specified for the object. If you are working with clocks, make sure create_clock was used to create the clock object before it is referenced.
+Finished Parsing XDC File [/tmp/kv260-mdrv-wt/hw/constraints/pccx_timing.xdc]
+INFO: [Project 1-236] Implementation specific constraints were found while reading constraint file [/tools/Xilinx/2025.2/data/ip/xpm/xpm_cdc/tcl/xpm_cdc_gray.tcl]. These constraints will be ignored for synthesis but will be used in implementation. Impacted constraints are listed in the file [.Xil/NPU_top_propImpl.xdc].
+Resolution: To avoid this warning, move constraints listed in [.Xil/NPU_top_propImpl.xdc] to another XDC file and exclude this new file from synthesis with the used_in_synthesis property (File Properties dialog in GUI) and re-run elaboration/synthesis.
+INFO: [Project 1-236] Implementation specific constraints were found while reading constraint file [/tools/Xilinx/2025.2/data/ip/xpm/xpm_fifo/tcl/xpm_fifo_rst_axis.tcl]. These constraints will be ignored for synthesis but will be used in implementation. Impacted constraints are listed in the file [.Xil/NPU_top_propImpl.xdc].
+Resolution: To avoid this warning, move constraints listed in [.Xil/NPU_top_propImpl.xdc] to another XDC file and exclude this new file from synthesis with the used_in_synthesis property (File Properties dialog in GUI) and re-run elaboration/synthesis.
+INFO: [Project 1-236] Implementation specific constraints were found while reading constraint file [/tools/Xilinx/2025.2/data/ip/xpm/xpm_fifo/tcl/xpm_fifo_rst.tcl]. These constraints will be ignored for synthesis but will be used in implementation. Impacted constraints are listed in the file [.Xil/NPU_top_propImpl.xdc].
+Resolution: To avoid this warning, move constraints listed in [.Xil/NPU_top_propImpl.xdc] to another XDC file and exclude this new file from synthesis with the used_in_synthesis property (File Properties dialog in GUI) and re-run elaboration/synthesis.
+INFO: [Project 1-236] Implementation specific constraints were found while reading constraint file [/tools/Xilinx/2025.2/data/ip/xpm/xpm_memory/tcl/xpm_memory_xdc.tcl]. These constraints will be ignored for synthesis but will be used in implementation. Impacted constraints are listed in the file [.Xil/NPU_top_propImpl.xdc].
+Resolution: To avoid this warning, move constraints listed in [.Xil/NPU_top_propImpl.xdc] to another XDC file and exclude this new file from synthesis with the used_in_synthesis property (File Properties dialog in GUI) and re-run elaboration/synthesis.
+INFO: [Project 1-236] Implementation specific constraints were found while reading constraint file [/tools/Xilinx/2025.2/data/ip/xpm/xpm_memory/tcl/xpm_memory_xdc.tcl]. These constraints will be ignored for synthesis but will be used in implementation. Impacted constraints are listed in the file [.Xil/NPU_top_propImpl.xdc].
+Resolution: To avoid this warning, move constraints listed in [.Xil/NPU_top_propImpl.xdc] to another XDC file and exclude this new file from synthesis with the used_in_synthesis property (File Properties dialog in GUI) and re-run elaboration/synthesis.
+INFO: [Project 1-1714] 55 XPM XDC files have been applied to the design.
+Completed Processing XDC Constraints
+
+Netlist sorting complete. Time (s): cpu = 00:00:00.28 ; elapsed = 00:00:00.27 . Memory (MB): peak = 7805.809 ; gain = 0.000 ; free physical = 1072 ; free virtual = 5540
+INFO: [Project 1-111] Unisim Transformation Summary:
+  A total of 1120 instances were transformed.
+  DSP48E2 => DSP48E2 (DSP_ALU, DSP_A_B_DATA, DSP_C_DATA, DSP_MULTIPLIER, DSP_M_DATA, DSP_OUTPUT, DSP_PREADD, DSP_PREADD_DATA): 1120 instances
+
+Constraint Validation Runtime : Time (s): cpu = 00:00:05 ; elapsed = 00:00:03 . Memory (MB): peak = 7805.844 ; gain = 0.000 ; free physical = 1044 ; free virtual = 5524
+---------------------------------------------------------------------------------
+Finished Constraint Validation : Time (s): cpu = 00:05:57 ; elapsed = 00:07:29 . Memory (MB): peak = 7805.844 ; gain = 5155.637 ; free physical = 849 ; free virtual = 5599
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Loading Part and Timing Information
+---------------------------------------------------------------------------------
+Loading part: xck26-sfvc784-2LV-c
+INFO: [Synth 8-6742] Reading net delay rules and data
+---------------------------------------------------------------------------------
+Finished Loading Part and Timing Information : Time (s): cpu = 00:05:57 ; elapsed = 00:07:29 . Memory (MB): peak = 7813.812 ; gain = 5163.605 ; free physical = 848 ; free virtual = 5599
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Applying 'set_property' XDC Constraints
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished applying 'set_property' XDC Constraints : Time (s): cpu = 00:05:57 ; elapsed = 00:07:29 . Memory (MB): peak = 7813.812 ; gain = 5163.605 ; free physical = 844 ; free virtual = 5600
+---------------------------------------------------------------------------------
+INFO: [Synth 8-802] inferred FSM for state register 'gen_rst_ic.curr_wrst_state_reg' in module 'xpm_fifo_rst__parameterized0'
+INFO: [Synth 8-802] inferred FSM for state register 'gen_rst_ic.curr_rrst_state_reg' in module 'xpm_fifo_rst__parameterized0'
+INFO: [Synth 8-802] inferred FSM for state register 'gen_fwft.curr_fwft_state_reg' in module 'xpm_fifo_base__parameterized0'
+INFO: [Synth 8-802] inferred FSM for state register 'state_reg' in module 'mem_CVO_stream_bridge'
+INFO: [Synth 8-802] inferred FSM for state register 'gen_fwft.curr_fwft_state_reg' in module 'xpm_fifo_base__parameterized2'
+INFO: [Synth 8-802] inferred FSM for state register 'gen_fwft.curr_fwft_state_reg' in module 'xpm_fifo_base__parameterized3'
+INFO: [Synth 8-802] inferred FSM for state register 'state_reg' in module 'FROM_gemm_result_packer'
+INFO: [Synth 8-802] inferred FSM for state register 'state_reg' in module 'CVO_top'
+INFO: [Synth 8-6904] The RAM "AXIL_STAT_OUT:/mem_reg" of size (depth=8 x width=64) is automatically implemented using LUTRAM. BRAM implementation would be inefficient 
+INFO: [Synth 8-5775] Found 'rw_addr_collision' attribute set to 'no' on SDP RAM gen_wr_a.gen_word_narrow.mem_reg. Setting write mode to NO_CHANGE 
+INFO: [Synth 8-5775] Found 'rw_addr_collision' attribute set to 'no' on SDP RAM gen_wr_a.gen_word_narrow.mem_reg. Setting write mode to NO_CHANGE 
+INFO: [Synth 8-5552] Implemented safe state 'default_state' for state register 'gen_rst_ic.curr_wrst_state_reg' in module 'xpm_fifo_rst__parameterized0'
+---------------------------------------------------------------------------------------------------
+                   State |                     New Encoding |                Previous Encoding 
+---------------------------------------------------------------------------------------------------
+*
+               WRST_IDLE |                            00001 |                              000
+                 WRST_IN |                            00010 |                              010
+                WRST_OUT |                            00100 |                              111
+               WRST_EXIT |                            01000 |                              110
+            WRST_GO2IDLE |                            10000 |                              100
+---------------------------------------------------------------------------------------------------
+INFO: [Synth 8-3354] encoded FSM with state register 'gen_rst_ic.curr_wrst_state_reg' using encoding 'one-hot' in module 'xpm_fifo_rst__parameterized0'
+INFO: [Synth 8-5552] Implemented safe state 'default_state' for state register 'gen_rst_ic.curr_rrst_state_reg' in module 'xpm_fifo_rst__parameterized0'
+---------------------------------------------------------------------------------------------------
+                   State |                     New Encoding |                Previous Encoding 
+---------------------------------------------------------------------------------------------------
+*
+               RRST_IDLE |                               00 |                               00
+                 RRST_IN |                               01 |                               10
+                RRST_OUT |                               10 |                               11
+               RRST_EXIT |                               11 |                               01
+---------------------------------------------------------------------------------------------------
+INFO: [Synth 8-3354] encoded FSM with state register 'gen_rst_ic.curr_rrst_state_reg' using encoding 'sequential' in module 'xpm_fifo_rst__parameterized0'
+---------------------------------------------------------------------------------------------------
+                   State |                     New Encoding |                Previous Encoding 
+---------------------------------------------------------------------------------------------------
+                 invalid |                               00 |                               00
+            stage1_valid |                               01 |                               10
+       both_stages_valid |                               10 |                               11
+            stage2_valid |                               11 |                               01
+---------------------------------------------------------------------------------------------------
+INFO: [Synth 8-3354] encoded FSM with state register 'gen_fwft.curr_fwft_state_reg' using encoding 'sequential' in module 'xpm_fifo_base__parameterized0'
+INFO: [Synth 8-5780] Default cascade height of 8 will be used for URAM '"xpm_memory_base__parameterized1:/gen_wr_b.gen_word_narrow.mem_reg"'.
+WARNING: [Synth 8-5810] UltraRAM "xpm_memory_base__parameterized1:/gen_wr_b.gen_word_narrow.mem_reg" is in TDP mode. Simulation mismatches may occur when both port A and B access same address, either both ports have write operations or port A has read operation while port B has write operation.
+INFO: [Synth 8-3971] The signal "xpm_memory_base__parameterized1:/gen_wr_b.gen_word_narrow.mem_reg" was recognized as a true dual port RAM template.
+INFO: [Synth 8-5775] Found 'rw_addr_collision' attribute set to 'no' on SDP RAM gen_wr_a.gen_word_narrow.mem_reg. Setting write mode to NO_CHANGE 
+---------------------------------------------------------------------------------------------------
+                   State |                     New Encoding |                Previous Encoding 
+---------------------------------------------------------------------------------------------------
+                 ST_IDLE |                               01 |                               00
+                 ST_READ |                               11 |                               01
+                ST_WRITE |                               10 |                               10
+                 ST_DONE |                               00 |                               11
+---------------------------------------------------------------------------------------------------
+INFO: [Synth 8-3354] encoded FSM with state register 'state_reg' using encoding 'sequential' in module 'mem_CVO_stream_bridge'
+INFO: [Synth 8-5775] Found 'rw_addr_collision' attribute set to 'no' on SDP RAM gen_wr_a.gen_word_narrow.mem_reg. Setting write mode to NO_CHANGE 
+---------------------------------------------------------------------------------------------------
+                   State |                     New Encoding |                Previous Encoding 
+---------------------------------------------------------------------------------------------------
+                 invalid |                               00 |                               00
+            stage1_valid |                               01 |                               10
+       both_stages_valid |                               10 |                               11
+            stage2_valid |                               11 |                               01
+---------------------------------------------------------------------------------------------------
+INFO: [Synth 8-3354] encoded FSM with state register 'gen_fwft.curr_fwft_state_reg' using encoding 'sequential' in module 'xpm_fifo_base__parameterized2'
+INFO: [Synth 8-5775] Found 'rw_addr_collision' attribute set to 'no' on SDP RAM gen_wr_a.gen_word_narrow.mem_reg. Setting write mode to NO_CHANGE 
+---------------------------------------------------------------------------------------------------
+                   State |                     New Encoding |                Previous Encoding 
+---------------------------------------------------------------------------------------------------
+                 invalid |                               00 |                               00
+            stage1_valid |                               01 |                               10
+       both_stages_valid |                               10 |                               11
+            stage2_valid |                               11 |                               01
+---------------------------------------------------------------------------------------------------
+INFO: [Synth 8-3354] encoded FSM with state register 'gen_fwft.curr_fwft_state_reg' using encoding 'sequential' in module 'xpm_fifo_base__parameterized3'
+---------------------------------------------------------------------------------------------------
+                   State |                     New Encoding |                Previous Encoding 
+---------------------------------------------------------------------------------------------------
+                    IDLE |                              001 |                               00
+             CHECK_VALID |                              010 |                               01
+               SEND_DATA |                              100 |                               10
+---------------------------------------------------------------------------------------------------
+INFO: [Synth 8-3354] encoded FSM with state register 'state_reg' using encoding 'one-hot' in module 'FROM_gemm_result_packer'
+---------------------------------------------------------------------------------------------------
+                   State |                     New Encoding |                Previous Encoding 
+---------------------------------------------------------------------------------------------------
+                 ST_IDLE |                              001 |                               00
+              ST_RUNNING |                              010 |                               01
+                 ST_DONE |                              100 |                               10
+---------------------------------------------------------------------------------------------------
+INFO: [Synth 8-3354] encoded FSM with state register 'state_reg' using encoding 'one-hot' in module 'CVO_top'
+---------------------------------------------------------------------------------
+Finished RTL Optimization Phase 2 : Time (s): cpu = 00:07:08 ; elapsed = 00:08:43 . Memory (MB): peak = 7813.812 ; gain = 5163.605 ; free physical = 1419 ; free virtual = 5649
+---------------------------------------------------------------------------------
+INFO: [Synth 8-5775] Found 'rw_addr_collision' attribute set to 'no' on SDP RAM gen_wr_a.gen_word_narrow.mem_reg. Setting write mode to NO_CHANGE 
+INFO: [Synth 8-5775] Found 'rw_addr_collision' attribute set to 'no' on SDP RAM gen_wr_a.gen_word_narrow.mem_reg. Setting write mode to NO_CHANGE 
+INFO: [Synth 8-5775] Found 'rw_addr_collision' attribute set to 'no' on SDP RAM gen_wr_a.gen_word_narrow.mem_reg. Setting write mode to NO_CHANGE 
+INFO: [Synth 8-5775] Found 'rw_addr_collision' attribute set to 'no' on SDP RAM gen_wr_a.gen_word_narrow.mem_reg. Setting write mode to NO_CHANGE 
+INFO: [Synth 8-5775] Found 'rw_addr_collision' attribute set to 'no' on SDP RAM gen_wr_a.gen_word_narrow.mem_reg. Setting write mode to NO_CHANGE 
+INFO: [Synth 8-5775] Found 'rw_addr_collision' attribute set to 'no' on SDP RAM gen_wr_a.gen_word_narrow.mem_reg. Setting write mode to NO_CHANGE 
+INFO: [Synth 8-5775] Found 'rw_addr_collision' attribute set to 'no' on SDP RAM gen_wr_a.gen_word_narrow.mem_reg. Setting write mode to NO_CHANGE 
+INFO: [Synth 8-5775] Found 'rw_addr_collision' attribute set to 'no' on SDP RAM gen_wr_a.gen_word_narrow.mem_reg. Setting write mode to NO_CHANGE 
+INFO: [Synth 8-5775] Found 'rw_addr_collision' attribute set to 'no' on SDP RAM gen_wr_a.gen_word_narrow.mem_reg. Setting write mode to NO_CHANGE 
+INFO: [Synth 8-5775] Found 'rw_addr_collision' attribute set to 'no' on SDP RAM gen_wr_a.gen_word_narrow.mem_reg. Setting write mode to NO_CHANGE 
+# Minor page faults: 2.11962e+06 Major page faults: 259530
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.1201e+06 Major page faults: 259627
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.12052e+06 Major page faults: 259630
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.12103e+06 Major page faults: 259747
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.12138e+06 Major page faults: 259751
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.12139e+06 Major page faults: 259755
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.12153e+06 Major page faults: 259755
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.12208e+06 Major page faults: 259869
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.12213e+06 Major page faults: 259869
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.12213e+06 Major page faults: 259869
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.12219e+06 Major page faults: 259869
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.12228e+06 Major page faults: 259879
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.12228e+06 Major page faults: 259879
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.12228e+06 Major page faults: 259879
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.12228e+06 Major page faults: 259879
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.12252e+06 Major page faults: 259953
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.12253e+06 Major page faults: 259967
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.12253e+06 Major page faults: 259967
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.12253e+06 Major page faults: 259972
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.12253e+06 Major page faults: 259972
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.12262e+06 Major page faults: 259972
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.12269e+06 Major page faults: 259975
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.12269e+06 Major page faults: 259975
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.12269e+06 Major page faults: 259975
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.1227e+06 Major page faults: 259982
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.1228e+06 Major page faults: 259998
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.1228e+06 Major page faults: 259998
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.1228e+06 Major page faults: 259998
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.12349e+06 Major page faults: 260041
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.12384e+06 Major page faults: 260100
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.12389e+06 Major page faults: 260104
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.12402e+06 Major page faults: 260142
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.12402e+06 Major page faults: 260142
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.12402e+06 Major page faults: 260142
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.12402e+06 Major page faults: 260142
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.12402e+06 Major page faults: 260142
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.12402e+06 Major page faults: 260142
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.12402e+06 Major page faults: 260142
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.12409e+06 Major page faults: 260152
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.1241e+06 Major page faults: 260153
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.1241e+06 Major page faults: 260153
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.1241e+06 Major page faults: 260153
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+# Minor page faults: 2.1241e+06 Major page faults: 260153
+# Thrashing Detected!
+# Process may be trying to use more memory than is available
+# (memory might be consumed by other processes or file cache).
+---------------------------------------------------------------------------------
+Start RTL Component Statistics 
+---------------------------------------------------------------------------------
+Detailed RTL Component Info : 
++---Adders : 
+	   2 Input   48 Bit       Adders := 32    
+	   2 Input   32 Bit       Adders := 6     
+	   2 Input   30 Bit       Adders := 64    
+	   2 Input   29 Bit       Adders := 1024  
+	   2 Input   27 Bit       Adders := 16    
+	   2 Input   25 Bit       Adders := 1     
+	   2 Input   24 Bit       Adders := 3     
+	   2 Input   17 Bit       Adders := 4     
+	   3 Input   17 Bit       Adders := 2     
+	   2 Input   16 Bit       Adders := 23    
+	   3 Input   16 Bit       Adders := 26    
+	   2 Input   15 Bit       Adders := 2     
+	   2 Input   13 Bit       Adders := 10    
+	   4 Input   13 Bit       Adders := 8     
+	   4 Input   12 Bit       Adders := 14    
+	   2 Input   12 Bit       Adders := 1     
+	   3 Input   12 Bit       Adders := 2     
+	   2 Input   11 Bit       Adders := 1     
+	   4 Input   11 Bit       Adders := 3     
+	   3 Input   11 Bit       Adders := 1     
+	   2 Input   10 Bit       Adders := 1     
+	   4 Input   10 Bit       Adders := 2     
+	   3 Input   10 Bit       Adders := 4     
+	   4 Input    9 Bit       Adders := 3     
+	   2 Input    9 Bit       Adders := 7     
+	   3 Input    8 Bit       Adders := 63    
+	   4 Input    8 Bit       Adders := 4     
+	   2 Input    8 Bit       Adders := 23    
+	   2 Input    7 Bit       Adders := 2     
+	   4 Input    7 Bit       Adders := 6     
+	   3 Input    7 Bit       Adders := 2     
+	   4 Input    6 Bit       Adders := 4     
+	   2 Input    6 Bit       Adders := 37    
+	   4 Input    5 Bit       Adders := 6     
+	   2 Input    5 Bit       Adders := 2     
+	   2 Input    4 Bit       Adders := 6     
+	   2 Input    3 Bit       Adders := 2     
+	   4 Input    2 Bit       Adders := 7     
++---XORs : 
+	   2 Input     13 Bit         XORs := 8     
+	   2 Input     12 Bit         XORs := 8     
+	   2 Input      6 Bit         XORs := 4     
+	   2 Input      5 Bit         XORs := 4     
+	   2 Input      1 Bit         XORs := 225   
++---Registers : 
+	              432 Bit    Registers := 1     
+	              324 Bit    Registers := 2     
+	              256 Bit    Registers := 4     
+	              164 Bit    Registers := 12    
+	              128 Bit    Registers := 9     
+	               64 Bit    Registers := 11    
+	               60 Bit    Registers := 1     
+	               48 Bit    Registers := 64    
+	               35 Bit    Registers := 2     
+	               32 Bit    Registers := 1     
+	               30 Bit    Registers := 2237  
+	               27 Bit    Registers := 530   
+	               17 Bit    Registers := 404   
+	               16 Bit    Registers := 153   
+	               15 Bit    Registers := 1     
+	               13 Bit    Registers := 51    
+	               12 Bit    Registers := 50    
+	               11 Bit    Registers := 5     
+	               10 Bit    Registers := 4     
+	                9 Bit    Registers := 9     
+	                8 Bit    Registers := 35950 
+	                7 Bit    Registers := 49    
+	                6 Bit    Registers := 64    
+	                5 Bit    Registers := 29    
+	                4 Bit    Registers := 3144  
+	                3 Bit    Registers := 2090  
+	                2 Bit    Registers := 38    
+	                1 Bit    Registers := 2567  
++---Multipliers : 
+	              17x32  Multipliers := 1     
++---RAMs : 
+	           14336K Bit	(114688 X 128 bit)          RAMs := 1     
+	             656K Bit	(4096 X 164 bit)          RAMs := 4     
+	             162K Bit	(512 X 324 bit)          RAMs := 1     
+	              54K Bit	(2048 X 27 bit)          RAMs := 1     
+	              32K Bit	(2048 X 16 bit)          RAMs := 1     
+	               5K Bit	(32 X 164 bit)          RAMs := 2     
+	               4K Bit	(128 X 35 bit)          RAMs := 2     
+	              512 Bit	(8 X 64 bit)          RAMs := 1     
++---Muxes : 
+	   2 Input  256 Bit        Muxes := 1     
+	   4 Input  128 Bit        Muxes := 1     
+	   2 Input  128 Bit        Muxes := 2     
+	   2 Input   64 Bit        Muxes := 1     
+	   3 Input   64 Bit        Muxes := 1     
+	   2 Input   48 Bit        Muxes := 32    
+	   2 Input   32 Bit        Muxes := 2     
+	   2 Input   30 Bit        Muxes := 1     
+	   2 Input   27 Bit        Muxes := 16    
+	   2 Input   24 Bit        Muxes := 4     
+	   2 Input   23 Bit        Muxes := 1     
+	   2 Input   22 Bit        Muxes := 1     
+	   2 Input   21 Bit        Muxes := 1     
+	   2 Input   20 Bit        Muxes := 1     
+	   2 Input   19 Bit        Muxes := 1     
+	   2 Input   18 Bit        Muxes := 1     
+	   2 Input   17 Bit        Muxes := 10    
+	   4 Input   16 Bit        Muxes := 4     
+	   2 Input   16 Bit        Muxes := 52    
+	   3 Input   16 Bit        Muxes := 5     
+	   3 Input   15 Bit        Muxes := 2     
+	   2 Input   15 Bit        Muxes := 8     
+	   2 Input   14 Bit        Muxes := 2     
+	   4 Input   13 Bit        Muxes := 2     
+	   2 Input   13 Bit        Muxes := 3     
+	   2 Input   12 Bit        Muxes := 2     
+	   2 Input   11 Bit        Muxes := 2     
+	   2 Input   10 Bit        Muxes := 18    
+	   2 Input    9 Bit        Muxes := 12    
+	   2 Input    8 Bit        Muxes := 38    
+	   4 Input    7 Bit        Muxes := 1     
+	   2 Input    7 Bit        Muxes := 50    
+	   3 Input    6 Bit        Muxes := 65    
+	   2 Input    6 Bit        Muxes := 39    
+	   3 Input    5 Bit        Muxes := 960   
+	   2 Input    5 Bit        Muxes := 51    
+	   5 Input    5 Bit        Muxes := 1     
+	   6 Input    5 Bit        Muxes := 6     
+	   2 Input    4 Bit        Muxes := 2     
+	   6 Input    4 Bit        Muxes := 1     
+	   2 Input    3 Bit        Muxes := 4     
+	   4 Input    3 Bit        Muxes := 3     
+	   3 Input    3 Bit        Muxes := 1     
+	   2 Input    2 Bit        Muxes := 231   
+	   4 Input    2 Bit        Muxes := 50    
+	   5 Input    2 Bit        Muxes := 6     
+	   2 Input    1 Bit        Muxes := 245   
+	   4 Input    1 Bit        Muxes := 27    
+	   3 Input    1 Bit        Muxes := 9     
+	   6 Input    1 Bit        Muxes := 16    
+	   5 Input    1 Bit        Muxes := 18    
+---------------------------------------------------------------------------------
+Finished RTL Component Statistics 
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Part Resource Summary
+---------------------------------------------------------------------------------
+Part Resources:
+DSPs: 1248 (col length:96)
+BRAMs: 288 (col length: RAMB18 96 RAMB36 48)
+---------------------------------------------------------------------------------
+Finished Part Resource Summary
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Cross Boundary and Area Optimization
+---------------------------------------------------------------------------------
+INFO: [Synth 8-5775] Found 'rw_addr_collision' attribute set to 'no' on SDP RAM gen_wr_a.gen_word_narrow.mem_reg. Setting write mode to NO_CHANGE 
+INFO: [Synth 8-5775] Found 'rw_addr_collision' attribute set to 'no' on SDP RAM gen_wr_a.gen_word_narrow.mem_reg. Setting write mode to NO_CHANGE 
+INFO: [Synth 8-5775] Found 'rw_addr_collision' attribute set to 'no' on SDP RAM gen_wr_a.gen_word_narrow.mem_reg. Setting write mode to NO_CHANGE 
+INFO: [Synth 8-5775] Found 'rw_addr_collision' attribute set to 'no' on SDP RAM gen_wr_a.gen_word_narrow.mem_reg. Setting write mode to NO_CHANGE 
+INFO: [Synth 8-5784] Optimized 128 bits of RAM "gen_wr_a.gen_word_narrow.mem_reg" due to constant propagation. Old ram width 324 bits, new ram width 196 bits.
+INFO: [Synth 8-5775] Found 'rw_addr_collision' attribute set to 'no' on SDP RAM gen_wr_a.gen_word_narrow.mem_reg. Setting write mode to NO_CHANGE 
+INFO: [Synth 8-5775] Found 'rw_addr_collision' attribute set to 'no' on SDP RAM gen_wr_a.gen_word_narrow.mem_reg. Setting write mode to NO_CHANGE 
+INFO: [Synth 8-5775] Found 'rw_addr_collision' attribute set to 'no' on SDP RAM gen_wr_a.gen_word_narrow.mem_reg. Setting write mode to NO_CHANGE 
+INFO: [Synth 8-5775] Found 'rw_addr_collision' attribute set to 'no' on SDP RAM gen_wr_a.gen_word_narrow.mem_reg. Setting write mode to NO_CHANGE 
+Terminated
+Terminated
+Terminated
+Terminated
+Terminated

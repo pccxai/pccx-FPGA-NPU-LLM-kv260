@@ -72,6 +72,10 @@ module NPU_top (
   axis_if #(.DATA_WIDTH(128)) M_CORE_HP2_WEIGHT ();
   axis_if #(.DATA_WIDTH(128)) M_CORE_HP3_WEIGHT ();
 
+  // ===| Internal Wires — ACP FMap Route |======================================
+  axis_if #(.DATA_WIDTH(128)) S_AXIS_ACP_FMAP_MEM ();
+  axis_if #(.DATA_WIDTH(128)) S_AXIS_ACP_FMAP_PRE ();
+
   // ===| Internal Wires — Instruction Path |=====================================
   logic                GEMV_op_x64_valid_wire;
   logic                GEMM_op_x64_valid_wire;
@@ -130,6 +134,33 @@ module NPU_top (
       .OUT_sram_rd_start(sram_rd_start_wire)
   );
 
+  // The external ACP-FMAP stream has one upstream ready owner. Route it to
+  // either L2 DMA (MEMCPY) or direct fmap preprocessing (GEMM/GEMV).
+  logic acp_fmap_route_mem;
+
+  always_ff @(posedge clk_core) begin
+    if (!rst_n_core || i_clear) begin
+      acp_fmap_route_mem <= 1'b1;
+    end else if (memcpy_op_x64_valid_wire) begin
+      acp_fmap_route_mem <= 1'b1;
+    end else if (GEMM_op_x64_valid_wire || GEMV_op_x64_valid_wire) begin
+      acp_fmap_route_mem <= 1'b0;
+    end
+  end
+
+  assign S_AXIS_ACP_FMAP_MEM.tdata  = S_AXIS_ACP_FMAP.tdata;
+  assign S_AXIS_ACP_FMAP_MEM.tkeep  = S_AXIS_ACP_FMAP.tkeep;
+  assign S_AXIS_ACP_FMAP_MEM.tlast  = S_AXIS_ACP_FMAP.tlast;
+  assign S_AXIS_ACP_FMAP_MEM.tvalid = S_AXIS_ACP_FMAP.tvalid & acp_fmap_route_mem;
+
+  assign S_AXIS_ACP_FMAP_PRE.tdata  = S_AXIS_ACP_FMAP.tdata;
+  assign S_AXIS_ACP_FMAP_PRE.tkeep  = S_AXIS_ACP_FMAP.tkeep;
+  assign S_AXIS_ACP_FMAP_PRE.tlast  = S_AXIS_ACP_FMAP.tlast;
+  assign S_AXIS_ACP_FMAP_PRE.tvalid = S_AXIS_ACP_FMAP.tvalid & ~acp_fmap_route_mem;
+
+  assign S_AXIS_ACP_FMAP.tready = acp_fmap_route_mem ? S_AXIS_ACP_FMAP_MEM.tready :
+                                                       S_AXIS_ACP_FMAP_PRE.tready;
+
   // ===| [3] Memory Dispatcher |=================================================
   // CVO stream wires: bridge ↔ CVO_top
   logic [15:0] cvo_disp_data_wire;
@@ -147,7 +178,7 @@ module NPU_top (
       .clk_axi  (clk_axi),
       .rst_axi_n(rst_axi_n),
 
-      .S_AXIS_ACP_FMAP  (S_AXIS_ACP_FMAP),
+      .S_AXIS_ACP_FMAP  (S_AXIS_ACP_FMAP_MEM),
       .M_AXIS_ACP_RESULT(M_AXIS_ACP_RESULT),
 
       .IN_LOAD_uop     (LOAD_uop_wire),
@@ -195,7 +226,7 @@ module NPU_top (
       .rst_n  (rst_n_core),
       .i_clear(i_clear),
 
-      .S_AXIS_ACP_FMAP(S_AXIS_ACP_FMAP),
+      .S_AXIS_ACP_FMAP(S_AXIS_ACP_FMAP_PRE),
 
       .i_rd_start(sram_rd_start_wire),
 
