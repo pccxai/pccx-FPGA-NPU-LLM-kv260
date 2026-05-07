@@ -7,6 +7,49 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## v002.1 ramp PR inventory — 2026-05-07
+
+Evidence-gated inventory of draft PRs #80-#100 queried for the v002.1
+ramp on 2026-05-07. This is not a release note and does not claim
+merge, tag, timing closure, bitstream availability, or KV260 board
+bring-up.
+
+### Spec
+
+- #80 `docs(spec): resolve v002 quantization, K-drain, and DSP baseline`
+
+### TBs
+
+- #81 `tb(gemm): verify W4A8 DSP dual-MAC and sign recovery`
+- #83 `tb(npu_top): minimal end-to-end integration tb`
+- #84 `tb(preprocess): bf16 to int8 e_max golden`
+- #85 `tb(gemm): validate dsp packer and sign recovery`
+- #89 `tb(gemv): verify reduction pipeline and sfu/l2 output mux`
+- #91 `tb(gemm): re-enable fmap staggered-delay after int8 transition`
+- #92 `tb(sched): global_scheduler hazard and chaining`
+- #93 `tb(memcpy): add mem_dispatcher comprehensive testbench`
+- #94 `tb(memory): verify uram l2 mapping and arbitration`
+
+### RTL fixes
+
+- #86 `feat(stat): connect engine completion to mmio_npu_stat`
+- #87 `feat(gemv): connect lane mask and remove activation hardcode`
+- #90 `feat(npu_top): connect result packer ready/valid and STORE writeback`
+
+### Infra
+
+- #82 `build(vivado): add KV260 bitstream runbook and BD scaffold`
+- #88 `infra(synth): add baseline recording scripts and runbook`
+
+### Docs
+
+- #95 `docs(evidence): v002.1 evidence inventory`
+- #96 `docs(runbook): post-impl timing closure and bitstream smoke plan`
+- #97 `docs(release): v002.1-rc.0 notes draft`
+- #98 `docs(contrib): add CONTRIBUTING.md`
+- #99 `docs(readme): link v002.1 ramp artifacts`
+- #100 `docs(runbook): v002.1 bitstream deploy procedure`
+
 ## v0.1.0-alpha — 2026-05-01
 
 First public RTL preview of the pccx v002 NPU implementation targeting
