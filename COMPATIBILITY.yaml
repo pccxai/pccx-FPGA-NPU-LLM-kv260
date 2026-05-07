@@ -1,0 +1,15 @@
+application: pccx-FPGA-NPU-LLM-kv260
+board: kv260
+models:
+  - gemma3n-e4b
+arch: pccx-v002
+rtl_dependency:
+  repo: pccx-v002
+  submodule_path: third_party/pccx-v002
+  version: TBD
+  commit: b727385fd4f3b7ff5ce5f1dd3709ddcbdfdbfcc8
+isa_version: TBD
+register_abi_version: TBD
+driver_abi_version: TBD
+vivado_version: TBD
+status: bringup
