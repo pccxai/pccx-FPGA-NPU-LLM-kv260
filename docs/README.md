@@ -20,6 +20,8 @@ Pages, bilingual EN / KO).
   [TIMING_EVIDENCE.md](TIMING_EVIDENCE.md)
 - Repo-local release evidence checklist:
   [RELEASE_EVIDENCE_CHECKLIST.md](RELEASE_EVIDENCE_CHECKLIST.md)
+- Repo-local v002.1 KV260 acceptance criteria:
+  [releases/v002.1-acceptance-criteria.md](releases/v002.1-acceptance-criteria.md)
 - Documentation root (language picker):
   <https://pccxai.github.io/pccx/en/index.html>
 - pccx source repository:
