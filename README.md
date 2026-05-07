@@ -346,8 +346,9 @@ hw/sim/run_verification.sh --quick
 scripts/v002/run-local-candidate.sh --quick
 ```
 
-See [docs/SIMULATION.md](docs/SIMULATION.md) for generated log paths,
-PASS verdict rules, and the evidence checklist.
+See [docs/SIMULATION.md](docs/SIMULATION.md) for all runner flags,
+generated log paths, PASS verdict rules, new-testbench policy, and the
+evidence checklist.
 
 ### Current testbench matrix
 
@@ -372,15 +373,11 @@ non-PASS verdict.
 
 ### Adding a new testbench
 
-Two lines in `hw/sim/run_verification.sh`:
-
-```bash
-TB_DEPS[tb_new_module]="SUB_DIR/new_module.sv"
-TB_CORE[tb_new_module]=N   # pick an unused core-id for the emitted trace
-```
-
-Then drop `hw/tb/tb_new_module.sv` with the canonical `$display` line on
-success / failure. See
+Add the self-checking `hw/tb/tb_<name>.sv`, wire its dependencies and
+trace lane into `hw/sim/run_verification.sh`, add it to the deterministic
+suite list, and verify it with `--list` plus `--tb <name>`. See
+[docs/SIMULATION.md](docs/SIMULATION.md#adding-a-testbench) for the full
+runner policy, and
 [pccx-lab's verification-workflow doc](https://pccxai.github.io/pccx/en/lab/verification-workflow.html)
 for the end-to-end flow diagram and the Tauri IPC surface.
 
