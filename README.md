@@ -17,6 +17,12 @@ Next milestone: v0.2.0 evidence pack
 
 **Current status:** RTL alpha · timing closure and full runtime bring-up in progress.
 
+**v002.1 ramp:** Documentation and bring-up work are being collected
+through evidence-gated review artifacts: [v002.1 evidence inventory](https://github.com/pccxai/pccx-FPGA-NPU-LLM-kv260/pull/95),
+[KV260 bitstream runbook](https://github.com/pccxai/pccx-FPGA-NPU-LLM-kv260/pull/82),
+[CONTRIBUTING update](https://github.com/pccxai/pccx-FPGA-NPU-LLM-kv260/pull/98), and
+[v002 spec resolution](https://github.com/pccxai/pccx-FPGA-NPU-LLM-kv260/pull/80).
+
 This repo is the **bare-metal Kria KV260 implementation** of the
 **pccx v002** NPU architecture. It hosts an early SystemVerilog RTL and
 bare-metal driver source snapshot intended to close the loop between the
