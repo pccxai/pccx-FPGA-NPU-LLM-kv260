@@ -1,0 +1,9 @@
+Implementation command:
+bash hw/vivado/build.sh impl
+
+Implementation failure excerpt from PR #104 evidence:
+ERROR: [DRC MDRV-1] Multiple Driver Nets: Net u_mem_dispatcher/u_l2_cache/u_acp_cdc/u_acp_rx_fifo/xpm_fifo_base_inst/full_n has multiple drivers: u_mem_dispatcher/u_l2_cache/u_acp_cdc/u_acp_rx_fifo/xpm_fifo_base_inst/gen_pf_ic_rc.gen_full_rst_val.ram_full_n_reg/Q, and u_fmap_pre/u_fmap_fifo/xpm_fifo_base_inst/gen_pntr_flags_cc.gen_full_rst_val.ram_full_n_reg/Q.
+
+Source:
+origin/fix/vivado-svh-add-files:
+docs/evidence/vivado-svh-add-files/20260507T024124Z-18d4631/vivado_impl_failure_excerpt.txt

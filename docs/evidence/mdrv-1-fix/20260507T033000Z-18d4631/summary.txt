@@ -1,0 +1,74 @@
+Run: mdrv-1-fix
+Branch: fix/mdrv-1-multi-driver
+Worktree: /tmp/kv260-mdrv-wt
+Base: origin/main 18d4631f54721684ef6747bc37cf8538653a7a9e
+
+PR104_EVIDENCE:
+- Source branch: origin/fix/vivado-svh-add-files
+- Source path:
+  docs/evidence/vivado-svh-add-files/20260507T024124Z-18d4631/
+- PR #104 synth result: PASS
+- PR #104 impl result: FAIL at opt_design DRC MDRV-1
+
+OFFENDING_NET:
+u_mem_dispatcher/u_l2_cache/u_acp_cdc/u_acp_rx_fifo/xpm_fifo_base_inst/full_n
+
+DRIVERS_REPORTED_BY_VIVADO:
+- u_mem_dispatcher/u_l2_cache/u_acp_cdc/u_acp_rx_fifo/xpm_fifo_base_inst/gen_pf_ic_rc.gen_full_rst_val.ram_full_n_reg/Q
+- u_fmap_pre/u_fmap_fifo/xpm_fifo_base_inst/gen_pntr_flags_cc.gen_full_rst_val.ram_full_n_reg/Q
+
+ROOT_CAUSE:
+NPU_top connected the same external S_AXIS_ACP_FMAP slave interface to both
+mem_dispatcher and preprocess_fmap. Both children instantiate xpm_fifo_axis
+and both child FIFOs drove S_AXIS_ACP_FMAP.tready. Vivado optimized that
+shared ready path through each FIFO's internal full_n signal and reported the
+multiple-driver net at opt_design.
+
+RECENT_PR_CROSS_REFERENCE:
+- #86 feat(stat): touches NPU_top status wiring only; commit 654f8bb is not an
+  ancestor of origin/main 18d4631 and did not introduce the PR #104 failure.
+- #87 feat(gemv): touches NPU_top lane-mask wiring only; commit 55ea652 is not
+  an ancestor of origin/main 18d4631 and did not introduce the PR #104 failure.
+- #90 feat(npu_top): touches NPU_top/result writeback, but commit 091b107 is not
+  an ancestor of origin/main 18d4631 and did not introduce the PR #104 failure.
+- The double connection is present on origin/main and traces back to the older
+  NPU_top integration around commit 4f9e98b44aaa8289074506c31524fbec64ebf511
+  ("add Complex Vector Operation Engine"). No associated GitHub PR was found
+  for that historical commit via the GitHub commit pulls API.
+
+FIX_KIND:
+two-modules-driving-same-wire -> explicit top-level route mux
+
+RTL_FIX:
+- Added internal S_AXIS_ACP_FMAP_MEM and S_AXIS_ACP_FMAP_PRE interfaces.
+- Added acp_fmap_route_mem, reset/defaulting to the MEMCPY/L2 path.
+- MEMCPY issue selects mem_dispatcher.
+- GEMM/GEMV issue selects preprocess_fmap.
+- S_AXIS_ACP_FMAP.tready now has exactly one driver in NPU_top.
+
+COMMANDS:
+- git diff --check
+- scripts/v002/artifact-safety-check.sh
+- scripts/v002/claim-scan.sh
+- bash hw/vivado/build.sh synth
+- PCCX_VIVADO_JOBS=1 bash hw/vivado/build.sh synth
+
+RESULTS:
+- git diff --check: PASS
+- scripts/v002/artifact-safety-check.sh: ARTIFACT_SAFETY=PASS
+- scripts/v002/claim-scan.sh: UNSUPPORTED_CLAIM_FOUND=no
+- synth default jobs=4: BLOCKED_RESOURCE_TERMINATED
+  Reached Cross Boundary and Area Optimization, then full-swap thrashing with
+  no log progress; terminated to avoid leaving a runaway Vivado process.
+- synth jobs=1: BLOCKED_RESOURCE_TERMINATED
+  Reached Cross Boundary and Area Optimization, then no log progress for over
+  40 minutes while still CPU/swap bound; terminated and preserved logs.
+- impl: NOT_RUN because synth did not complete.
+- bitstream generated: NO
+
+CLAIM_GUARD:
+- No timing-closure claim.
+- No implementation-success claim.
+- No bitstream-success claim.
+- CVO SFU files touched: no.
+- The RTL change is limited to the top-level ACP-FMAP route mux in NPU_top.sv.
