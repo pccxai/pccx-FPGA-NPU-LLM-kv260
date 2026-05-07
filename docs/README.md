@@ -20,6 +20,8 @@ Pages, bilingual EN / KO).
   [TIMING_EVIDENCE.md](TIMING_EVIDENCE.md)
 - Repo-local release evidence checklist:
   [RELEASE_EVIDENCE_CHECKLIST.md](RELEASE_EVIDENCE_CHECKLIST.md)
+- Repo-local ISA package v002 vs v001 diff:
+  [internal/isa_v002_vs_v001_diff.md](internal/isa_v002_vs_v001_diff.md)
 - Documentation root (language picker):
   <https://pccxai.github.io/pccx/en/index.html>
 - pccx source repository:
