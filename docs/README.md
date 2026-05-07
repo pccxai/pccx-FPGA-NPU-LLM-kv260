@@ -20,6 +20,8 @@ Pages, bilingual EN / KO).
   [TIMING_EVIDENCE.md](TIMING_EVIDENCE.md)
 - Repo-local release evidence checklist:
   [RELEASE_EVIDENCE_CHECKLIST.md](RELEASE_EVIDENCE_CHECKLIST.md)
+- v002.1 sign-off evidence file list:
+  [evidence/v002.1-signoff-evidence-list.md](evidence/v002.1-signoff-evidence-list.md)
 - Documentation root (language picker):
   <https://pccxai.github.io/pccx/en/index.html>
 - pccx source repository:
