@@ -1,0 +1,24 @@
+#-----------------------------------------------------------
+# Vivado v2025.2 (64-bit)
+# SW Build 6299465 on Fri Nov 14 12:34:56 MST 2025
+# IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+# SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+# Start of session at: Thu May  7 10:26:19 2026
+# Process ID         : 216895
+# Current directory  : /tmp/kv260-bitstream-wt/hw
+# Command line       : vivado -mode batch -log build/logs/v002_1_full_top_synth.log -journal build/logs/v002_1_full_top_synth.jou -source /tmp/kv260-bitstream-wt/hw/vivado/system_bd.tcl -source vivado/scripts/record_synth_baseline.tcl -tclargs synth
+# Log file           : /tmp/kv260-bitstream-wt/hw/build/logs/v002_1_full_top_synth.log
+# Journal file       : /tmp/kv260-bitstream-wt/hw/build/logs/v002_1_full_top_synth.jou
+# Running On         : hwkim-Swift-SF314-42
+# Platform           : Ubuntu
+# Operating System   : Ubuntu 24.04.4 LTS
+# Processor Detail   : AMD Ryzen 5 4500U with Radeon Graphics
+# CPU Frequency      : 3992.327 MHz
+# CPU Physical cores : 6
+# CPU Logical cores  : 6
+# Host memory        : 13459 MB
+# Swap memory        : 32767 MB
+# Total Virtual      : 46227 MB
+# Available Virtual  : 19465 MB
+#-----------------------------------------------------------
+source /tmp/kv260-bitstream-wt/hw/vivado/system_bd.tcl
