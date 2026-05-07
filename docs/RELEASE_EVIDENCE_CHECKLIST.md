@@ -115,6 +115,7 @@ include estimated or simulated numbers as hardware-measured results.
 
 - [ ] Exact `run_verification.sh` command and expected runtime noted
 - [ ] Required Vivado version and license type documented
+- [ ] Vivado synth host RAM, swap, and `PCCX_VIVADO_JOBS` setting documented
 - [ ] Required hardware (KV260 board revision) listed
 - [ ] Known non-reproducible parts identified (e.g. Vivado seed, licensed
       model weights)

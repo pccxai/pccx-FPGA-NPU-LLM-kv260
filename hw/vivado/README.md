@@ -23,7 +23,7 @@ cd hw
 ./vivado/build.sh project
 
 # Out-of-context synthesis (minutes to tens of minutes, depending on machine)
-./vivado/build.sh synth
+PCCX_VIVADO_JOBS=1 ./vivado/build.sh synth
 
 # Full implementation + bitstream (hour-scale)
 ./vivado/build.sh impl
@@ -63,6 +63,9 @@ Minimum report set:
 See [`../../docs/TIMING_EVIDENCE.md`](../../docs/TIMING_EVIDENCE.md) for
 the review checklist and wording rules. A generated timing report is
 evidence, not a timing-closure claim.
+
+For host sizing, swap, and resource-terminated synth attempts, see
+[`../../docs/VIVADO_SYNTH_RESOURCE_POLICY.md`](../../docs/VIVADO_SYNTH_RESOURCE_POLICY.md).
 
 ## Next steps to reach a running board
 
