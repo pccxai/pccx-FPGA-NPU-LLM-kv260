@@ -50,6 +50,26 @@ bring-up.
 - #99 `docs(readme): link v002.1 ramp artifacts`
 - #100 `docs(runbook): v002.1 bitstream deploy procedure`
 
+### Evidence
+
+- #95 `docs(evidence): v002.1 evidence inventory` organizes the
+  v002.1 evidence stack across PRs #80-#94 and lists missing gates
+  before any release claim.
+- #97 `docs(release): v002.1-rc.0 notes draft` adds draft-only release
+  notes for PRs #80-#96; no tag or GitHub Release is claimed.
+- #101 `evidence(v002.1): bitstream attempt 1 reports` records a
+  full-top BD synth attempt that failed during BD preparation before
+  `synth_design`; no timing reports, implementation, route, or
+  bitstream are claimed.
+- #104 `fix(vivado): register svh files as verilog headers in synth`
+  records SVH header registration, `bash hw/vivado/build.sh synth`
+  passing, post-synth WNS `-9.531 ns`, implementation blocked at
+  `opt_design` DRC `MDRV-1`, and no bitstream generated.
+- #105 `docs(spec): timing improvement playbook for full-top closure`
+  adds docs-only timing triage guidance based on the open evidence,
+  without claiming timing closure, bitstream availability, KV260
+  runtime, measured throughput, or release readiness.
+
 ## v0.1.0-alpha — 2026-05-01
 
 First public RTL preview of the pccx v002 NPU implementation targeting
