@@ -411,6 +411,6 @@ risk while keeping the ecosystem open for hardware research.
 
 `PCCX™` is a mark used by the PCCX project. Korean trademark
 applications are pending for PCCX in Classes 09 and 42. Registration
-has not been granted; do not use `PCCX®` until the central trademark
-policy is updated. See
+has not been granted; do not use any registration-mark variant until
+the central trademark policy is updated. See
 [`pccx/TRADEMARKS.md`](https://github.com/pccxai/pccx/blob/main/TRADEMARKS.md).

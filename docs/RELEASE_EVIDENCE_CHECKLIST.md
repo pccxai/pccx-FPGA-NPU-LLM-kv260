@@ -104,7 +104,7 @@ include estimated or simulated numbers as hardware-measured results.
 - [ ] Output sample documented (decoded tokens)
 - [ ] Measurement method for latency/throughput (cycle counter, wall clock,
       UART timestamp)
-- [ ] Measured tok/s figure with methodology note
+- [ ] Measured throughput figure with methodology note
 - [ ] Power / thermal notes if available (board PSU measurement or on-chip
       sensor)
 - [ ] Known limitations listed (sequence length cap, unsupported ops, etc.)
