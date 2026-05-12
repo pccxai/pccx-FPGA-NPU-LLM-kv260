@@ -7,6 +7,9 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- Documented the explicit release, closure, evidence, and release-doc
+  branch naming convention.
+
 ## v0.1.0-alpha — 2026-05-01
 
 First public RTL preview of the pccx v002 NPU implementation targeting

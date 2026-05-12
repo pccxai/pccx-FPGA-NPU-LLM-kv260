@@ -13,6 +13,45 @@ separately-versioned bringup line opens.
 - Tag format: `vX.Y.Z[-alpha|-beta|-rc]`.
 - The first tag is planned as `v0.1.0-alpha` — see `CHANGELOG.md`.
 
+## Release branch naming
+
+Branch names must make the branch purpose explicit without implying that
+the repo has achieved release, timing, bitstream, or KV260 runtime
+closure.  Use lowercase ASCII slugs with hyphens only.
+
+Use these branch families:
+
+- `release/vX.Y.Z[-alpha|-beta|-rcN]`: final maintainer-owned prep for
+  a SemVer tag.  Examples: `release/v0.2.0`, `release/v0.2.0-rc1`.
+- `closure/v002-<scope>-candidate`: short-lived stabilization branch
+  for a specific v002 closure scope.  Examples:
+  `closure/v002-runtime-handoff-candidate`,
+  `closure/v002-synth-impl-bitstream-candidate`.
+- `evidence/v002.<checkpoint>-<scope>-<attempt>`: evidence collection
+  for a named v002 checkpoint before it is summarized in release notes
+  or a closure PR.  Examples: `evidence/v002.1-bitstream-attempt-1`,
+  `evidence/v002.1-kv260-smoke-attempt-2`.
+- `docs/release-<scope>`: documentation-only release process updates.
+  Examples: `docs/release-branch-naming-spec`,
+  `docs/release-evidence-checklist`.
+
+The `v002` token is the pccx architecture generation used by this RTL
+line.  It is not a SemVer release tag.  Use `v002.<checkpoint>` only for
+evidence/checkpoint work such as `evidence/v002.1-...`; use
+`vX.Y.Z[-...]` only for public release tags and release-prep branches.
+
+The `closure/` prefix means "working toward closure", not "closed".
+Keep the `candidate` suffix on closure branches until all required
+evidence is summarized and a maintainer chooses a tagged commit.  A
+branch name must not be used as proof of timing closure, KV260 bring-up,
+measured throughput, bitstream availability, or published release status.
+
+Choose `<scope>` from the reviewable deliverable, not from an agent or
+worker name.  Good scopes include `runtime-handoff`,
+`driver-handoff`, `synth-impl-bitstream`, `kv260-smoke`, and
+`acceptance-checklist`.  Do not use underscores, spaces, uppercase
+tokens, or tool/vendor names in release branch slugs.
+
 ## What is in a release
 
 A release is a **source archive** at the tagged commit:
