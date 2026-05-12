@@ -37,6 +37,6 @@ Pages, bilingual EN / KO).
 | `Attention_RoPE.md`              | [Gemma 3N attention / RoPE](https://pccx.pages.dev/en/docs/v002/Models/gemma3n_attention_rope.html)               |
 | `PLE_LAuReL.md`                  | [Gemma 3N PLE & LAuReL](https://pccx.pages.dev/en/docs/v002/Models/gemma3n_ple_laurel.html)                       |
 | `FFN_Sparsity.md`                | [Gemma 3N FFN sparsity](https://pccx.pages.dev/en/docs/v002/Models/gemma3n_ffn_sparsity.html)                     |
-| *(new)* how the model runs here  | [Gemma 3N on pccx v002 execution](https://pccx.pages.dev/en/docs/v002/Models/gemma3n_execution.html)              |
+| *(new)* target-model mapping here | [Gemma 3N on pccx v002 execution](https://pccx.pages.dev/en/docs/v002/Models/gemma3n_execution.html)              |
 
 For the Korean mirror, swap `/en/` for `/ko/` in any of the links above.

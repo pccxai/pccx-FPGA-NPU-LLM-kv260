@@ -18,7 +18,7 @@ Per the Stage C decisions memo:
 - **Out of scope** (hard limits):
   - No FPGA RTL functional changes.
   - No top-level interface changes.
-  - No KV260 inference claims.
+  - No board inference claims.
   - No timing-closed claims.
   - No release / tag creation.
 
@@ -230,7 +230,7 @@ throughout.
 This batch did **not** touch:
 
 - Release tags (no v0.1.1-alpha or anything similar).
-- README claims about FPGA stable / timing-closed / KV260 inference.
+- README claims about FPGA stable / timing-closed / board inference.
 - The `docs/RELEASE_EVIDENCE_CHECKLIST.md` content.
 
 The internal docs added under `docs/internal/` describe engineering

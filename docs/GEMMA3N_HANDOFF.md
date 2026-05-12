@@ -82,7 +82,7 @@ Use:
 Avoid:
 
 - wording that presents Gemma 3N E4B board execution as complete
-- wording that presents KV260 inference as proven without logs
+- wording that presents board inference as proven without logs
 - throughput wording without tied evidence
 - production-readiness wording
 

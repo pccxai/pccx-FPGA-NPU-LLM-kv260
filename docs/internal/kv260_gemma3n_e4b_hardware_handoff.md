@@ -335,7 +335,7 @@ owner is not surprised when the next clean-host synth surfaces them.
   and `drc_post_synth.rpt` before promoting to impl.
 - The wrapper change is signal-level only — no behavioural delta on
   `NPU_top`. The TB suite is the regression evidence (7/7 PASS).
-- Do not claim KV260 inference success or timing closure unless the
+- Do not claim board inference success or timing closure unless the
   board run logs prove it. Until §5 items land, the public alpha
   scope statement (“FPGA bring-up in progress, no production claims”)
   is the only honest description.

@@ -26,7 +26,7 @@ Connection to board smoke:
 
 Not yet verified by this template:
 
-- KV260 NPU inference.
+- KV260 NPU execution.
 - Gemma 3N E4B hardware execution.
-- 20 tok/s throughput.
+- Measured throughput.
 - Timing closure.

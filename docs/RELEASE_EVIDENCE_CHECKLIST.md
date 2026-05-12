@@ -73,7 +73,7 @@ date: 2026-04-20, design: NPU_top, device: xck26-sfvc784-2LV-c).
 - [ ] Utilization post-implementation recorded
 - [ ] Clock interaction post-implementation recorded
 - [ ] Critical path summary noted in release notes
-- [ ] Bitstream generated (`.bit` not committed to git — attach to GitHub
+- [ ] Bitstream evidence recorded (`.bit` not committed to git — attach to GitHub
       Release or record SHA + generation command)
 
 ---

@@ -1,5 +1,7 @@
 # pccx — Bare-Metal Transformer Accelerator on Kria KV260
 
+PCCX™ technology / operated by Altifigence™.
+
 > This repository is the KV260 + PCCX v002 LLM application integration
 > repo. The reusable v002 IP-core is pinned at `third_party/pccx-v002`.
 > Future v003 IP-core will live in `pccx-v003`.
@@ -8,27 +10,28 @@ Open SystemVerilog NPU for experimental Gemma-class LLM acceleration on
 AMD/Xilinx Kria KV260.
 
 ```text
-PCCX KV260 Roadmap
+PCCX KV260 Evidence State
 
-RTL Alpha        ███████████████░░  85%
-Verification     ███████████░░░░░  70%
-Driver Bring-up  ███████░░░░░░░░░  45%
-Bitstream        ████░░░░░░░░░░░░  25%
-Public Release   ██░░░░░░░░░░░░░░  15%
-
-Next milestone: v0.2.0 evidence pack
+xsim: PASS 12/0
+post-synth timing: RTL synthesis-closed (WNS 0.052)
+post-impl timing recovery in progress; evidence pending
+bitstream: not generated
+KV260 board execution: no evidence
+Gemma 3N E4B runtime: no evidence
+throughput: no measurement
 ```
 
-**Current status:** RTL alpha · timing closure and full runtime bring-up in progress.
+**Current status:** RTL synthesis-closed (WNS 0.052); post-impl timing recovery in progress; evidence pending.
 
 This repo is the **KV260 + PCCX v002 LLM application integration** repo.
 It hosts board integration, bare-metal driver source, application wiring,
 and the Vivado/sim wrappers that consume the reusable `pccx-v002` LLM
 package through `third_party/pccx-v002` and `hw/vivado/filelist.v002.f`.
 
-This is not a timing-closed production bitstream release — Vivado
-synthesis, trace-driven verification, and full Gemma 3N E4B application
-wiring are still in progress or planned.
+This is not a production bitstream release. xsim and RTL synthesis
+evidence are present; post-impl timing recovery, bitstream generation,
+board execution, and full Gemma 3N E4B application wiring remain in
+progress or pending.
 
 > ### Start with the architecture docs
 >
@@ -48,9 +51,9 @@ Related repos: [pccx (spec)](https://github.com/pccxai/pccx) · [pccx-lab (profi
 ## Project status
 
 **Public alpha** — `v0.1.0-alpha` is published as a prerelease. Core
-RTL and ISA are stable; verification and KV260 bring-up are in
-progress. This is not a timing-closed bitstream release. Feedback and
-issues are welcome.
+RTL and ISA are available; verification and KV260 bring-up are in
+progress. This is not a bitstream release. Feedback and issues are
+welcome.
 
 | Entry point | Link |
 | --- | --- |
