@@ -181,3 +181,105 @@ def status_busy(stat: int) -> bool:
 
 def status_done(stat: int) -> bool:
     return bool(stat & STAT_DONE_MASK)
+
+
+# ============================================================================
+# Decoders — inverse of the encode_* functions. Used by test_isa.py round-trip
+# coverage and host-side debug tools that inspect the raw 64-bit words pulled
+# off /dev/mem traces.
+#
+# Each decoder takes a 64-bit ISA word and returns a dict of the named fields
+# (matching the encode_* signature). decode_x64() returns just the opcode and
+# raw body for callers that want to dispatch themselves.
+# ============================================================================
+
+
+def decode_x64(word64: int) -> tuple[int, int]:
+    """Split a 64-bit ISA word into (opcode, 60-bit body)."""
+    word64 = _check(word64, 64, "word64")
+    return ((word64 >> 60) & 0xF, word64 & ((1 << 60) - 1))
+
+
+def _decode_field(body: int, lsb: int, width: int) -> int:
+    """Extract `width` bits starting at `lsb` from a 60-bit body."""
+    return (body >> lsb) & _mask(width)
+
+
+def decode_gemm(word64: int) -> dict:
+    """Inverse of encode_gemm. Returns dict matching encode_gemm kwargs."""
+    op, body = decode_x64(word64)
+    if op != Opcode.GEMM:
+        raise ValueError(f"opcode {op:#x} is not GEMM ({int(Opcode.GEMM):#x})")
+    flags_bits = _decode_field(body, 20, 6)
+    return {
+        "dest_reg":       _decode_field(body, 43, 17),
+        "src_addr":       _decode_field(body, 26, 17),
+        "flags":          GemmFlags(
+                              findemax=bool(flags_bits & (1 << 5)),
+                              accm=    bool(flags_bits & (1 << 4)),
+                              w_scale= bool(flags_bits & (1 << 3))),
+        "size_ptr_addr":  _decode_field(body, 14, 6),
+        "shape_ptr_addr": _decode_field(body,  8, 6),
+        "parallel_lane":  _decode_field(body,  3, 5),
+    }
+
+
+def decode_gemv(word64: int) -> dict:
+    """Inverse of encode_gemv (same layout as GEMM, opcode differs)."""
+    op, body = decode_x64(word64)
+    if op != Opcode.GEMV:
+        raise ValueError(f"opcode {op:#x} is not GEMV ({int(Opcode.GEMV):#x})")
+    flags_bits = _decode_field(body, 20, 6)
+    return {
+        "dest_reg":       _decode_field(body, 43, 17),
+        "src_addr":       _decode_field(body, 26, 17),
+        "flags":          GemmFlags(
+                              findemax=bool(flags_bits & (1 << 5)),
+                              accm=    bool(flags_bits & (1 << 4)),
+                              w_scale= bool(flags_bits & (1 << 3))),
+        "size_ptr_addr":  _decode_field(body, 14, 6),
+        "shape_ptr_addr": _decode_field(body,  8, 6),
+        "parallel_lane":  _decode_field(body,  3, 5),
+    }
+
+
+def decode_memcpy(word64: int) -> dict:
+    op, body = decode_x64(word64)
+    if op != Opcode.MEMCPY:
+        raise ValueError(f"opcode {op:#x} is not MEMCPY ({int(Opcode.MEMCPY):#x})")
+    return {
+        "from_device":    _decode_field(body, 59,  1),
+        "to_device":      _decode_field(body, 58,  1),
+        "dest_addr":      _decode_field(body, 41, 17),
+        "src_addr":       _decode_field(body, 24, 17),
+        "aux_addr":       _decode_field(body,  7, 17),
+        "shape_ptr_addr": _decode_field(body,  1,  6),
+        "async_op":       _decode_field(body,  0,  1),
+    }
+
+
+def decode_memset(word64: int) -> dict:
+    op, body = decode_x64(word64)
+    if op != Opcode.MEMSET:
+        raise ValueError(f"opcode {op:#x} is not MEMSET ({int(Opcode.MEMSET):#x})")
+    return {
+        "dest_cache": _decode_field(body, 58,  2),
+        "dest_addr":  _decode_field(body, 52,  6),
+        "a_value":    _decode_field(body, 36, 16),
+        "b_value":    _decode_field(body, 20, 16),
+        "c_value":    _decode_field(body,  4, 16),
+    }
+
+
+def decode_cvo(word64: int) -> dict:
+    op, body = decode_x64(word64)
+    if op != Opcode.CVO:
+        raise ValueError(f"opcode {op:#x} is not CVO ({int(Opcode.CVO):#x})")
+    return {
+        "cvo_func": CvoFunc(_decode_field(body, 56, 4)),
+        "src_addr": _decode_field(body, 39, 17),
+        "dst_addr": _decode_field(body, 22, 17),
+        "length":   _decode_field(body,  6, 16),
+        "flags":    _decode_field(body,  1,  5),
+        "async_op": _decode_field(body,  0,  1),
+    }
