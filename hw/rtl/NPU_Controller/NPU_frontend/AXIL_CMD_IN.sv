@@ -135,7 +135,7 @@ module AXIL_CMD_IN #(
       .clk  (clk),
       .rst_n(rst_n)
   );
-  QUEUE u_cmd_q (.q(cmd_q.owner));
+  QUEUE u_cmd_q (.q(cmd_q));  // owner role: take the bare interface
 
   always_ff @(posedge clk) begin
     if (!rst_n || IN_clear) begin

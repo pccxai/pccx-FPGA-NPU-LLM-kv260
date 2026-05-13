@@ -17,7 +17,9 @@
 // Counters     : none.
 // ===============================================================================
 module QUEUE (
-    IF_queue.owner q
+    // Owner role: take the bare interface (no modport) so we can drive
+    // wr_ptr/rd_ptr and ref `mem`. Modport-free interface ports are SV-legal.
+    IF_queue q
 );
 
   // Width of the pointer's index field — the interface stores the

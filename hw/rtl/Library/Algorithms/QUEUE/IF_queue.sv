@@ -61,15 +61,16 @@ interface IF_queue #(
   endtask
 
   // ── Modports ───── Access Control ──────────────
-  // producer : only pushes
-  modport producer(import push, input empty, full, clk, rst_n, output push_data, push_en);
+  // Renamed producer/consumer to IP-XACT-friendly master/slave so this
+  // interface can be packaged as a Vivado IP. The previous third "owner"
+  // modport was removed; modules that need internal access (the QUEUE
+  // controller) now take the bare interface (no modport) which still
+  // permits ref/mem access.
+  //
+  // master : push side — outputs push_data/push_en, observes empty/full
+  modport master(import push, input empty, full, clk, rst_n, output push_data, push_en);
 
-  // consumer : only pops
-  modport consumer(import pop, input empty, full, pop_data, clk, rst_n, output pop_en);
-
-  // owner : the FIFO module itself. Reads producer/consumer handshake
-  // signals, updates its own pointers + memory contents.
-  modport owner(input  clk, rst_n, push_data, push_en, pop_en, full, empty,
-                output wr_ptr, rd_ptr, ref mem);
+  // slave  : pop side  — outputs pop_en, observes pop_data/empty/full
+  modport slave (import pop,  input empty, full, pop_data, clk, rst_n, output pop_en);
 
 endinterface
