@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PCCX Gemma Daemon</title>
+  <link rel="stylesheet" href="/static/chat.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <h1>PCCX Gemma Daemon</h1>
+        <p id="status">Connecting</p>
+      </div>
+      <button id="reset" type="button">Reset</button>
+    </header>
+    <section id="messages" class="messages" aria-live="polite"></section>
+    <form id="composer" class="composer">
+      <textarea id="prompt" rows="3" placeholder="Message the KV260 runtime"></textarea>
+      <button id="send" type="submit">Send</button>
+    </form>
+  </main>
+  <script src="/static/chat.js"></script>
+</body>
+</html>

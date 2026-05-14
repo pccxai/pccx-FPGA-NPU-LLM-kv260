@@ -1,0 +1,17 @@
+[Unit]
+Description=PCCX Gemma inference daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/pccx-FPGA-NPU-LLM-kv260
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 -m sw.runtime.server --model /home/ubuntu/models/gemma-3n-e4b-int4 --host 0.0.0.0 --port 7860
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,8 @@
+aiohttp>=3.9
+aiohttp_cors
+transformers
+safetensors
+numpy
+psutil
+sentencepiece
+torch
