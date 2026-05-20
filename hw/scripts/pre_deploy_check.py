@@ -22,6 +22,8 @@ Checks performed:
   8. KV260 connection environment (PCCX_KV260_HOST, PCCX_KV260_USER) is
      present iff --check-env is set, but the script does NOT contact the
      board.
+  9. Optional: v002 timing/resource rules from the error knowledge base are
+     evaluated when metrics are supplied.
 
 Exit code:
   0 - all checks PASS
@@ -38,6 +40,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import struct
 import sys
 from dataclasses import dataclass
@@ -48,6 +51,12 @@ from typing import Optional
 DEFAULT_ALLOWED_PARTS = ("xck26-sfvc784-2LV-c",)
 DT_MAGIC = b"\xd0\x0d\xfe\xed"
 BIT_MAGIC = bytes.fromhex("0ff00ff00ff00ff000")
+PRE_DEPLOY_RE = re.compile(
+    r"^pre_deploy_(?P<index>[1-9][0-9]*)_(?P<name>metric|operator|threshold|level|message)$"
+)
+URAM_LINE_RE = re.compile(r"\bURAM\b", re.IGNORECASE)
+PERCENT_RE = re.compile(r"([-+]?\d+(?:\.\d+)?)\s*%")
+WHS_RE = re.compile(r"\bWHS\b[^-+0-9]*([-+]?\d+(?:\.\d+)?)", re.IGNORECASE)
 
 
 @dataclass
@@ -58,6 +67,16 @@ class BitHeader:
     time: str
     payload_len: int
     header_len: int  # bytes consumed up to and including the 'e' length field
+
+
+@dataclass(frozen=True)
+class KnowledgeRule:
+    entry_id: str
+    metric: str
+    operator: str
+    threshold: float
+    level: str
+    message: str
 
 
 def parse_bit_header(path: Path) -> BitHeader:
@@ -121,6 +140,226 @@ def color(s: str, code: str) -> str:
 def ok(s: str) -> str: return color("PASS", "32") + " " + s
 def warn(s: str) -> str: return color("WARN", "33") + " " + s
 def fail(s: str) -> str: return color("FAIL", "31") + " " + s
+
+
+def parse_entry_metadata(path: Path) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or ": " not in line:
+            continue
+        key, value = line.split(": ", 1)
+        if re.fullmatch(r"[A-Za-z0-9_]+", key):
+            fields[key] = value.strip()
+    return fields
+
+
+def has_active_rule_layer(value: str, layer: str) -> bool:
+    for part in [item.strip() for item in value.split(",") if item.strip()]:
+        if part == layer:
+            return True
+    return False
+
+
+def load_knowledge_rules(kb_root: Optional[Path]) -> list[KnowledgeRule]:
+    if not kb_root:
+        return []
+    root = kb_root.expanduser().resolve()
+    entries_dir = root / "entries" if root.name == "error-knowledge-base" else root
+    if not entries_dir.is_dir():
+        print(warn(f"knowledge base entries directory not found: {entries_dir}"))
+        return []
+
+    rules: list[KnowledgeRule] = []
+    for entry in sorted(entries_dir.glob("*.md")):
+        fields = parse_entry_metadata(entry)
+        entry_id = fields.get("id", entry.stem)
+        if not has_active_rule_layer(fields.get("rule_added_at", ""), "pre-deploy-check"):
+            continue
+
+        grouped: dict[str, dict[str, str]] = {}
+        for key, value in fields.items():
+            match = PRE_DEPLOY_RE.fullmatch(key)
+            if match:
+                grouped.setdefault(match.group("index"), {})[match.group("name")] = value
+
+        for index, parts in sorted(grouped.items(), key=lambda item: int(item[0])):
+            try:
+                rules.append(
+                    KnowledgeRule(
+                        entry_id=entry_id,
+                        metric=parts["metric"],
+                        operator=parts["operator"],
+                        threshold=float(parts["threshold"]),
+                        level=parts["level"],
+                        message=parts["message"],
+                    )
+                )
+            except (KeyError, ValueError) as exc:
+                print(warn(f"skipping malformed pre-deploy rule {entry_id}#{index}: {exc}"))
+    return rules
+
+
+def builtin_v002_rules() -> list[KnowledgeRule]:
+    return [
+        KnowledgeRule(
+            entry_id="v002-resource-uram-threshold",
+            metric="uram_percent",
+            operator=">",
+            threshold=80.0,
+            level="warn",
+            message="URAM use is above 80%; review new memory consumers before deploy.",
+        ),
+        KnowledgeRule(
+            entry_id="v002-timing-whs-threshold",
+            metric="whs_ns",
+            operator="<",
+            threshold=0.5,
+            level="warn",
+            message="WHS is below 0.5 ns; add runtime watch and temperature review before deploy.",
+        ),
+    ]
+
+
+def dedupe_rules(rules: list[KnowledgeRule]) -> list[KnowledgeRule]:
+    seen: set[tuple[str, str, float, str]] = set()
+    deduped: list[KnowledgeRule] = []
+    for rule in rules:
+        key = (rule.metric, rule.operator, rule.threshold, rule.level)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(rule)
+    return deduped
+
+
+def compare_metric(value: float, operator: str, threshold: float) -> bool:
+    if operator == ">":
+        return value > threshold
+    if operator == ">=":
+        return value >= threshold
+    if operator == "<":
+        return value < threshold
+    if operator == "<=":
+        return value <= threshold
+    if operator == "==":
+        return value == threshold
+    if operator == "!=":
+        return value != threshold
+    raise ValueError(f"unsupported operator: {operator}")
+
+
+def parse_metric_arg(raw: str) -> tuple[str, float]:
+    if "=" not in raw:
+        raise argparse.ArgumentTypeError("metric must be NAME=VALUE")
+    name, value = raw.split("=", 1)
+    try:
+        return name.strip(), float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"metric value must be numeric: {raw}") from exc
+
+
+def extract_uram_percent(path: Path) -> Optional[float]:
+    text = path.read_text(encoding="utf-8", errors="replace")
+    for line in text.splitlines():
+        if not URAM_LINE_RE.search(line):
+            continue
+        matches = PERCENT_RE.findall(line)
+        if matches:
+            return float(matches[-1])
+    return None
+
+
+def extract_whs_ns(path: Path) -> Optional[float]:
+    text = path.read_text(encoding="utf-8", errors="replace")
+    match = WHS_RE.search(text)
+    if match:
+        return float(match.group(1))
+    return None
+
+
+def load_metrics(args: argparse.Namespace) -> dict[str, float]:
+    metrics: dict[str, float] = {}
+    if args.metrics_json:
+        try:
+            data = json.loads(args.metrics_json.read_text(encoding="utf-8"))
+        except Exception as exc:
+            print(warn(f"metrics json parse failed: {exc}"))
+        else:
+            for key, value in data.items():
+                try:
+                    metrics[str(key)] = float(value)
+                except (TypeError, ValueError):
+                    print(warn(f"skipping non-numeric metric {key!r} from {args.metrics_json}"))
+    for key, value in args.metric or []:
+        metrics[key] = value
+    if args.uram_percent is not None:
+        metrics["uram_percent"] = args.uram_percent
+    if args.whs_ns is not None:
+        metrics["whs_ns"] = args.whs_ns
+    if args.utilization_report:
+        try:
+            value = extract_uram_percent(args.utilization_report)
+        except OSError as exc:
+            print(warn(f"could not read utilization report {args.utilization_report}: {exc}"))
+            value = None
+        if value is None:
+            print(warn(f"could not extract URAM percentage from {args.utilization_report}"))
+        else:
+            metrics["uram_percent"] = value
+    if args.timing_report:
+        try:
+            value = extract_whs_ns(args.timing_report)
+        except OSError as exc:
+            print(warn(f"could not read timing report {args.timing_report}: {exc}"))
+            value = None
+        if value is None:
+            print(warn(f"could not extract WHS from {args.timing_report}"))
+        else:
+            metrics["whs_ns"] = value
+    return metrics
+
+
+def check_knowledge_rules(args: argparse.Namespace) -> bool:
+    kb_root = args.knowledge_base or os.environ.get("PCCX_ERROR_KB_ROOT")
+    kb_path = Path(kb_root) if kb_root else None
+    kb_rules = load_knowledge_rules(kb_path)
+    rules = dedupe_rules(kb_rules + builtin_v002_rules())
+    metrics = load_metrics(args)
+
+    if kb_path:
+        print(ok(f"knowledge-base rules loaded: {len(kb_rules)} from {kb_path}"))
+    else:
+        print(warn("knowledge base path not set; using built-in v002 pre-deploy rules only"))
+
+    if not metrics:
+        print(warn("no timing/resource metrics supplied; knowledge rules loaded but not evaluated"))
+        return True
+
+    failures = 0
+    evaluated = 0
+    for rule in rules:
+        if rule.metric not in metrics:
+            continue
+        evaluated += 1
+        value = metrics[rule.metric]
+        triggered = compare_metric(value, rule.operator, rule.threshold)
+        detail = (
+            f"[{rule.entry_id}] {rule.metric}={value:g} "
+            f"{rule.operator} {rule.threshold:g}: {rule.message}"
+        )
+        if not triggered:
+            print(ok(f"knowledge rule clear: {detail}"))
+            continue
+        if rule.level == "fail":
+            print(fail(f"knowledge rule failed: {detail}"))
+            failures += 1
+        else:
+            print(warn(f"knowledge rule warning: {detail}"))
+
+    if evaluated == 0:
+        print(warn(f"no supplied metrics matched {len(rules)} knowledge rules"))
+    return failures == 0
 
 
 def check_bitstream(path: Path, allowed_parts: tuple[str, ...],
@@ -248,7 +487,7 @@ def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
         description="Validate v002 bitstream / dtbo / bit.bin before KV260 deploy. "
                     "This script never connects to the board.")
-    parser.add_argument("--bit", required=True, type=Path,
+    parser.add_argument("--bit", type=Path,
                         help="Path to .bit file (e.g. hw/build/v002-vivado-*/pccx_v002_system_wrapper.bit)")
     parser.add_argument("--dtbo", type=Path,
                         help="Path to .dtbo file. Defaults to sw/dtbo/build/pccx_npu_bd/pccx_npu_bd.dtbo")
@@ -263,8 +502,32 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--check-env", action="store_true",
                         help="Also check that PCCX_KV260_HOST / PCCX_KV260_USER env vars are set "
                              "(values are NEVER printed)")
+    parser.add_argument("--knowledge-base", type=Path,
+                        help="Path to error-knowledge-base root or entries directory. "
+                             "Defaults to PCCX_ERROR_KB_ROOT when set.")
+    parser.add_argument("--metrics-json", type=Path,
+                        help="JSON object with metric names such as uram_percent and whs_ns.")
+    parser.add_argument("--metric", action="append", type=parse_metric_arg,
+                        help="Inline metric as NAME=VALUE. Can be passed multiple times.")
+    parser.add_argument("--uram-percent", type=float,
+                        help="URAM utilization percentage for v002 knowledge rules.")
+    parser.add_argument("--whs-ns", type=float,
+                        help="Worst hold slack in ns for v002 knowledge rules.")
+    parser.add_argument("--utilization-report", type=Path,
+                        help="Text report to scan for URAM percentage.")
+    parser.add_argument("--timing-report", type=Path,
+                        help="Text report to scan for WHS in ns.")
+    parser.add_argument("--pre-commit", action="store_true",
+                        help="Hook-friendly mode: evaluate knowledge rules without requiring bit artifacts.")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args(argv)
+
+    if not args.bit and not args.pre_commit:
+        parser.error("--bit is required unless --pre-commit is set")
+
+    ok_rules = check_knowledge_rules(args)
+    if args.pre_commit and not args.bit:
+        return 0 if ok_rules else 1
 
     allowed = tuple(args.allowed_part) if args.allowed_part else DEFAULT_ALLOWED_PARTS
 
@@ -305,6 +568,7 @@ def main(argv: list[str]) -> int:
         "bitbin": ok_bitbin,
         "shell.json": ok_shell,
         "env": ok_env,
+        "knowledge_rules": ok_rules,
     }
     failed = [k for k, v in summary.items() if not v]
     if failed:
