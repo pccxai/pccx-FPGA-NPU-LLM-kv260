@@ -1,37 +1,38 @@
 # PS-Side NPU Dispatch
 
-This package exposes the Gemma-facing NumPy API for the pccx v002 KV260 NPU
-runtime.  The hardware path is experimental and golden-vector gated; the CPU
-fallback is always present so the daemon can run without a loaded bitstream.
+This package exposes the Gemma-facing API for the pccx v002 KV260 NPU runtime.
+The hardware backend is a self-contained token path: weights are loaded into
+NPU L2 once, prompt tokens initialize NPU-resident activation/KV state, and each
+NEXT_TOKEN command runs the full forward path inside the NPU.  The host reads
+back only one 32-bit token per generated token.
 
 ## Interface
 
-- `npu_gemm(W, X, layer_idx=None)` returns `X @ W` as float32 for
-  `W [K_in, M_out]` and `X [B, K_in]`.
-- `npu_gemv(W, x, layer_idx=None)` returns `x @ W` as float32 for
-  `W [K_in, M_out]` and `x [K_in]`.
-- `npu_cvo(op, x)` supports `EXP`, `SQRT`, `GELU`, `SIN`, `COS`,
-  `REDUCE_SUM`, `SCALE`, and `RECIP`.
+- `load_weights_to_l2(weights)` starts the one-time host-to-NPU L2 weight-load
+  phase.
+- `init_activation(prompt_tokens)` resets NPU-resident KV state and loads prompt
+  token IDs.
+- `run_one_token_step()` issues NEXT_TOKEN and returns the generated 32-bit
+  token from status.
+- `npu_gemm`, `npu_gemv`, and `npu_cvo` are CPU fallback compatibility helpers
+  for CPU-mode Gemma modules; they do not issue hardware matrix commands.
 - `npu_status()` returns `mmio_hex`, `busy`, `done`, `available`, and
-  `last_cycle_count`.
+  token-step status metadata.
 - `npu_available()` returns true only when `/dev/uio4` can be opened and
   mmapped and the deployed bitstream file hash matches the expected v12d list.
 
 ## NPU Path And CPU Fallback
 
 When `/dev/uio4` is absent, mmap fails, the bitstream hash is not in the
-expected list, or `PCCX_NPU_FORCE_FALLBACK=1` is set, all public calls use the
+expected list, or `PCCX_NPU_FORCE_FALLBACK=1` is set, CPU-mode calls use the
 NumPy reference implementation in `cpu_fallback.py`.
 
-If the board is present and `PCCX_NPU_EXPERIMENTAL_DISPATCH=1` is set, the
-runtime can submit the matching v002 ISA word through AXIL_CMD_IN and wait for
-AXIL_STAT_OUT `DONE`.  The returned tensor still uses the NumPy golden result
-until DMA buffer ownership and result-region reads are verified on KV260.
-This avoids claiming hardware numerical results before the golden-vector gate.
+The NPU backend is selected only when `PCCX_NPU_TOKEN_BACKEND=1` and token-step
+MMIO is available, or when `PCCX_NPU_SIM_BACKEND=1` enables the local
+MMIO-compatible token simulator.  There is no host tensor readback path for
+Gemma generation.
 
-For large matrix shapes the fallback path includes M/K/N tiling with
-conservative defaults.  The tile sizes are configurable through
-`PCCX_NPU_TILE_M`, `PCCX_NPU_TILE_K`, and `PCCX_NPU_TILE_N`.
+For large matrix shapes, CPU-mode fallback uses NumPy reference math.
 
 ## Command/Status AXIL FIFO Layout
 

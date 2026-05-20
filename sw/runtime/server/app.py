@@ -341,6 +341,9 @@ def status_payload(state: ServerState) -> Dict[str, Any]:
         "npu_done": npu["npu_done"],
         "npu_available": npu["npu_available"],
         "npu_axil_command_count": npu["npu_axil_command_count"],
+        "npu_token_valid": npu["npu_token_valid"],
+        "npu_last_token": npu["npu_last_token"],
+        "npu_readback_bytes_last": npu["npu_readback_bytes_last"],
         "npu_mmio_stat_changed": npu["npu_mmio_stat_changed"],
         "backend": state.backend,
         "backend_requested": state.backend_requested,
@@ -363,6 +366,9 @@ def read_npu_status() -> Dict[str, Any]:
         "npu_available": False,
         "npu_axil_command_count": 0,
         "npu_last_cycle_count": 0,
+        "npu_token_valid": False,
+        "npu_last_token": None,
+        "npu_readback_bytes_last": 0,
     }
     try:
         module = importlib.import_module("sw.runtime.npu")
@@ -378,9 +384,12 @@ def read_npu_status() -> Dict[str, Any]:
             "npu_available": True,
             "npu_axil_command_count": 0,
             "npu_last_cycle_count": 0,
+            "npu_token_valid": False,
+            "npu_last_token": None,
+            "npu_readback_bytes_last": 0,
         }
     if isinstance(raw, dict):
-        stat_value = raw.get("npu_mmio_stat_hex", raw.get("mmio_stat_hex"))
+        stat_value = raw.get("npu_mmio_stat_hex", raw.get("mmio_stat_hex", raw.get("mmio_hex")))
         if stat_value is None:
             stat_value = raw.get("npu_mmio_stat", raw.get("mmio_stat", 0))
         stat = _parse_stat_value(stat_value)
@@ -397,6 +406,13 @@ def read_npu_status() -> Dict[str, Any]:
             ),
             "npu_last_cycle_count": _parse_int_value(
                 raw.get("npu_last_cycle_count", raw.get("last_cycle_count", 0))
+            ),
+            "npu_token_valid": bool(raw.get("npu_token_valid", raw.get("token_valid", False))),
+            "npu_last_token": _parse_optional_int_value(
+                raw.get("npu_last_token", raw.get("last_token"))
+            ),
+            "npu_readback_bytes_last": _parse_int_value(
+                raw.get("npu_readback_bytes_last", raw.get("readback_bytes_last", 0))
             ),
         }
     return fallback
@@ -457,6 +473,15 @@ def _parse_int_value(value: Any) -> int:
         return int(value)
     except (TypeError, ValueError):
         return 0
+
+
+def _parse_optional_int_value(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _percentile(values: List[float], quantile: float) -> float:

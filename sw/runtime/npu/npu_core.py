@@ -1,10 +1,12 @@
-"""High-level NPU dispatch API with NumPy fallback."""
+"""High-level NPU token-step runtime with NumPy fallback helpers."""
 from __future__ import annotations
 
+from contextlib import nullcontext
 import logging
 import os
 from pathlib import Path
 import time
+from typing import Any, Callable
 
 import numpy as np
 
@@ -19,6 +21,7 @@ from .address_map import (
     bitstream_sha256_is_expected,
 )
 from .cpu_fallback import cpu_cvo, cpu_gemm, cpu_gemv
+from .sim_mmio import TokenSimMmio
 
 
 LOG = logging.getLogger(__name__)
@@ -28,16 +31,138 @@ UIO_DEVICE_DEFAULT = "/dev/uio4"
 NPU_TIMEOUT_SEC = 5.0
 
 _TRUTHY = {"1", "true", "yes", "on"}
-_CVO_FUNC_BY_NAME = {
-    "EXP": isa.CvoFunc.EXP,
-    "SQRT": isa.CvoFunc.SQRT,
-    "GELU": isa.CvoFunc.GELU,
-    "SIN": isa.CvoFunc.SIN,
-    "COS": isa.CvoFunc.COS,
-    "REDUCE_SUM": isa.CvoFunc.REDUCE_SUM,
-    "SCALE": isa.CvoFunc.SCALE,
-    "RECIP": isa.CvoFunc.RECIP,
-}
+_TOKEN_RUNTIME: "NpuTokenRuntime | None" = None
+
+
+class NpuTokenRuntime:
+    """Host control for the self-contained NPU next-token path.
+
+    The only value read back for generated text is the 32-bit token embedded in
+    the completion status word of NEXT_TOKEN.  Intermediate activations, layer
+    outputs, accumulators, and logits remain NPU-resident.
+    """
+
+    def __init__(
+        self,
+        *,
+        uio_device: str = UIO_DEVICE_DEFAULT,
+        timeout_sec: float = NPU_TIMEOUT_SEC,
+        poll_interval_sec: float = 0.001,
+        mmio_factory: Callable[[], Any] | None = None,
+    ) -> None:
+        self.uio_device = uio_device
+        self.timeout_sec = timeout_sec
+        self.poll_interval_sec = poll_interval_sec
+        self._mmio_factory = mmio_factory
+        self._sim_mmio: TokenSimMmio | None = None
+        self.command_count = 0
+        self.last_status_word = 0
+        self.weights_loaded = False
+
+    def load_weights_to_l2(self, weights: Any = None) -> None:
+        descriptor_count = _descriptor_count(weights)
+        manifest_id = _manifest_id(weights)
+        word = isa.encode_load_weight(
+            descriptor_count=descriptor_count,
+            manifest_id=manifest_id,
+        )
+        self._submit_command(word)
+        self.weights_loaded = True
+
+    def reset_kv_cache(self, *, session_id: int = 0) -> None:
+        self._submit_command(isa.encode_reset_kv_cache(session_id=session_id))
+
+    def init_activation(self, prompt_tokens: list[int] | tuple[int, ...]) -> None:
+        self.reset_kv_cache()
+        self.load_prompt_tokens(prompt_tokens)
+
+    def load_prompt_tokens(self, prompt_tokens: list[int] | tuple[int, ...]) -> None:
+        for position, token_id in enumerate(prompt_tokens):
+            self._submit_command(
+                isa.encode_load_prompt(position=position, token_id=int(token_id))
+            )
+
+    def run_one_token_step(
+        self,
+        *,
+        request_id: int | None = None,
+        sampling: isa.SamplingMode = isa.SamplingMode.ARGMAX,
+        temperature: float = 0.0,
+        top_p: float = 1.0,
+    ) -> int:
+        rid = self.command_count & 0xFFFF if request_id is None else int(request_id)
+        word = isa.encode_next_token(
+            request_id=rid,
+            sampling=sampling,
+            temperature_q8_8=isa.q8_8(temperature),
+            top_p_q8_8=isa.q8_8(top_p),
+        )
+        status = self._submit_command(word)
+        token = isa.status_token(status)
+        if token is None:
+            raise RuntimeError("NEXT_TOKEN completed without a token-valid status word")
+        return token
+
+    def _submit_command(self, word64: int) -> int:
+        with self._open_mmio() as mmio:
+            mmio.write64(AXIL_CMD_IN, word64)
+            mmio.write64(AXIL_CMD_KICK, 0x1)
+            self.command_count += 1
+            deadline = time.monotonic() + self.timeout_sec
+            while time.monotonic() < deadline:
+                status = _read_status_word(mmio)
+                self.last_status_word = status
+                if isa.status_error(status):
+                    raise RuntimeError(f"NPU command failed: status=0x{status:016x}")
+                if isa.status_done(status):
+                    return status
+                time.sleep(self.poll_interval_sec)
+        raise TimeoutError("NPU command did not report DONE")
+
+    def _open_mmio(self):
+        if self._mmio_factory is not None:
+            return self._mmio_factory()
+        if _env_truthy("PCCX_NPU_SIM_BACKEND"):
+            if self._sim_mmio is None:
+                self._sim_mmio = TokenSimMmio.from_env()
+            return nullcontext(self._sim_mmio)
+        return NpuMmio(uio=self.uio_device)
+
+
+def load_weights_to_l2(weights: Any = None) -> None:
+    token_runtime().load_weights_to_l2(weights)
+
+
+def reset_kv_cache(*, session_id: int = 0) -> None:
+    token_runtime().reset_kv_cache(session_id=session_id)
+
+
+def init_activation(prompt_tokens: list[int] | tuple[int, ...]) -> None:
+    token_runtime().init_activation(prompt_tokens)
+
+
+def load_prompt_tokens(prompt_tokens: list[int] | tuple[int, ...]) -> None:
+    token_runtime().load_prompt_tokens(prompt_tokens)
+
+
+def run_one_token_step(
+    *,
+    temperature: float = 0.0,
+    top_p: float = 1.0,
+    sampling: isa.SamplingMode = isa.SamplingMode.ARGMAX,
+) -> int:
+    return token_runtime().run_one_token_step(
+        temperature=temperature,
+        top_p=top_p,
+        sampling=sampling,
+    )
+
+
+def token_runtime() -> NpuTokenRuntime:
+    global _TOKEN_RUNTIME
+    if _TOKEN_RUNTIME is None:
+        _TOKEN_RUNTIME = NpuTokenRuntime()
+    return _TOKEN_RUNTIME
 
 
 def npu_gemm(
@@ -46,25 +171,14 @@ def npu_gemm(
     *,
     layer_idx: int | None = None,
 ) -> np.ndarray:
-    """W [K_in, M_out], X [B, K_in] -> [B, M_out] float32."""
-    Wf = np.asarray(W, dtype=np.float32)
-    Xf = np.asarray(X, dtype=np.float32)
-    if not _can_attempt_hardware():
-        return cpu_gemm(Wf, Xf)
+    """CPU fallback for legacy tensor-call sites.
 
-    try:
-        _submit_experimental_program([
-            isa.encode_gemm(
-                dest_reg=0,
-                src_addr=0,
-                size_ptr_addr=_shape_ptr_for_layer(layer_idx),
-                shape_ptr_addr=_shape_ptr_for_layer(layer_idx),
-                parallel_lane=_parallel_lane_for_shape(Wf.shape),
-            )
-        ])
-    except Exception as exc:
-        LOG.warning("NPU GEMM dispatch failed; using CPU fallback: %s", exc)
-    return _tiled_gemm_fallback(Wf, Xf)
+    Hardware Gemma generation uses run_one_token_step(), not per-matrix
+    dispatch.  This wrapper remains so CPU-mode code can keep sharing the
+    Gemma math modules.
+    """
+    del layer_idx
+    return cpu_gemm(np.asarray(W, dtype=np.float32), np.asarray(X, dtype=np.float32))
 
 
 def npu_gemv(
@@ -73,101 +187,63 @@ def npu_gemv(
     *,
     layer_idx: int | None = None,
 ) -> np.ndarray:
-    """W [K_in, M_out], x [K_in] -> [M_out] float32."""
-    Wf = np.asarray(W, dtype=np.float32)
-    xf = np.asarray(x, dtype=np.float32)
-    if not _can_attempt_hardware():
-        return cpu_gemv(Wf, xf)
-
-    try:
-        _submit_experimental_program([
-            isa.encode_gemv(
-                dest_reg=0,
-                src_addr=0,
-                size_ptr_addr=_shape_ptr_for_layer(layer_idx),
-                shape_ptr_addr=_shape_ptr_for_layer(layer_idx),
-                parallel_lane=_parallel_lane_for_shape(Wf.shape),
-            )
-        ])
-    except Exception as exc:
-        LOG.warning("NPU GEMV dispatch failed; using CPU fallback: %s", exc)
-    return cpu_gemv(Wf, xf)
+    del layer_idx
+    return cpu_gemv(np.asarray(W, dtype=np.float32), np.asarray(x, dtype=np.float32))
 
 
 def npu_cvo(op: str, x: np.ndarray) -> np.ndarray:
-    """op in {EXP, SQRT, GELU, SIN, COS, REDUCE_SUM, SCALE, RECIP}."""
-    xf = np.asarray(x, dtype=np.float32)
-    op_norm = op.upper()
-    if op_norm not in _CVO_FUNC_BY_NAME:
-        return cpu_cvo(op_norm, xf)
-    if not _can_attempt_hardware():
-        return cpu_cvo(op_norm, xf)
-
-    try:
-        _submit_experimental_program([
-            isa.encode_cvo(
-                _CVO_FUNC_BY_NAME[op_norm],
-                src_addr=0,
-                dst_addr=0,
-                length=min(int(xf.size), 0xFFFF),
-            )
-        ])
-    except Exception as exc:
-        LOG.warning("NPU CVO dispatch failed; using CPU fallback: %s", exc)
-    return cpu_cvo(op_norm, xf)
+    return cpu_cvo(str(op).upper(), np.asarray(x, dtype=np.float32))
 
 
 def npu_status() -> dict:
-    """Return status bits exposed through AXIL_STAT_OUT."""
-    available = npu_available()
-    status_word = 0
-    if available:
-        try:
-            with NpuMmio(uio=UIO_DEVICE_DEFAULT) as mmio:
-                status_word = mmio.read32(AXIL_STAT_OUT)
-        except Exception as exc:
-            LOG.warning("could not read NPU status; reporting unavailable: %s", exc)
-            available = False
-            status_word = 0
-
+    """Return the last observed token-step status without popping a FIFO."""
+    runtime = _TOKEN_RUNTIME
+    status_word = runtime.last_status_word if runtime is not None else 0
+    token = isa.status_token(status_word)
     return {
         "mmio_hex": f"0x{status_word & 0xFFFF_FFFF:08x}",
         "busy": isa.status_busy(status_word),
         "done": isa.status_done(status_word),
-        "available": available,
+        "error": isa.status_error(status_word),
+        "token_valid": token is not None,
+        "last_token": token,
+        "available": npu_available(),
         "last_cycle_count": 0,
+        "axil_command_count": runtime.command_count if runtime is not None else 0,
+        "readback_bytes_last": 4 if token is not None else 0,
     }
 
 
 def npu_backend_readiness() -> dict:
-    """Return whether the NPU path can produce Gemma tensor results."""
+    """Return whether the high-level token backend can produce token results."""
     available = npu_available()
-    experimental_axil = _env_truthy("PCCX_NPU_EXPERIMENTAL_DISPATCH")
-    hardware_results = False
-    if not available:
-        reason = (
-            "NPU UIO/bitstream is not available; Gemma tensor dispatch would "
-            "use CPU fallback"
-        )
+    token_path_enabled = (
+        _env_truthy("PCCX_NPU_TOKEN_BACKEND")
+        or _env_truthy("PCCX_NPU_SIM_BACKEND")
+    )
+    hardware_results = bool(available and token_path_enabled)
+    if hardware_results:
+        reason = "NPU self-contained token backend is ready"
+    elif not token_path_enabled:
+        reason = "NPU self-contained token backend is disabled; CPU backend selected"
     else:
-        reason = (
-            "NPU UIO/bitstream is available, but high-level Gemma tensor "
-            "dispatch still returns NumPy golden results; DMA buffer ownership "
-            "and result readback are not implemented"
-        )
+        reason = "NPU self-contained token backend is enabled but UIO/sim access is unavailable"
     return {
         "npu_available": available,
         "hardware_results": hardware_results,
-        "experimental_axil_dispatch": experimental_axil,
+        "token_backend": token_path_enabled,
+        "experimental_axil_dispatch": False,
         "reason": reason,
     }
 
 
 def npu_available() -> bool:
-    """True iff /dev/uio4 opens and the loaded bitstream hash is expected."""
+    """True when token-step MMIO is available or the local sim backend is enabled."""
     global NPU_AVAILABLE
     if _fallback_requested():
         return False
+    if _env_truthy("PCCX_NPU_SIM_BACKEND"):
+        return True
     if NPU_AVAILABLE is not None:
         return bool(NPU_AVAILABLE)
     if not bitstream_sha256_is_expected(BITSTREAM_PATH_DEFAULT):
@@ -183,72 +259,28 @@ def npu_available() -> bool:
     return True
 
 
-def _can_attempt_hardware() -> bool:
-    if not npu_available():
-        return False
-    if _env_truthy("PCCX_NPU_EXPERIMENTAL_DISPATCH"):
-        return True
-    LOG.info(
-        "NPU is present but high-level dispatch is using CPU fallback until "
-        "DMA buffer ownership is golden-vector gated"
-    )
-    return False
+def _read_status_word(mmio: Any) -> int:
+    read64 = getattr(mmio, "read64", None)
+    if read64 is not None:
+        return int(read64(AXIL_STAT_OUT)) & 0xFFFF_FFFF_FFFF_FFFF
+    return int(mmio.read32(AXIL_STAT_OUT)) & 0xFFFF_FFFF
 
 
-def _submit_experimental_program(words: list[int]) -> None:
-    if len(words) > 8:
-        raise ValueError("AXIL_CMD_IN FIFO accepts at most 8 words per program")
-    with NpuMmio(uio=UIO_DEVICE_DEFAULT) as mmio:
-        for word in words:
-            mmio.write64(AXIL_CMD_IN, word)
-        mmio.write64(AXIL_CMD_KICK, 0x1)
-        deadline = time.monotonic() + NPU_TIMEOUT_SEC
-        while time.monotonic() < deadline:
-            status = mmio.read32(AXIL_STAT_OUT)
-            if isa.status_done(status):
-                return
-            time.sleep(0.001)
-    raise TimeoutError("NPU program did not report DONE")
+def _descriptor_count(weights: Any) -> int:
+    if isinstance(weights, dict):
+        descriptors = weights.get("descriptors")
+        if descriptors is not None:
+            return min(len(descriptors), 0xFF)
+    return 0
 
 
-def _tiled_gemm_fallback(W: np.ndarray, X: np.ndarray) -> np.ndarray:
-    Wf = np.asarray(W, dtype=np.float32)
-    Xf = np.asarray(X, dtype=np.float32)
-    if Wf.ndim != 2 or Xf.ndim != 2:
-        return cpu_gemm(Wf, Xf)
-    batch, kin = Xf.shape
-    if Wf.shape[0] != kin:
-        return cpu_gemm(Wf, Xf)
-
-    tile_m = int(os.getenv("PCCX_NPU_TILE_M", "32"))
-    tile_k = int(os.getenv("PCCX_NPU_TILE_K", "128"))
-    tile_n = int(os.getenv("PCCX_NPU_TILE_N", "128"))
-    if batch <= tile_m and kin <= tile_k and Wf.shape[1] <= tile_n:
-        return cpu_gemm(Wf, Xf)
-
-    out = np.zeros((batch, Wf.shape[1]), dtype=np.float32)
-    for m0 in range(0, batch, tile_m):
-        m1 = min(m0 + tile_m, batch)
-        for n0 in range(0, Wf.shape[1], tile_n):
-            n1 = min(n0 + tile_n, Wf.shape[1])
-            acc = np.zeros((m1 - m0, n1 - n0), dtype=np.float32)
-            for k0 in range(0, kin, tile_k):
-                k1 = min(k0 + tile_k, kin)
-                acc += np.dot(Xf[m0:m1, k0:k1], Wf[k0:k1, n0:n1])
-            out[m0:m1, n0:n1] = acc
-    return out
-
-
-def _parallel_lane_for_shape(shape: tuple[int, ...]) -> int:
-    if not shape:
-        return 1
-    return max(1, min(31, int(shape[-1] if len(shape) > 1 else shape[0])))
-
-
-def _shape_ptr_for_layer(layer_idx: int | None) -> int:
-    if layer_idx is None:
+def _manifest_id(weights: Any) -> int:
+    if weights is None:
         return 0
-    return int(layer_idx) & 0x3F
+    model_dir = getattr(weights, "model_dir", None)
+    if model_dir is not None:
+        return isa.manifest_id_from_text(model_dir)
+    return isa.manifest_id_from_text(weights)
 
 
 def _fallback_requested() -> bool:
@@ -260,3 +292,9 @@ def _fallback_requested() -> bool:
 
 def _env_truthy(name: str) -> bool:
     return os.getenv(name, "").strip().lower() in _TRUTHY
+
+
+def _reset_token_runtime_for_tests() -> None:
+    global _TOKEN_RUNTIME, NPU_AVAILABLE
+    _TOKEN_RUNTIME = None
+    NPU_AVAILABLE = None

@@ -18,12 +18,12 @@ def test_auto_backend_uses_cpu_when_npu_results_are_not_ready() -> None:
     use_npu, backend, reason = _resolve_backend(
         "auto",
         None,
-        _readiness(hardware_results=False, reason="missing result readback"),
+        _readiness(hardware_results=False, reason="token backend disabled"),
     )
 
     assert use_npu is False
     assert backend == "cpu"
-    assert reason == "missing result readback"
+    assert reason == "token backend disabled"
 
 
 def test_strict_npu_backend_errors_when_results_are_not_ready() -> None:
@@ -31,7 +31,7 @@ def test_strict_npu_backend_errors_when_results_are_not_ready() -> None:
         _resolve_backend(
             "npu",
             None,
-            _readiness(hardware_results=False, reason="missing DMA ownership"),
+            _readiness(hardware_results=False, reason="token backend unavailable"),
         )
 
 

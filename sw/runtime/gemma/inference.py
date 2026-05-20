@@ -19,11 +19,17 @@ from .tokenizer import GemmaTokenizer
 from .weights import DEFAULT_MODEL_DIR, GemmaGlobalWeights, GemmaWeights, matmul_weight
 
 try:  # pragma: no cover - exercised when the board runtime module lands.
+    from sw.runtime.npu import init_activation as _runtime_npu_init_activation
+    from sw.runtime.npu import load_weights_to_l2 as _runtime_npu_load_weights_to_l2
     from sw.runtime.npu import npu_backend_readiness as _runtime_npu_backend_readiness
     from sw.runtime.npu import npu_status as _runtime_npu_status
+    from sw.runtime.npu import run_one_token_step as _runtime_npu_run_one_token_step
 except Exception:  # pragma: no cover - import fallback is tested indirectly.
+    _runtime_npu_init_activation = None
+    _runtime_npu_load_weights_to_l2 = None
     _runtime_npu_backend_readiness = None
     _runtime_npu_status = None
+    _runtime_npu_run_one_token_step = None
 
 
 BACKEND_AUTO = "auto"
@@ -131,6 +137,7 @@ class GemmaInferenceSession:
         self._sessions: dict[str, dict] = {}
         self._tokens_total = 0
         self._tokens_per_sec_last = 0.0
+        self._npu_weights_loaded = False
 
     def _npu_status(self) -> dict:
         if not self.use_npu or _runtime_npu_status is None:
@@ -204,6 +211,64 @@ class GemmaInferenceSession:
         x_final = rms_norm(x_final, globals_.w_final_norm)
         return matmul_weight(x_final, globals_.w_lm_head)
 
+    def _ensure_npu_prompt_loaded(self, input_tokens: list[int]) -> None:
+        if (
+            _runtime_npu_load_weights_to_l2 is None
+            or _runtime_npu_init_activation is None
+        ):
+            raise RuntimeError("NPU token runtime is not importable")
+        if not self._npu_weights_loaded:
+            _runtime_npu_load_weights_to_l2(self.weights)
+            self._npu_weights_loaded = True
+        _runtime_npu_init_activation(input_tokens)
+
+    def _generate_with_npu(
+        self,
+        input_tokens: list[int],
+        *,
+        max_new_tokens: int,
+        temperature: float,
+        top_p: float,
+        session_id: str,
+    ) -> Iterator[Tuple[str, dict]]:
+        if _runtime_npu_run_one_token_step is None:
+            raise RuntimeError("NPU token runtime is not importable")
+
+        self._ensure_npu_prompt_loaded(input_tokens)
+        self._sessions[session_id] = {
+            "pos": len(input_tokens),
+            "backend": BACKEND_NPU,
+        }
+
+        stop_tokens = {1, 106}
+        for _ in range(max_new_tokens):
+            start = time.perf_counter()
+            next_token = int(
+                _runtime_npu_run_one_token_step(
+                    temperature=temperature,
+                    top_p=top_p,
+                )
+            )
+            if next_token in stop_tokens:
+                break
+            elapsed = max(time.perf_counter() - start, 1e-9)
+            self._tokens_total += 1
+            self._tokens_per_sec_last = 1.0 / elapsed
+            piece = self.tokenizer.decode_piece([next_token])
+            event = {
+                "token_id": next_token,
+                "tok_per_sec": self._tokens_per_sec_last,
+                "npu_status": self._npu_status(),
+                "readback_bytes": 4,
+                "layer_progress": {
+                    "current": self.arch.num_layers,
+                    "total": self.arch.num_layers,
+                    "stage": "next_token",
+                    "session_id": session_id,
+                },
+            }
+            yield piece, event
+
     def generate(
         self,
         prompt: str,
@@ -216,11 +281,22 @@ class GemmaInferenceSession:
         if not self.weights.available:
             raise FileNotFoundError(self.weights.model_dir)
 
-        state = self._new_state()
-        self._sessions[session_id] = state
         input_tokens = self.tokenizer.encode(prompt)
         if not input_tokens:
             input_tokens = [0]
+
+        if self.use_npu:
+            yield from self._generate_with_npu(
+                input_tokens,
+                max_new_tokens=max_new_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                session_id=session_id,
+            )
+            return
+
+        state = self._new_state()
+        self._sessions[session_id] = state
 
         for token_id in input_tokens:
             self._forward_one_token(token_id, state)

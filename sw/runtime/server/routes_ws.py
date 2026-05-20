@@ -299,6 +299,11 @@ def _invoke_generate(session: Any, **values: Any) -> Any:
 
 
 def _token_text(item: Any) -> tuple[Optional[str], Optional[str]]:
+    if isinstance(item, tuple) and item:
+        text, finish = _token_text(item[0])
+        if finish is None and len(item) > 1 and isinstance(item[1], dict):
+            finish = item[1].get("finish_reason")
+        return text, finish
     if isinstance(item, str):
         return item, None
     if isinstance(item, bytes):

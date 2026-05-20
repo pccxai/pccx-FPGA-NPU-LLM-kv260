@@ -1,46 +1,46 @@
-"""pccx v002 ISA word encoders.
+"""pccx v002 high-level NPU command encoders.
 
-Layout (mirrors hw/rtl/NPU_Controller/NPU_Control_Unit/ISA_PACKAGE/isa_pkg.sv):
+The host-visible SW contract is intentionally coarse grained: the host starts
+weight load, prompt load, KV reset, and next-token commands.  It does not issue
+per-layer GEMM/GEMV/CVO programs or read intermediate activations.
 
-  bits [63:60] = 4-bit opcode
-  bits [59:0]  = 60-bit instruction body, format depends on opcode
+SystemVerilog representation:
 
-KICK is special — pushed by writing any word to ADDR_KICK = 0x008; the RTL
-overrides the wdata with 0x8000_0000_0000_0000 internally, so KICK_MARKER is
-provided here only for symmetry / asserts.
+    typedef struct packed {
+        logic [7:0]  opcode;
+        logic [55:0] operand;
+    } pccx_host_cmd_t;
+
+This follows the packed-structure shape used by IEEE Std 1800-2023: the
+structure is a contiguous vector with no gaps, so Python packs the same fields
+as an unsigned 64-bit word.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
 from enum import IntEnum
+from zlib import crc32
 
 
 class Opcode(IntEnum):
-    GEMV   = 0x0
-    GEMM   = 0x1
-    MEMCPY = 0x2
-    MEMSET = 0x3
-    CVO    = 0x4
+    RESET_KV_CACHE = 0x01
+    LOAD_WEIGHT = 0x02
+    LOAD_PROMPT = 0x03
+    NEXT_TOKEN = 0x04
 
 
-class CvoFunc(IntEnum):
-    EXP        = 0x0
-    SQRT       = 0x1
-    GELU       = 0x2
-    SIN        = 0x3
-    COS        = 0x4
-    REDUCE_SUM = 0x5
-    SCALE      = 0x6
-    RECIP      = 0x7
-
-
-# Address direction enums (memcpy)
-FROM_NPU, FROM_HOST = 0, 1
-TO_NPU,   TO_HOST   = 0, 1
-SYNC, ASYNC         = 0, 1
+class SamplingMode(IntEnum):
+    ARGMAX = 0x00
+    RANDOM = 0x01
 
 
 KICK_MARKER = 0x8000_0000_0000_0000
+
+STAT_BUSY_MASK = 0x1
+STAT_DONE_MASK = 0x2
+STAT_ERROR_MASK = 0x4
+STAT_TOKEN_VALID_MASK = 0x8
+STAT_TOKEN_SHIFT = 32
+STAT_TOKEN_MASK = 0xFFFF_FFFF
 
 
 def _mask(width: int) -> int:
@@ -54,124 +54,116 @@ def _check(val: int, width: int, name: str) -> int:
     return val & m
 
 
-def _pack_opcode(opcode: Opcode, body: int) -> int:
-    """body must already fit in 60 bits."""
-    body = _check(body, 60, "body")
-    return (int(opcode) & 0xF) << 60 | body
+def _pack_command(opcode: Opcode, operand: int = 0) -> int:
+    return (_check(int(opcode), 8, "opcode") << 56) | _check(operand, 56, "operand")
 
 
-@dataclass(frozen=True)
-class GemmFlags:
-    """6-bit GEMV/GEMM flags struct (isa_pkg.sv flags_t)."""
-    findemax: bool = False
-    accm:     bool = False
-    w_scale:  bool = False
-
-    def to_bits(self) -> int:
-        # bits: findemax[5] | accm[4] | w_scale[3] | reserved[2:0]
-        return ((int(self.findemax) << 5)
-                | (int(self.accm)     << 4)
-                | (int(self.w_scale)  << 3))
+def decode_command(word64: int) -> tuple[int, int]:
+    word64 = _check(word64, 64, "word64")
+    return (word64 >> 56) & 0xFF, word64 & _mask(56)
 
 
-def encode_gemm(
-    dest_reg: int,
-    src_addr: int,
-    flags: GemmFlags = GemmFlags(),
-    size_ptr_addr: int = 0,
-    shape_ptr_addr: int = 0,
-    parallel_lane: int = 0,
-) -> int:
-    """GEMM_op_x64_t — same layout as GEMV.
-
-    Body (60 bits, MSB first):
-      dest_reg[16:0] (17) | src_addr[16:0] (17) | flags (6) |
-      size_ptr (6) | shape_ptr (6) | parallel_lane (5) | reserved (3)
-    """
-    body = ((_check(dest_reg,        17, "dest_reg")       << 43)
-            | (_check(src_addr,       17, "src_addr")       << 26)
-            | (flags.to_bits()                              << 20)
-            | (_check(size_ptr_addr,   6, "size_ptr_addr")  << 14)
-            | (_check(shape_ptr_addr,  6, "shape_ptr_addr") <<  8)
-            | (_check(parallel_lane,   5, "parallel_lane")  <<  3))
-    return _pack_opcode(Opcode.GEMM, body)
+def encode_reset_kv_cache(*, session_id: int = 0) -> int:
+    """Reset NPU-resident KV cache and token-step activation state."""
+    return _pack_command(Opcode.RESET_KV_CACHE, _check(session_id, 32, "session_id"))
 
 
-def encode_gemv(
-    dest_reg: int,
-    src_addr: int,
-    flags: GemmFlags = GemmFlags(),
-    size_ptr_addr: int = 0,
-    shape_ptr_addr: int = 0,
-    parallel_lane: int = 0,
-) -> int:
-    """GEMV_op_x64_t — identical layout to GEMM, opcode differs."""
-    body = ((_check(dest_reg,        17, "dest_reg")       << 43)
-            | (_check(src_addr,       17, "src_addr")       << 26)
-            | (flags.to_bits()                              << 20)
-            | (_check(size_ptr_addr,   6, "size_ptr_addr")  << 14)
-            | (_check(shape_ptr_addr,  6, "shape_ptr_addr") <<  8)
-            | (_check(parallel_lane,   5, "parallel_lane")  <<  3))
-    return _pack_opcode(Opcode.GEMV, body)
+def decode_reset_kv_cache(word64: int) -> dict[str, int]:
+    opcode, operand = decode_command(word64)
+    if opcode != Opcode.RESET_KV_CACHE:
+        raise ValueError(
+            f"opcode {opcode:#x} is not RESET_KV_CACHE ({int(Opcode.RESET_KV_CACHE):#x})"
+        )
+    return {"session_id": operand & _mask(32)}
 
 
-def encode_memcpy(
-    from_device: int,
-    to_device: int,
-    dest_addr: int,
-    src_addr: int,
-    aux_addr: int = 0,
-    shape_ptr_addr: int = 0,
-    async_op: int = SYNC,
-) -> int:
-    """MEMCPY layout (60 bits): from(1) to(1) dest(17) src(17) aux(17) shape(6) async(1)."""
-    body = ((_check(from_device, 1, "from_device") << 59)
-            | (_check(to_device,   1, "to_device")   << 58)
-            | (_check(dest_addr,  17, "dest_addr")   << 41)
-            | (_check(src_addr,   17, "src_addr")    << 24)
-            | (_check(aux_addr,   17, "aux_addr")    <<  7)
-            | (_check(shape_ptr_addr, 6, "shape_ptr_addr") << 1)
-            | (_check(async_op,    1, "async_op")    <<  0))
-    return _pack_opcode(Opcode.MEMCPY, body)
-
-
-def encode_memset(
-    dest_cache: int,
-    dest_addr: int,
-    a_value: int,
-    b_value: int = 0,
-    c_value: int = 0,
-) -> int:
-    """MEMSET layout (60 bits): dest_cache(2) dest_addr(6) a(16) b(16) c(16) reserved(4)."""
-    body = ((_check(dest_cache, 2, "dest_cache") << 58)
-            | (_check(dest_addr,  6, "dest_addr")  << 52)
-            | (_check(a_value,   16, "a_value")    << 36)
-            | (_check(b_value,   16, "b_value")    << 20)
-            | (_check(c_value,   16, "c_value")    <<  4))
-    return _pack_opcode(Opcode.MEMSET, body)
-
-
-def encode_cvo(
-    cvo_func: CvoFunc,
-    src_addr: int,
-    dst_addr: int,
-    length: int,
+def encode_load_weight(
+    *,
+    weight_slot: int = 0,
+    descriptor_count: int = 0,
+    manifest_id: int = 0,
     flags: int = 0,
-    async_op: int = SYNC,
 ) -> int:
-    """CVO layout (60 bits): func(4) src(17) dst(17) length(16) flags(5) async(1)."""
-    body = ((_check(int(cvo_func), 4, "cvo_func")  << 56)
-            | (_check(src_addr,   17, "src_addr")    << 39)
-            | (_check(dst_addr,   17, "dst_addr")    << 22)
-            | (_check(length,     16, "length")      <<  6)
-            | (_check(flags,       5, "flags")       <<  1)
-            | (_check(async_op,    1, "async_op")    <<  0))
-    return _pack_opcode(Opcode.CVO, body)
+    """Start one host-to-L2 weight-load phase.
+
+    Operand layout:
+      weight_slot[55:48] | flags[47:40] | descriptor_count[39:32] |
+      manifest_id[31:0]
+
+    Bulk bytes are described by the DMA command stream.  This command only
+    starts the NPU-side weight-cache acceptance phase and never requests a
+    result buffer from PS memory.
+    """
+    operand = (
+        (_check(weight_slot, 8, "weight_slot") << 48)
+        | (_check(flags, 8, "flags") << 40)
+        | (_check(descriptor_count, 8, "descriptor_count") << 32)
+        | _check(manifest_id, 32, "manifest_id")
+    )
+    return _pack_command(Opcode.LOAD_WEIGHT, operand)
 
 
-# Status word (read from AXIL_STAT_OUT, 64-bit but only [31:0] is mmio_npu_stat)
-STAT_BUSY_MASK = 0x1
-STAT_DONE_MASK = 0x2
+def decode_load_weight(word64: int) -> dict[str, int]:
+    opcode, operand = decode_command(word64)
+    if opcode != Opcode.LOAD_WEIGHT:
+        raise ValueError(f"opcode {opcode:#x} is not LOAD_WEIGHT ({int(Opcode.LOAD_WEIGHT):#x})")
+    return {
+        "weight_slot": (operand >> 48) & _mask(8),
+        "flags": (operand >> 40) & _mask(8),
+        "descriptor_count": (operand >> 32) & _mask(8),
+        "manifest_id": operand & _mask(32),
+    }
+
+
+def encode_load_prompt(*, position: int, token_id: int) -> int:
+    """Load one prompt token into NPU-resident activation/KV state."""
+    operand = (_check(position, 24, "position") << 32) | _check(token_id, 32, "token_id")
+    return _pack_command(Opcode.LOAD_PROMPT, operand)
+
+
+def decode_load_prompt(word64: int) -> dict[str, int]:
+    opcode, operand = decode_command(word64)
+    if opcode != Opcode.LOAD_PROMPT:
+        raise ValueError(f"opcode {opcode:#x} is not LOAD_PROMPT ({int(Opcode.LOAD_PROMPT):#x})")
+    return {
+        "position": (operand >> 32) & _mask(24),
+        "token_id": operand & _mask(32),
+    }
+
+
+def q8_8(value: float) -> int:
+    """Quantize a non-negative scalar into unsigned Q8.8."""
+    return _check(int(round(float(value) * 256.0)), 16, "q8_8")
+
+
+def encode_next_token(
+    *,
+    request_id: int = 0,
+    sampling: SamplingMode = SamplingMode.ARGMAX,
+    temperature_q8_8: int = 0,
+    top_p_q8_8: int = 0x0100,
+) -> int:
+    """Run all NPU-resident layers and return one 32-bit token in status."""
+    operand = (
+        (_check(request_id, 16, "request_id") << 40)
+        | (_check(int(sampling), 8, "sampling") << 32)
+        | (_check(temperature_q8_8, 16, "temperature_q8_8") << 16)
+        | _check(top_p_q8_8, 16, "top_p_q8_8")
+    )
+    return _pack_command(Opcode.NEXT_TOKEN, operand)
+
+
+def decode_next_token(word64: int) -> dict[str, int | SamplingMode]:
+    opcode, operand = decode_command(word64)
+    if opcode != Opcode.NEXT_TOKEN:
+        raise ValueError(f"opcode {opcode:#x} is not NEXT_TOKEN ({int(Opcode.NEXT_TOKEN):#x})")
+    sampling_raw = (operand >> 32) & _mask(8)
+    return {
+        "request_id": (operand >> 40) & _mask(16),
+        "sampling": SamplingMode(sampling_raw),
+        "temperature_q8_8": (operand >> 16) & _mask(16),
+        "top_p_q8_8": operand & _mask(16),
+    }
 
 
 def status_busy(stat: int) -> bool:
@@ -182,103 +174,39 @@ def status_done(stat: int) -> bool:
     return bool(stat & STAT_DONE_MASK)
 
 
-# ============================================================================
-# Decoders — inverse of the encode_* functions. Used by test_isa.py round-trip
-# coverage and host-side debug tools that inspect the raw 64-bit words pulled
-# off /dev/mem traces.
-#
-# Each decoder takes a 64-bit ISA word and returns a dict of the named fields
-# (matching the encode_* signature). decode_x64() returns just the opcode and
-# raw body for callers that want to dispatch themselves.
-# ============================================================================
+def status_error(stat: int) -> bool:
+    return bool(stat & STAT_ERROR_MASK)
 
 
-def decode_x64(word64: int) -> tuple[int, int]:
-    """Split a 64-bit ISA word into (opcode, 60-bit body)."""
-    word64 = _check(word64, 64, "word64")
-    return ((word64 >> 60) & 0xF, word64 & ((1 << 60) - 1))
+def status_token_valid(stat: int) -> bool:
+    return bool(stat & STAT_TOKEN_VALID_MASK)
 
 
-def _decode_field(body: int, lsb: int, width: int) -> int:
-    """Extract `width` bits starting at `lsb` from a 60-bit body."""
-    return (body >> lsb) & _mask(width)
+def status_token(stat: int) -> int | None:
+    stat = _check(stat, 64, "stat")
+    if not status_token_valid(stat):
+        return None
+    return (stat >> STAT_TOKEN_SHIFT) & STAT_TOKEN_MASK
 
 
-def decode_gemm(word64: int) -> dict:
-    """Inverse of encode_gemm. Returns dict matching encode_gemm kwargs."""
-    op, body = decode_x64(word64)
-    if op != Opcode.GEMM:
-        raise ValueError(f"opcode {op:#x} is not GEMM ({int(Opcode.GEMM):#x})")
-    flags_bits = _decode_field(body, 20, 6)
-    return {
-        "dest_reg":       _decode_field(body, 43, 17),
-        "src_addr":       _decode_field(body, 26, 17),
-        "flags":          GemmFlags(
-                              findemax=bool(flags_bits & (1 << 5)),
-                              accm=    bool(flags_bits & (1 << 4)),
-                              w_scale= bool(flags_bits & (1 << 3))),
-        "size_ptr_addr":  _decode_field(body, 14, 6),
-        "shape_ptr_addr": _decode_field(body,  8, 6),
-        "parallel_lane":  _decode_field(body,  3, 5),
-    }
+def encode_status(
+    *,
+    busy: bool = False,
+    done: bool = False,
+    error: bool = False,
+    token: int | None = None,
+) -> int:
+    flags = (
+        (STAT_BUSY_MASK if busy else 0)
+        | (STAT_DONE_MASK if done else 0)
+        | (STAT_ERROR_MASK if error else 0)
+    )
+    if token is None:
+        return flags
+    return ((_check(token, 32, "token") << STAT_TOKEN_SHIFT)
+            | STAT_TOKEN_VALID_MASK
+            | flags)
 
 
-def decode_gemv(word64: int) -> dict:
-    """Inverse of encode_gemv (same layout as GEMM, opcode differs)."""
-    op, body = decode_x64(word64)
-    if op != Opcode.GEMV:
-        raise ValueError(f"opcode {op:#x} is not GEMV ({int(Opcode.GEMV):#x})")
-    flags_bits = _decode_field(body, 20, 6)
-    return {
-        "dest_reg":       _decode_field(body, 43, 17),
-        "src_addr":       _decode_field(body, 26, 17),
-        "flags":          GemmFlags(
-                              findemax=bool(flags_bits & (1 << 5)),
-                              accm=    bool(flags_bits & (1 << 4)),
-                              w_scale= bool(flags_bits & (1 << 3))),
-        "size_ptr_addr":  _decode_field(body, 14, 6),
-        "shape_ptr_addr": _decode_field(body,  8, 6),
-        "parallel_lane":  _decode_field(body,  3, 5),
-    }
-
-
-def decode_memcpy(word64: int) -> dict:
-    op, body = decode_x64(word64)
-    if op != Opcode.MEMCPY:
-        raise ValueError(f"opcode {op:#x} is not MEMCPY ({int(Opcode.MEMCPY):#x})")
-    return {
-        "from_device":    _decode_field(body, 59,  1),
-        "to_device":      _decode_field(body, 58,  1),
-        "dest_addr":      _decode_field(body, 41, 17),
-        "src_addr":       _decode_field(body, 24, 17),
-        "aux_addr":       _decode_field(body,  7, 17),
-        "shape_ptr_addr": _decode_field(body,  1,  6),
-        "async_op":       _decode_field(body,  0,  1),
-    }
-
-
-def decode_memset(word64: int) -> dict:
-    op, body = decode_x64(word64)
-    if op != Opcode.MEMSET:
-        raise ValueError(f"opcode {op:#x} is not MEMSET ({int(Opcode.MEMSET):#x})")
-    return {
-        "dest_cache": _decode_field(body, 58,  2),
-        "dest_addr":  _decode_field(body, 52,  6),
-        "a_value":    _decode_field(body, 36, 16),
-        "b_value":    _decode_field(body, 20, 16),
-        "c_value":    _decode_field(body,  4, 16),
-    }
-
-
-def decode_cvo(word64: int) -> dict:
-    op, body = decode_x64(word64)
-    if op != Opcode.CVO:
-        raise ValueError(f"opcode {op:#x} is not CVO ({int(Opcode.CVO):#x})")
-    return {
-        "cvo_func": CvoFunc(_decode_field(body, 56, 4)),
-        "src_addr": _decode_field(body, 39, 17),
-        "dst_addr": _decode_field(body, 22, 17),
-        "length":   _decode_field(body,  6, 16),
-        "flags":    _decode_field(body,  1,  5),
-        "async_op": _decode_field(body,  0,  1),
-    }
+def manifest_id_from_text(value: object) -> int:
+    return crc32(str(value).encode("utf-8")) & 0xFFFF_FFFF

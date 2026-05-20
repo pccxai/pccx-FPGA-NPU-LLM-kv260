@@ -12,9 +12,10 @@ NPU register layout (mirrors hw/rtl/NPU_Controller/NPU_frontend):
                         is the right call.
 - 0x008  ADDR_KICK    — write only.  Any word triggers the hardware to push
                         0x8000_0000_0000_0000 into the FIFO (decoder kick marker).
-- any    AXIL_STAT_OUT — read returns the head of the status FIFO (64-bit). With
-                        status backflow connected (commit c3fea5e), bits [31:0]
-                        carry the live mmio_npu_stat (bit 0 BUSY, bit 1 DONE).
+- any    AXIL_STAT_OUT — read returns the head of the status FIFO (64-bit).
+                        bits [31:0] carry status flags. For NEXT_TOKEN,
+                        bits [63:32] carry exactly one generated token when
+                        TOKEN_VALID is set.
                         Reads before the FIFO has data block forever — only safe
                         once status backflow RTL is in the loaded bitstream.
 
@@ -114,7 +115,8 @@ class NpuMmio:
     def read_status(self) -> int:
         """Return the lower 32 bits of the head AXIL_STAT_OUT word.
 
-        Bit 0 BUSY, Bit 1 DONE per NPU_top.sv mmio_npu_stat.
+        Bit 0 BUSY, Bit 1 DONE. Token-step callers that need the generated
+        token should read the full 64-bit status word instead.
         """
         return self.read32(ADDR_STAT)
 
