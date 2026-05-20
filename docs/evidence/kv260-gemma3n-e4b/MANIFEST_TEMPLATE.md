@@ -29,4 +29,4 @@ Not yet verified by this template:
 - KV260 NPU execution.
 - Gemma 3N E4B hardware execution.
 - Measured throughput.
-- Timing closure.
+- Post-implementation timing report verdict.

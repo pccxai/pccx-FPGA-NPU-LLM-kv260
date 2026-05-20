@@ -54,7 +54,7 @@ When adding a SystemVerilog source:
 ## Review Check
 
 Before handing off a change that adds or reorders sources, run the
-source compile check from `CLAUDE.md` or an equivalent Vivado `xvlog`
+local agent-guide source compile check or an equivalent Vivado `xvlog`
 command that consumes `hw/vivado/filelist.f` directly:
 
 ```bash

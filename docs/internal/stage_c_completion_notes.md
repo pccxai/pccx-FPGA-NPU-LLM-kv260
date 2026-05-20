@@ -126,7 +126,7 @@ Each commit is reviewable on its own; nothing is squashed.
   Spec ref / Clock / Reset / Latency / Throughput / Handshake / Reset
   state / Counters / Errors / Notes / Protected) across ~38 RTL
   files.
-- Files in CLAUDE.md §6.2 protected list got the header block but
+- Files in the local protected-list agent guide got the header block but
   no internal-compute changes (CVO CORDIC / SFU, GEMV reduction /
   reduction_branch / accumulate, BF16 fixed-point preprocess).
 
