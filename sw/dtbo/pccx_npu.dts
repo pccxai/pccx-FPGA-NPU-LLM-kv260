@@ -5,7 +5,7 @@
  *   /lib/firmware/xilinx/pccx_npu/
  *
  * Address map (matches PS HPM0 default, axi_pc_axil M_AXI):
- *   0xA000_0000 .. 0xA000_0FFF   pccx_npu (4 KiB control window)
+ *   0xA000_0000 .. 0xA000_FFFF   pccx_npu + DataMover command/status windows
  *
  * Interrupt routing is omitted at this stage; AXIL_STAT_OUT polling is
  * sufficient for the v002.1 bring-up loop.
@@ -23,7 +23,7 @@
 
         pccx_npu@a0000000 {
             compatible = "pccx,npu-v002";
-            reg = <0x0 0xa0000000 0x0 0x1000>;
+            reg = <0x0 0xa0000000 0x0 0x10000>;
             clocks = <&zynqmp_clk 71>;   /* PL0_REF_CTRL @ 250 MHz */
             clock-names = "axi_clk";
             status = "okay";

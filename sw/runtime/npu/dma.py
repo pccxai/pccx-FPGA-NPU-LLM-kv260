@@ -22,6 +22,7 @@ FLAG_CMD_EMPTY = 1 << 0
 FLAG_CMD_FULL = 1 << 1
 FLAG_STS_EMPTY = 1 << 2
 FLAG_STS_FULL = 1 << 3
+DATAMOVER_STATUS_ERROR_MASK = 0x0F
 
 BTT_MASK = (1 << 23) - 1
 ADDR_MASK = (1 << 32) - 1
@@ -98,6 +99,11 @@ class PSDataMoverChannel:
                         f"{self.name} status tag 0x{status_tag:x} "
                         f"did not match command token 0x{cmd_token & TAG_MASK:x}"
                     )
+                error_bits = datamover_status_error_bits(status)
+                if error_bits:
+                    raise RuntimeError(
+                        f"{self.name} DataMover status error bits 0x{error_bits:x}"
+                    )
                 return status
             time.sleep(0.0005)
         raise TimeoutError(
@@ -148,3 +154,9 @@ def pack_datamover_command(
         | (1 << 23)
         | (length_bytes & BTT_MASK)
     )
+
+
+def datamover_status_error_bits(status: int) -> int:
+    """Return the low DataMover status bits that signal transfer errors."""
+
+    return int(status) & DATAMOVER_STATUS_ERROR_MASK
