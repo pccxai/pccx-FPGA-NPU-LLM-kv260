@@ -56,7 +56,17 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,-
 .main{position:relative;background:#fff;display:grid;place-items:center;min-width:0}
 .state{display:none}
 .shell{width:min(760px,calc(100vw - var(--sidebar) - 110px));transition:width .22s cubic-bezier(.2,.8,.2,1)}
+.shell.has-messages{height:min(78vh,720px);display:flex;flex-direction:column;justify-content:flex-end;gap:14px}
 .open .shell{width:min(760px,calc(100vw - var(--sidebar-open) - 110px))}
+.messages{display:none;min-height:0;max-height:calc(78vh - 120px);overflow-y:auto;flex-direction:column;gap:10px;padding:0 10px 2px;scroll-behavior:smooth}
+.shell.has-messages .messages{display:flex}
+.bubble{width:fit-content;max-width:min(620px,92%);border:1px solid var(--line);border-radius:18px;padding:12px 14px;background:#fff;color:#1b1b18;box-shadow:0 8px 24px rgba(17,17,15,.06);font-size:15px;line-height:1.45;white-space:pre-wrap}
+.bubble.user{align-self:flex-end;background:#11110f;border-color:#11110f;color:#fff}
+.bubble.assistant{align-self:flex-start;background:#f7f7f4}
+.bubble.error .bubbleBody{color:#777771}
+.bubbleMeta{margin-top:8px;color:#777771;font-size:12px;line-height:1.2;white-space:normal}
+.thinking{display:inline-flex;align-items:center;gap:6px;color:#777771}
+.thinking::after{content:"";width:6px;height:6px;border-radius:50%;background:#777771;animation:pulse 1s ease-in-out infinite}
 .prompt{height:70px;background:rgba(255,255,255,.98);border:1px solid var(--line2);border-radius:35px;box-shadow:var(--shadow);display:flex;align-items:center;gap:12px;padding:10px 10px 10px 18px;transition:.18s}
 .prompt:focus-within{border-color:#c4c4bc;box-shadow:0 24px 68px rgba(17,17,15,.13);transform:translateY(-1px)}
 .plus{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:#111;color:#fff;flex:none}
@@ -72,11 +82,18 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,-
 .icon svg{width:20px;height:20px}
 .send{width:48px;height:48px;border-radius:50%;background:#111;color:#fff;display:grid;place-items:center;transition:.16s}
 .send:hover{background:#000;transform:translateY(-1px);box-shadow:0 8px 24px rgba(0,0,0,.12)}
+.send:disabled{cursor:wait;opacity:.72;transform:none;box-shadow:none}
 .send svg{width:22px;height:22px}
+.send .spinner{display:none;width:18px;height:18px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}
+.send.loading svg{display:none}
+.send.loading .spinner{display:block}
 .hint{display:flex;justify-content:space-between;margin-top:18px;padding:0 10px;color:#777771;font-size:14px}
 .kbd{border:1px solid var(--line);border-radius:8px;padding:3px 7px;background:#fff;color:#66665f;font-size:13px}
 .toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(18px);opacity:0;background:#111;color:#fff;border-radius:16px;padding:12px 16px;font-size:15px;font-weight:550;box-shadow:0 16px 40px rgba(0,0,0,.18);transition:.2s;pointer-events:none}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.error{background:#9f2d22}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:.25;transform:scale(.75)}50%{opacity:1;transform:scale(1)}}
 
 /* Release alignment patch: collapsed labels must not reserve flex width. */
 .app:not(.open) .brand,
@@ -100,7 +117,7 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,-
 .app.open .nav button,
 .app.open .railFooter button{margin-inline:0;gap:13px}
 
-@media(max-width:760px){.app,.app.open{grid-template-columns:58px 1fr}.sidebar{padding:13px 7px}.brand,.nav span,.railFooter span,.recents{display:none}.logo{width:44px;height:38px}.logo img{width:34px}.nav button,.railFooter button{width:44px!important;justify-content:center!important;padding:0!important}.shell,.open .shell{width:min(92vw,620px)}.prompt{height:64px;border-radius:32px;padding-left:14px}.field input{font-size:16px}.chip{display:none}.hint{display:none}}
+@media(max-width:760px){.app,.app.open{grid-template-columns:58px 1fr}.sidebar{padding:13px 7px}.brand,.nav span,.railFooter span,.recents{display:none}.logo{width:44px;height:38px}.logo img{width:34px}.nav button,.railFooter button{width:44px!important;justify-content:center!important;padding:0!important}.shell,.open .shell{width:min(92vw,620px)}.shell.has-messages{height:82vh}.bubble{max-width:94%;font-size:14px}.prompt{height:64px;border-radius:32px;padding-left:14px}.field input{font-size:16px}.chip{display:none}.hint{display:none}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
@@ -127,10 +144,11 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,-
   <main class="main">
     <div class="state"><i></i>Local</div>
     <section class="shell" aria-label="PCCX command launcher">
+      <div class="messages" id="messages" aria-live="polite" aria-label="Chat messages"></div>
       <form class="prompt" id="form">
         <div class="plus" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg></div>
         <div class="field"><input id="input" autocomplete="off" spellcheck="false" placeholder="Ask PCCX to launch a model" aria-label="Ask PCCX to launch a model" /></div>
-        <div class="tools"><button type="button" class="chip">Local</button><button type="button" class="icon" aria-label="Attach profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg></button><button class="send" aria-label="Run command"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M7 17L17 7M9 7h8v8" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
+        <div class="tools"><button type="button" class="chip">Local</button><button type="button" class="icon" aria-label="Attach profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg></button><button class="send" id="send" aria-label="Run command"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M7 17L17 7M9 7h8v8" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="spinner" aria-hidden="true"></span></button></div>
       </form>
       <div class="hint"><span>Type a model path, profile name, or command.</span><span class="kbd">⌘ K</span></div>
     </section>
@@ -143,45 +161,143 @@ const toggle=document.getElementById('toggle');
 const input=document.getElementById('input');
 const form=document.getElementById('form');
 const toast=document.getElementById('toast');
+const shell=document.querySelector('.shell');
+const messages=document.getElementById('messages');
+const send=document.getElementById('send');
 
 toggle.addEventListener('click',()=>{const open=app.classList.toggle('open');toggle.setAttribute('aria-expanded',String(open));toggle.querySelector('span').textContent=open?'Collapse':'Expand'});
 document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');input.focus()}));
 window.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();input.focus()}});
 
-// Chat wiring to KV260 daemon (visual design preserved; tokens stream into the existing toast element)
+// Chat wiring to KV260 daemon.
 let ws=null;
-let sessionId=crypto.randomUUID();
-function showToast(text,sticky){toast.textContent=text;toast.classList.add('show');if(!sticky){clearTimeout(window.__pccxToast);window.__pccxToast=setTimeout(()=>toast.classList.remove('show'),3500);}}
+let connecting=null;
+let reconnectTimer=null;
+let activeAssistant=null;
+let pending=false;
+let sessionId=crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random().toString(16).slice(2)}`;
+function showToast(text,sticky,kind){toast.textContent=text;toast.classList.toggle('error',kind==='error');toast.classList.add('show');clearTimeout(window.__pccxToast);if(!sticky){window.__pccxToast=setTimeout(()=>toast.classList.remove('show'),3500);}}
+function hideToast(){clearTimeout(window.__pccxToast);toast.classList.remove('show','error');}
+function scrollBottom(){messages.scrollTop=messages.scrollHeight;}
+function appendBubble(kind,text){
+  shell.classList.add('has-messages');
+  const node=document.createElement('div');
+  const body=document.createElement('div');
+  node.className=`bubble ${kind}`;
+  body.className='bubbleBody';
+  body.textContent=text||'';
+  node.appendChild(body);
+  messages.appendChild(node);
+  scrollBottom();
+  return{node,body,text:body.textContent,pending:false};
+}
+function appendThinkingBubble(){
+  const bubble=appendBubble('assistant','');
+  const thinking=document.createElement('span');
+  thinking.className='thinking';
+  thinking.textContent='thinking...';
+  bubble.body.replaceChildren(thinking);
+  bubble.pending=true;
+  return bubble;
+}
+function setBusy(value){
+  pending=value;
+  send.disabled=value;
+  send.classList.toggle('loading',value);
+}
+function finishRequest(){
+  setBusy(false);
+  activeAssistant=null;
+  input.focus();
+}
+function setAssistantText(text){
+  if(!activeAssistant){activeAssistant=appendBubble('assistant','');}
+  activeAssistant.pending=false;
+  activeAssistant.text=text;
+  activeAssistant.body.textContent=text;
+  scrollBottom();
+}
+function appendMeta(bubble,frame){
+  const parts=[];
+  if(Number.isFinite(Number(frame.tokens))){parts.push(`${frame.tokens} tokens`);}
+  if(Number.isFinite(Number(frame.elapsed_sec))){parts.push(`${Number(frame.elapsed_sec).toFixed(1)}s`);}
+  if(Number.isFinite(Number(frame.tok_per_sec))){parts.push(`${Number(frame.tok_per_sec).toFixed(1)} tok/s`);}
+  if(!parts.length){return;}
+  const meta=document.createElement('div');
+  meta.className='bubbleMeta';
+  meta.textContent=parts.join(' · ');
+  bubble.node.appendChild(meta);
+}
+function handleFrame(frame){
+  if(frame.type==='token'){
+    const text=String(frame.text??frame.content??'');
+    if(!activeAssistant){activeAssistant=appendBubble('assistant','');}
+    const next=(activeAssistant.pending?'':activeAssistant.text)+text;
+    setAssistantText(next);
+    return;
+  }
+  if(frame.type==='done'){
+    if(activeAssistant){
+      if(activeAssistant.pending){setAssistantText('');}
+      appendMeta(activeAssistant,frame);
+    }
+    finishRequest();
+    return;
+  }
+  if(frame.type==='error'){
+    const message=frame.message||'Request failed';
+    showToast(`error: ${message}`,false,'error');
+    if(activeAssistant){
+      activeAssistant.node.classList.add('error');
+      setAssistantText(`(error: ${message})`);
+    }else{
+      const bubble=appendBubble('assistant',`(error: ${message})`);
+      bubble.node.classList.add('error');
+    }
+    finishRequest();
+  }
+}
+function scheduleReconnect(){
+  if(reconnectTimer){return;}
+  reconnectTimer=setTimeout(()=>{reconnectTimer=null;ensureWs().catch(()=>scheduleReconnect());},5000);
+}
 function ensureWs(){
-  return new Promise((resolve,reject)=>{
-    if(ws&&ws.readyState===1){resolve(ws);return;}
-    const proto=location.protocol==='https:'?'wss:':'ws:';
-    ws=new WebSocket(`${proto}//${location.host}/api/chat`);
-    ws.onopen=()=>resolve(ws);
-    ws.onerror=e=>reject(e);
-    ws.onmessage=ev=>{
-      try{
-        const m=JSON.parse(ev.data);
-        if(m.type==='token'){showToast((toast.textContent||'')+m.content,true);}
-        else if(m.type==='done'){const ms=Math.round((m.elapsed_sec||0)*1000);showToast(toast.textContent+`  (${m.tokens||0} tok / ${ms}ms)`,false);}
-        else if(m.type==='error'){showToast('error: '+(m.message||'unknown'),false);}
-      }catch(_){}
-    };
-    ws.onclose=()=>{ws=null;};
+  if(ws&&ws.readyState===WebSocket.OPEN){return Promise.resolve(ws);}
+  if(connecting){return connecting;}
+  const proto=location.protocol==='https:'?'wss:':'ws:';
+  ws=new WebSocket(`${proto}//${location.host}/api/chat`);
+  ws.addEventListener('message',ev=>{try{handleFrame(JSON.parse(ev.data));}catch(_){}});
+  ws.addEventListener('close',()=>{ws=null;connecting=null;showToast('Connection lost. Reconnecting...',true);if(pending){finishRequest();}scheduleReconnect();});
+  ws.addEventListener('error',()=>{if(!ws||ws.readyState!==WebSocket.OPEN){showToast('Connection error',false,'error');}});
+  connecting=new Promise((resolve,reject)=>{
+    ws.addEventListener('open',()=>{connecting=null;hideToast();resolve(ws);},{once:true});
+    ws.addEventListener('error',()=>{connecting=null;reject(new Error('WebSocket error'));},{once:true});
   });
+  return connecting;
 }
 
 form.addEventListener('submit',async e=>{
   e.preventDefault();
   const v=input.value.trim();
   if(!v){showToast('Type a PCCX command first',false);return;}
-  showToast('',true);
+  if(pending){return;}
+  appendBubble('user',v);
+  activeAssistant=appendThinkingBubble();
+  setBusy(true);
+  input.value='';
   try{
     const sock=await ensureWs();
     sock.send(JSON.stringify({type:'user_message',content:v,session_id:sessionId,max_new_tokens:128,temperature:0.7,top_p:0.95}));
-    input.value='';
-  }catch(_){showToast('Daemon unreachable',false);}
+  }catch(_){
+    showToast('Daemon unreachable',false,'error');
+    if(activeAssistant){
+      activeAssistant.node.classList.add('error');
+      setAssistantText('(error: Daemon unreachable)');
+    }
+    finishRequest();
+  }
 });
+ensureWs().catch(()=>scheduleReconnect());
 </script>
 </body>
 </html>
