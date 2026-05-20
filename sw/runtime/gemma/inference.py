@@ -29,7 +29,8 @@ except Exception:  # pragma: no cover - import fallback is tested indirectly.
 BACKEND_AUTO = "auto"
 BACKEND_CPU = "cpu"
 BACKEND_NPU = "npu"
-BACKEND_CHOICES = {BACKEND_AUTO, BACKEND_CPU, BACKEND_NPU}
+BACKEND_HYBRID = "hybrid"
+BACKEND_CHOICES = {BACKEND_AUTO, BACKEND_CPU, BACKEND_NPU, BACKEND_HYBRID}
 
 
 def _default_npu_status(available: bool = False) -> dict:
@@ -46,6 +47,8 @@ def _default_npu_backend_readiness(reason: str = "NPU runtime is not importable"
         "npu_available": False,
         "hardware_results": False,
         "experimental_axil_dispatch": False,
+        "supported_ops": [],
+        "backend_kind": BACKEND_CPU,
         "reason": reason,
     }
 
@@ -74,14 +77,17 @@ def _resolve_backend(
 
     reason = str(readiness.get("reason") or "")
     hardware_results = bool(readiness.get("hardware_results"))
+    backend_kind = str(readiness.get("backend_kind") or BACKEND_NPU).strip().lower()
+    selected_backend = BACKEND_HYBRID if backend_kind == BACKEND_HYBRID else BACKEND_NPU
     if requested == BACKEND_CPU or use_npu is False:
         return False, BACKEND_CPU, "CPU backend requested"
-    if requested == BACKEND_NPU:
+    if requested in {BACKEND_NPU, BACKEND_HYBRID}:
         if not hardware_results:
-            raise RuntimeError(f"NPU backend requested but unavailable: {reason}")
-        return True, BACKEND_NPU, "NPU backend requested"
+            label = "NPU" if requested == BACKEND_NPU else BACKEND_HYBRID
+            raise RuntimeError(f"{label} backend requested but unavailable: {reason}")
+        return True, selected_backend, f"{selected_backend} backend requested"
     if hardware_results:
-        return True, BACKEND_NPU, "NPU backend auto-selected"
+        return True, selected_backend, f"{selected_backend} backend auto-selected"
     return False, BACKEND_CPU, reason or "NPU backend is not ready"
 
 

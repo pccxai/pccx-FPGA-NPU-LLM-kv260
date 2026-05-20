@@ -17,7 +17,7 @@ from aiohttp import web
 from .app import create_app
 
 
-BACKEND_CHOICES = ("auto", "cpu", "npu")
+BACKEND_CHOICES = ("auto", "cpu", "hybrid", "npu")
 
 
 def _default_backend() -> str:
@@ -34,7 +34,7 @@ def main() -> None:
         "--backend",
         choices=BACKEND_CHOICES,
         default=_default_backend(),
-        help="inference backend: auto, cpu, or strict npu",
+        help="inference backend: auto, cpu, hybrid, or strict npu",
     )
     parser.add_argument(
         "--no-model",
