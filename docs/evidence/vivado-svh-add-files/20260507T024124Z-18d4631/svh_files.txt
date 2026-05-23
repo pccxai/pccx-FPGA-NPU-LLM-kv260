@@ -1,0 +1,12 @@
+hw/rtl/Constants/compilePriority_Order/A_const_svh/GLOBAL_CONST.svh
+hw/rtl/Constants/compilePriority_Order/A_const_svh/NUMBERS.svh
+hw/rtl/Constants/compilePriority_Order/A_const_svh/kv260_device.svh
+hw/rtl/Constants/compilePriority_Order/A_const_svh/npu_arch.svh
+hw/rtl/MAT_CORE/GEMM_Array.svh
+hw/rtl/MEM_control/IO/mem_IO.svh
+hw/rtl/NPU_Controller/NPU_Control_Unit/ISA_PACKAGE/isa_memctrl.svh
+hw/rtl/NPU_Controller/NPU_Control_Unit/ISA_PACKAGE/isa_x32.svh
+hw/rtl/NPU_Controller/NPU_Control_Unit/ISA_PACKAGE/isa_x64.svh
+hw/rtl/NPU_Controller/NPU_Control_Unit/ctrl_decode_const.svh
+hw/rtl/NPU_Controller/npu_interfaces.svh
+hw/rtl/VEC_CORE/GEMV_Vec_Matrix_MUL.svh

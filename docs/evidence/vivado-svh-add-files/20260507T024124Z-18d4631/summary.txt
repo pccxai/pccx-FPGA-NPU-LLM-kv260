@@ -1,0 +1,31 @@
+Run: vivado-svh-add-files
+Branch: fix/vivado-svh-add-files
+Worktree: /tmp/kv260-svh-fix-wt
+Base: origin/main 18d4631
+
+Change:
+- hw/vivado/create_project.tcl now recursively registers hw/rtl/*.svh files
+  in sources_1 and sets each file_type to "Verilog Header".
+- No RTL files changed.
+
+Commands:
+- bash hw/vivado/build.sh synth
+- bash hw/vivado/build.sh impl
+
+SVH_FILES_REGISTERED_COUNT=12
+SYNTH_RESULT=PASS
+SYNTH_WNS_NS=-9.531
+SYNTH_TNS_NS=-3528.127
+SYNTH_TIMING_CLOSED=NO
+IMPL_RESULT=FAIL
+IMPL_WNS_NS=N/A
+BITSTREAM_GENERATED=NO
+BITSTREAM_PATH=N/A
+
+CLAIM_GUARD:
+- No timing-closure claim: post-synth setup WNS is negative.
+- No bitstream-success claim: implementation failed before opt_design.
+- No RTL changed for the implementation failure.
+
+Implementation blocker:
+ERROR: [DRC MDRV-1] Multiple Driver Nets: Net u_mem_dispatcher/u_l2_cache/u_acp_cdc/u_acp_rx_fifo/xpm_fifo_base_inst/full_n has multiple drivers: u_mem_dispatcher/u_l2_cache/u_acp_cdc/u_acp_rx_fifo/xpm_fifo_base_inst/gen_pf_ic_rc.gen_full_rst_val.ram_full_n_reg/Q, and u_fmap_pre/u_fmap_fifo/xpm_fifo_base_inst/gen_pntr_flags_cc.gen_full_rst_val.ram_full_n_reg/Q.
