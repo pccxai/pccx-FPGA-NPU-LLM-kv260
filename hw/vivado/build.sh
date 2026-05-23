@@ -47,7 +47,8 @@ case "${1:-synth}" in
             -log    "$BUILD_DIR/vivado_synth.log" \
             -journal "$BUILD_DIR/vivado_synth.jou" \
             -source vivado/create_project.tcl \
-            -source vivado/synth.tcl
+            -source vivado/synth.tcl \
+            -source vivado/scripts/record_synth_baseline.tcl
         ;;
     impl)
         mkdir -p "$BUILD_DIR"
