@@ -1,0 +1,5 @@
+BITSTREAM_GENERATED=no
+BITSTREAM_PATH=N/A
+BITSTREAM_SHA256=N/A
+BITSTREAM_SIZE_BYTES=0
+REASON=Not attempted because full-top synth failed during BD preparation.

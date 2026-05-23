@@ -1,0 +1,8 @@
+SYNTH_RESULT=FAIL
+SYNTH_STAGE=full_top_bd_prepare
+SYNTH_WNS_NS=N/A
+SYNTH_TNS_NS=N/A
+SYNTH_WHS_NS=N/A
+LOG=hw/build/reports/v002.1-attempt-1/logs/v002_1_full_top_synth.log
+ROOT_CAUSE=Vivado create_bd_cell failed because include file npu_arch.svh was not added to the project as an RTL module.
+VERBATIM_ERROR=ERROR: [filemgmt 56-591] Given include File '/tmp/kv260-bitstream-wt/hw/rtl/Constants/compilePriority_Order/A_const_svh/npu_arch.svh' needs to be addded to the project in order to use it as an RTL module.
