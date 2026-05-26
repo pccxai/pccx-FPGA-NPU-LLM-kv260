@@ -110,3 +110,16 @@ jobs:
             python3 -c "import sys, yaml; yaml.safe_load(open(sys.argv[1]))" "$f" \
               || { echo "::error::YAML parse error in $f"; exit 1; }
           done
+
+      - name: Bare-metal standalone build
+        run: |
+          set -e
+          if ! command -v aarch64-none-elf-gcc >/dev/null 2>&1; then
+            echo "::notice::aarch64-none-elf-gcc not available; skipping Vitis BSP ELF build"
+            exit 0
+          fi
+          if [ -z "${PCCX_VITIS_BSP:-}" ]; then
+            echo "::notice::PCCX_VITIS_BSP not set; skipping Vitis BSP ELF build"
+            exit 0
+          fi
+          make -C sw/baremetal BSP_ROOT="${PCCX_VITIS_BSP}" all check-elf
