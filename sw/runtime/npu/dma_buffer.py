@@ -18,6 +18,17 @@ class DmaBufferUnavailable(RuntimeError):
 
 
 @dataclass(frozen=True)
+class DmaRegionMetadata:
+    """Resolved userspace mapping metadata for one DMA-safe PS buffer."""
+
+    device_path: Path
+    phys_addr: int
+    size: int
+    coherent: bool = True
+    sysfs_path: Path | None = None
+
+
+@dataclass(frozen=True)
 class DmaBufferSlice:
     """A view into one contiguous DMA region."""
 
@@ -158,34 +169,48 @@ class MappedDmaRegion:
 def open_dma_region_from_env() -> MappedDmaRegion:
     """Open a DMA region from env or the first udmabuf-style device."""
 
+    metadata = discover_dma_region_metadata()
+    if metadata is not None:
+        region = MappedDmaRegion(
+            device_path=metadata.device_path,
+            phys_addr=metadata.phys_addr,
+            size=metadata.size,
+            coherent=metadata.coherent,
+            sysfs_path=metadata.sysfs_path,
+        )
+        region.open()
+        return region
+
+    raise DmaBufferUnavailable(
+        "no DMA buffer provider with a physical address was found; set "
+        "PCCX_NPU_DMA_DEVICE, PCCX_NPU_DMA_PHYS, and PCCX_NPU_DMA_SIZE, "
+        "or expose a udmabuf/u-dma-buf device with phys_addr and size sysfs files"
+    )
+
+
+def dma_region_configured() -> bool:
+    """Return True only when a usable physical DMA address is discoverable."""
+
+    return discover_dma_region_metadata() is not None
+
+
+def discover_dma_region_metadata() -> DmaRegionMetadata | None:
     explicit = os.getenv(DMA_DEVICE_ENV)
     if explicit:
         phys_text = os.getenv(DMA_PHYS_ENV)
         size_text = os.getenv(DMA_SIZE_ENV)
         if not phys_text or not size_text:
-            raise DmaBufferUnavailable(
-                f"{DMA_DEVICE_ENV} requires {DMA_PHYS_ENV} and {DMA_SIZE_ENV}"
-            )
-        region = MappedDmaRegion(
-            device_path=explicit,
+            return None
+        return DmaRegionMetadata(
+            device_path=Path(explicit),
             phys_addr=int(phys_text, 0),
             size=int(size_text, 0),
             coherent=_env_truthy("PCCX_NPU_DMA_COHERENT", default=True),
         )
-        region.open()
-        return region
-
-    discovered = _discover_udmabuf()
-    if discovered is None:
-        raise DmaBufferUnavailable(
-            "no DMA buffer provider found; set PCCX_NPU_DMA_DEVICE, "
-            "PCCX_NPU_DMA_PHYS, and PCCX_NPU_DMA_SIZE, or expose /dev/udmabufN"
-        )
-    discovered.open()
-    return discovered
+    return _discover_udmabuf()
 
 
-def _discover_udmabuf() -> MappedDmaRegion | None:
+def _discover_udmabuf() -> DmaRegionMetadata | None:
     for dev in sorted(Path("/dev").glob("udmabuf*")) + sorted(Path("/dev").glob("u-dma-buf*")):
         sysfs = _udmabuf_sysfs(dev.name)
         if sysfs is None:
@@ -195,7 +220,7 @@ def _discover_udmabuf() -> MappedDmaRegion | None:
         if phys is None or size is None:
             continue
         coherent = _read_bool_file(sysfs / "sync_mode")
-        return MappedDmaRegion(
+        return DmaRegionMetadata(
             device_path=dev,
             phys_addr=phys,
             size=size,

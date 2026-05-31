@@ -25,6 +25,7 @@ from .dma_buffer import (
     DMA_DEVICE_ENV,
     DMA_PHYS_ENV,
     DMA_SIZE_ENV,
+    dma_region_configured,
     open_dma_region_from_env,
 )
 
@@ -425,17 +426,7 @@ def _gemm_readback_configured() -> tuple[bool, str]:
 
 
 def _dma_provider_configured() -> bool:
-    if (
-        os.getenv(DMA_DEVICE_ENV)
-        and os.getenv(DMA_PHYS_ENV)
-        and os.getenv(DMA_SIZE_ENV)
-    ):
-        return True
-    try:
-        dev = Path("/dev")
-        return any(dev.glob("udmabuf*")) or any(dev.glob("u-dma-buf*"))
-    except OSError:
-        return False
+    return dma_region_configured()
 
 
 def _float32_to_bf16_bytes(value: np.ndarray) -> bytes:

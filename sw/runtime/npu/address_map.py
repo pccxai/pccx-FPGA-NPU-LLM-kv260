@@ -25,7 +25,9 @@ NPU_AXIL_BASE_DEFAULT = 0xA0000000
 HELPER_PAGE_SIZE = 0x1000
 
 AXIL_CMD_IN = 0x000
-AXIL_STAT_OUT = 0x004
+# The loaded v12d frontend returns the live status word on reads from the same
+# AXI-Lite word used for command writes. Offset 0x004 reads as zero on KV260.
+AXIL_STAT_OUT = 0x000
 AXIL_CMD_KICK = 0x008
 
 CMDSTS_HP0_BASE_DEFAULT = NPU_AXIL_BASE_DEFAULT + 0x1000
