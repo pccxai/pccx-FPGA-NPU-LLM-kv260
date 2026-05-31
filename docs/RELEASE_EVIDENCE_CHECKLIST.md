@@ -32,6 +32,8 @@ For each testbench run include the following.  Current TB inventory:
 - [ ] Command used to run: `bash scripts/v002/use_submodule_sources.sh`
 - [ ] Vivado / xsim version recorded (currently: Vivado v2025.2)
 - [ ] Per-TB pass/fail summary from the deterministic runner
+- [ ] Night prebuild evidence note reviewed when using the v22 diagnosis path:
+      [`docs/evidence/2026-05-31-v22-night-prebuild.md`](evidence/2026-05-31-v22-night-prebuild.md)
 - [ ] Known warnings or elaboration errors documented
 - [ ] `.pccx` trace artifacts retained in `third_party/pccx-v002/LLM/sim/work/<tb>/`
 - [ ] Waveform snapshots (`.wdb`) retained for failed TBs
