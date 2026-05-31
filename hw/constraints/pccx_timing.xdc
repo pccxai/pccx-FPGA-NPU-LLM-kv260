@@ -30,18 +30,17 @@ set_clock_groups -asynchronous \
 # Reset synchronisers
 # ---------------------------------------------------------------------------
 # Any path into the first flop of a reset bridge is inherently async.
-# Mark those as false paths so they don't inflate the WNS report.
-set_false_path -to [get_cells -hier -filter {NAME =~ */u_reset_sync*/sync_reg_reg[0]}]
+# The old u_reset_sync selector no longer matches the rebuilt synthesis
+# hierarchy. Re-add this only after checking the current post-synth cell names.
 
 # ---------------------------------------------------------------------------
 # Asynchronous FIFO flag paths
 # ---------------------------------------------------------------------------
 # Xilinx XPM_FIFO_ASYNC instances handle their own meta-stability; mark
 # the gray-coded pointer crossings as async.
-set_false_path -from [get_cells -hier -filter {NAME =~ */wr_pntr_gray_reg*}] \
-               -to   [get_cells -hier -filter {NAME =~ */wr_pntr_gray_sync_reg*}]
-set_false_path -from [get_cells -hier -filter {NAME =~ */rd_pntr_gray_reg*}] \
-               -to   [get_cells -hier -filter {NAME =~ */rd_pntr_gray_sync_reg*}]
+# The previous gray-pointer selectors no longer match the current XPM FIFO
+# hierarchy, and Vivado applies XPM-provided constraints separately. Re-add
+# project-local overrides only with selectors proven against the current DCP.
 
 # ---------------------------------------------------------------------------
 # Multi-cycle paths on the accumulator drain
@@ -50,9 +49,6 @@ set_false_path -from [get_cells -hier -filter {NAME =~ */rd_pntr_gray_reg*}] \
 # controller issues a flush (§2.2 of the Phase A audit). The drain path
 # from P-register to the result packer can tolerate multiple cycles
 # because the controller stalls new MACs during flush.
-set_multicycle_path -setup 2 \
-    -from [get_cells -hier -filter {NAME =~ */GEMM_dsp_unit*/DSP_HARD_BLOCK*}] \
-    -to   [get_cells -hier -filter {NAME =~ */u_mat_result_normalizer*}]
-set_multicycle_path -hold  1 \
-    -from [get_cells -hier -filter {NAME =~ */GEMM_dsp_unit*/DSP_HARD_BLOCK*}] \
-    -to   [get_cells -hier -filter {NAME =~ */u_mat_result_normalizer*}]
+# The old GEMM DSP/result-normalizer selectors no longer match the rebuilt
+# hierarchy. Do not carry a dead multicycle constraint forward; reintroduce it
+# only with post-synth object evidence and a timing report showing it is needed.
