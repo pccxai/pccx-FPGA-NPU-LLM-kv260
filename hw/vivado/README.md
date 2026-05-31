@@ -83,8 +83,9 @@ for the tracked-vs-ignored log policy and PR evidence format.
    - Clock Wizard for the 400 MHz core clock
 3. **`write_bitstream`** — only run after (1) and (2) are green; otherwise
    you burn an hour for nothing.
-4. **Device-tree overlay** — see `sw/dtbo/` (to be created) for the
-   Ubuntu 22.04 FPGA Manager flow. Files: `pccx_npu.dtsi`,
+4. **Device-tree overlay** — see `sw/dtbo/` and
+   `scripts/kv260/generate_sd_platform_bundle.sh` for the Ubuntu FPGA
+   Manager flow. Files: `<overlay>.dtbo`, `<overlay>.bit.bin`,
    `shell.json`, `Makefile`.
 5. **KV260 deploy**:
    ```bash
