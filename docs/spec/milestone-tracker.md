@@ -3,6 +3,15 @@
 Snapshot source: `gh issue list --state open --limit 200`, captured
 2026-05-07.
 
+Latest evidence update: v31 Stage1 GEMM contract evidence was captured on
+2026-06-03 and is tracked in
+[`docs/releases/v0.2.1-v31-stage1-gemm-evidence.md`](../releases/v0.2.1-v31-stage1-gemm-evidence.md).
+The public RTL/testbench sync is
+[`pccxai/pccx-v002#17`](https://github.com/pccxai/pccx-v002/pull/17).
+The remaining active hardware boundary is full Stage1 GEMM numeric silicon
+validation, tracked by issue
+[#154](https://github.com/pccxai/pccx-FPGA-NPU-LLM-kv260/issues/154).
+
 This tracker maps every currently open issue into the active planning
 milestones:
 
