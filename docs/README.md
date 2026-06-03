@@ -26,6 +26,8 @@ Pages, bilingual EN / KO).
   [VIVADO_LOG_POLICY.md](VIVADO_LOG_POLICY.md)
 - Repo-local release evidence checklist:
   [RELEASE_EVIDENCE_CHECKLIST.md](RELEASE_EVIDENCE_CHECKLIST.md)
+- v0.2.0 v30 dual-MAC recovery evidence:
+  [releases/v0.2.0-v30-dualmac-evidence.md](releases/v0.2.0-v30-dualmac-evidence.md)
 - M01 v002 correctness & bring-up close criteria:
   [spec/m01-v002-close-criteria.md](spec/m01-v002-close-criteria.md)
 - Documentation root (language picker):
