@@ -15,7 +15,7 @@ This file covers repo-specific guidance. For the full org-wide guidelines
 ## Architecture spec
 
 The canonical design rationale, ISA, memory map, and model-mapping notes
-live on the **[pccx documentation site](https://pccx.pages.dev/en/docs/v002/index.html)**.
+live on the **[pccx documentation site](https://docs.pccx.ai/en/docs/v002/index.html)**.
 This repo holds the KV260 integration RTL and board bring-up — read the
 spec first, then come back here for implementation details.
 
@@ -26,7 +26,11 @@ The repo uses a source-level xsim smoke suite for RTL bring-up evidence.
 **Prerequisites:**
 
 - Vivado xsim tools (`xvlog`, `xelab`, `xsim`) on `PATH`.
-- A sibling `pccx-lab` checkout, or `PCCX_LAB_DIR` set to that checkout.
+- A sibling legacy `pccx-lab` checkout, or `PCCX_LAB_DIR` set to that checkout.
+  That repository is no longer an active public PCCX entry point. The current
+  runner still requires its trace bridge; a clean contributor checkout must
+  resolve this dependency before xsim can be advertised as self-contained.
+  Track that onboarding gap in [#152](https://github.com/pccxai/pccx-FPGA-NPU-LLM-kv260/issues/152).
 
 **Run the full suite** from the repo root:
 
@@ -47,7 +51,7 @@ bash scripts/v002/use_submodule_sources.sh --tb tb_v002_runtime_smoke_program
 ```
 
 See [docs/SIMULATION.md](docs/SIMULATION.md) for run log paths and
-[pccx-lab's verification-workflow doc](https://pccx.pages.dev/en/lab/verification-workflow.html)
+[pccx-lab's verification-workflow doc](https://docs.pccx.ai/en/lab/verification-workflow.html)
 for the `from_xsim_log` converter.
 
 ## Pull requests

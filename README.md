@@ -1,5 +1,13 @@
 # pccx — Bare-Metal Transformer Accelerator on Kria KV260
 
+PCCX is an open-source semiconductor project initiated and operated by
+**Altifigence**. [Start here](https://github.com/pccxai/pccx/blob/main/START_HERE.md)
+· [Website](https://pccx.ai/) · [Roadmap](https://github.com/orgs/pccxai/projects/1)
+· [Transparency](https://pccx.ai/en/legal/transparency/).
+The repository license and file-level notices define usage rights; project
+participation does not transfer contributor ownership or require a paid tool.
+
+
 PCCX™ technology / operated by Altifigence™.
 
 > This repository is the KV260 + PCCX v002 LLM application integration
@@ -40,11 +48,11 @@ progress or pending.
 > specifies — read the spec first, then come back here for the KV260
 > integration flow.
 >
-> **→ [pccx v002 — Architecture & ISA spec](https://pccx.pages.dev/en/docs/v002/index.html)**
-> &nbsp;·&nbsp; [Gemma 3N E4B on pccx v002](https://pccx.pages.dev/en/docs/v002/Models/gemma3n_execution.html)
-> &nbsp;·&nbsp; [한국어 문서](https://pccx.pages.dev/ko/docs/v002/index.html)
+> **→ [pccx v002 — Architecture & ISA spec](https://docs.pccx.ai/en/docs/v002/index.html)**
+> &nbsp;·&nbsp; [Gemma 3N E4B on pccx v002](https://docs.pccx.ai/en/docs/v002/Models/gemma3n_execution.html)
+> &nbsp;·&nbsp; [한국어 문서](https://docs.pccx.ai/ko/docs/v002/index.html)
 
-Related repos: [pccx (spec)](https://github.com/pccxai/pccx) · [pccx-lab (profiler / simulator)](https://github.com/pccxai/pccx-lab) · [llm-bottleneck-lab (related research)](https://github.com/hkimw/llm-bottleneck-lab)
+Related repos: [pccx (spec)](https://github.com/pccxai/pccx) · [verification evidence](https://docs.pccx.ai/en/docs/Evidence/) · [llm-bottleneck-lab (related research)](https://github.com/hkimw/llm-bottleneck-lab)
 
 ---
 
@@ -57,7 +65,7 @@ welcome.
 
 | Entry point | Link |
 | --- | --- |
-| Architecture & ISA spec | <https://pccx.pages.dev/en/docs/v002/index.html> |
+| Architecture & ISA spec | <https://docs.pccx.ai/en/docs/v002/index.html> |
 | RTL consumed by KV260 | [`third_party/pccx-v002/LLM/rtl/`](third_party/pccx-v002/LLM/rtl/) + [`third_party/pccx-v002/common/rtl/`](third_party/pccx-v002/common/rtl/) via [`hw/vivado/filelist.v002.f`](hw/vivado/filelist.v002.f); top [`pccx_npu_top.sv`](third_party/pccx-v002/LLM/rtl/top/pccx_npu_top.sv) |
 | Releases | <https://github.com/pccxai/pccx-FPGA-NPU-LLM-kv260/releases> |
 | `v0.1.0-alpha` notes | [docs/releases/v0.1.0-alpha.md](docs/releases/v0.1.0-alpha.md) |
@@ -70,7 +78,7 @@ welcome.
 
 > The repository **Wiki** is intentionally empty — RTL- and bring-up
 > questions belong in **Discussions**, and the canonical architecture
-> documentation lives on the [pccx Sphinx site](https://pccx.pages.dev/en/docs/v002/index.html).
+> documentation lives on the [pccx Sphinx site](https://docs.pccx.ai/en/docs/v002/index.html).
 
 ---
 
@@ -78,15 +86,15 @@ welcome.
 
 | Layer                                | Lives in                                   | Authoritative source                                                                     |
 | ------------------------------------ | ------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| Architecture / ISA / driver spec     | `pccx/docs/v002/`                          | [pccx v002 docs](https://pccx.pages.dev/en/docs/v002/index.html)               |
-| Target-model pipeline (Gemma 3N E4B) | `pccx/docs/v002/Models/`                   | [Models section](https://pccx.pages.dev/en/docs/v002/Models/index.html)        |
+| Architecture / ISA / driver spec     | `pccx/docs/v002/`                          | [pccx v002 docs](https://docs.pccx.ai/en/docs/v002/index.html)               |
+| Target-model pipeline (Gemma 3N E4B) | `pccx/docs/v002/Models/`                   | [Models section](https://docs.pccx.ai/en/docs/v002/Models/index.html)        |
 | Reusable v002 IP-core RTL            | `third_party/pccx-v002/LLM/`, `third_party/pccx-v002/common/` | `pccx-v002` compatibility contract + [`third_party/PINS.md`](third_party/PINS.md) |
 | KV260 Vivado integration             | this repo — `hw/vivado/`                   | Wrapper, Tcl flow, and [`filelist.v002.f`](hw/vivado/filelist.v002.f)                 |
-| Bare-metal driver (C/C++)            | this repo — `sw/driver/`                   | API spec: [Drivers/api](https://pccx.pages.dev/en/docs/v002/Drivers/api.html)  |
+| Bare-metal driver (C/C++)            | this repo — `sw/driver/`                   | API spec: [Drivers/api](https://docs.pccx.ai/en/docs/v002/Drivers/api.html)  |
 | Application (planned, v0.2.0)        | this repo — `sw/gemma3NE4B/` (not yet in tree) | —                                                                                     |
 
 If you want to **read about how the accelerator works**, head to the
-**[pccx v002 docs](https://pccx.pages.dev/en/docs/v002/index.html)** —
+**[pccx v002 docs](https://docs.pccx.ai/en/docs/v002/index.html)** —
 that's the canonical source for every architectural decision in this repo.
 If you want to **inspect the KV260 integration wrapper, the submodule
 pin, or the board flow**, stay here.
@@ -95,7 +103,7 @@ pin, or the board flow**, stay here.
 
 ## Architecture Snapshot (pccx v002)
 
-[![pccx v002 architecture](https://raw.githubusercontent.com/pccxai/pccx/main/assets/images/Architecture/v002/architecture_v002.png)](https://pccx.pages.dev/en/docs/v002/Architecture/top_level.html)
+[![pccx v002 architecture](https://raw.githubusercontent.com/pccxai/pccx/main/assets/images/Architecture/v002/architecture_v002.png)](https://docs.pccx.ai/en/docs/v002/Architecture/top_level.html)
 
 *Click the diagram for the annotated top-level page on the pccx site.*
 
@@ -112,8 +120,8 @@ Three heterogeneous cores around a centralized L2 URAM cache:
 - **Activation path**: host DDR4 → ACP DMA → L2 URAM (1.75 MB, true dual port).
 - **Direct-connect FIFO**: GEMV → SFU, so softmax runs without an L2 round-trip.
 
-Full rationale and numbers: [Top-Level →](https://pccx.pages.dev/en/docs/v002/Architecture/top_level.html)
-· [Design rationale →](https://pccx.pages.dev/en/docs/v002/Architecture/rationale.html)
+Full rationale and numbers: [Top-Level →](https://docs.pccx.ai/en/docs/v002/Architecture/top_level.html)
+· [Design rationale →](https://docs.pccx.ai/en/docs/v002/Architecture/rationale.html)
 
 ---
 
@@ -123,16 +131,16 @@ Weight-stationary 2D systolic layout. Activations broadcast along
 columns, partial sums propagate vertically into the result accumulator.
 Used only during prefill; idle during decode.
 
-[![GEMM array layout](https://raw.githubusercontent.com/pccxai/pccx/main/assets/images/Architecture/v002/Processing_Elements_GEMM_1_v002.png)](https://pccx.pages.dev/en/docs/v002/Architecture/gemm_core.html)
+[![GEMM array layout](https://raw.githubusercontent.com/pccxai/pccx/main/assets/images/Architecture/v002/Processing_Elements_GEMM_1_v002.png)](https://docs.pccx.ai/en/docs/v002/Architecture/gemm_core.html)
 
 Inside each PE — a DSP48E2 wrapped with input flip-flops on both
 Activation and Weight ports, and an accumulator with a P-register
 output:
 
-[![GEMM single PE](https://raw.githubusercontent.com/pccxai/pccx/main/assets/images/Architecture/v002/Processing_Elements_GEMM_2_v002.png)](https://pccx.pages.dev/en/docs/v002/Architecture/gemm_core.html)
+[![GEMM single PE](https://raw.githubusercontent.com/pccxai/pccx/main/assets/images/Architecture/v002/Processing_Elements_GEMM_2_v002.png)](https://docs.pccx.ai/en/docs/v002/Architecture/gemm_core.html)
 
-Details: [GEMM core →](https://pccx.pages.dev/en/docs/v002/Architecture/gemm_core.html)
-· [GEMM dataflow →](https://pccx.pages.dev/en/docs/v002/ISA/dataflow.html)
+Details: [GEMM core →](https://docs.pccx.ai/en/docs/v002/Architecture/gemm_core.html)
+· [GEMM dataflow →](https://docs.pccx.ai/en/docs/v002/ISA/dataflow.html)
 
 ---
 
@@ -143,15 +151,15 @@ Activation broadcast and a Weight row. Outputs feed a reduction tree
 that collapses partial products into the final vector entry register.
 The primary compute path during autoregressive decode.
 
-[![GEMV core layout](https://raw.githubusercontent.com/pccxai/pccx/main/assets/images/Architecture/v002/Processing_Elements_GEMV_1_v002.png)](https://pccx.pages.dev/en/docs/v002/Architecture/gemv_core.html)
+[![GEMV core layout](https://raw.githubusercontent.com/pccxai/pccx/main/assets/images/Architecture/v002/Processing_Elements_GEMV_1_v002.png)](https://docs.pccx.ai/en/docs/v002/Architecture/gemv_core.html)
 
 Per-cycle operand shapes — a 1×N activation row multiplied against an
 N×N weight tile:
 
-[![GEMV operand shapes](https://raw.githubusercontent.com/pccxai/pccx/main/assets/images/Architecture/v002/Processing_Elements_GEMV_2_v002.png)](https://pccx.pages.dev/en/docs/v002/Architecture/gemv_core.html)
+[![GEMV operand shapes](https://raw.githubusercontent.com/pccxai/pccx/main/assets/images/Architecture/v002/Processing_Elements_GEMV_2_v002.png)](https://docs.pccx.ai/en/docs/v002/Architecture/gemv_core.html)
 
-Details: [GEMV core →](https://pccx.pages.dev/en/docs/v002/Architecture/gemv_core.html)
-· [GEMV dataflow →](https://pccx.pages.dev/en/docs/v002/ISA/dataflow.html)
+Details: [GEMV core →](https://docs.pccx.ai/en/docs/v002/Architecture/gemv_core.html)
+· [GEMV dataflow →](https://docs.pccx.ai/en/docs/v002/ISA/dataflow.html)
 
 ---
 
@@ -162,12 +170,12 @@ The DSP48E2 has a single 27×18 multiplier, not two. pccx v002 bit-packs
 port B, so each DSP emits **two MACs per cycle** into the 48-bit
 accumulator with a 19-bit guard band between the two channels.
 
-[![DSP48E2 W4A8 port layout](https://raw.githubusercontent.com/pccxai/pccx/main/assets/images/Architecture/v002/Processing_Elements_GEMM_4_v002.png)](https://pccx.pages.dev/en/docs/v002/Architecture/dsp48e2_w4a8.html)
+[![DSP48E2 W4A8 port layout](https://raw.githubusercontent.com/pccxai/pccx/main/assets/images/Architecture/v002/Processing_Elements_GEMM_4_v002.png)](https://docs.pccx.ai/en/docs/v002/Architecture/dsp48e2_w4a8.html)
 
 After accumulation, a sign-recovery step restores the upper channel
 when the lower channel borrowed a carry:
 
-[![Sign recovery SV snippet](https://raw.githubusercontent.com/pccxai/pccx/main/assets/images/Architecture/v002/Processing_Elements_GEMM_5_v002.png)](https://pccx.pages.dev/en/docs/v002/Architecture/dsp48e2_w4a8.html)
+[![Sign recovery SV snippet](https://raw.githubusercontent.com/pccxai/pccx/main/assets/images/Architecture/v002/Processing_Elements_GEMM_5_v002.png)](https://docs.pccx.ai/en/docs/v002/Architecture/dsp48e2_w4a8.html)
 
 - Maximum accumulations before draining the ACCM: **2^10 ≈ 1024** per
   channel (guard-band limited).
@@ -176,7 +184,7 @@ when the lower channel borrowed a carry:
   tree and merges the partial sums.
 - Peak: **2048 MAC × 400 MHz ≈ 819 GMAC/s** across the two systolic arrays.
 
-Details: [DSP48E2 W4A8 bit-packing →](https://pccx.pages.dev/en/docs/v002/Architecture/dsp48e2_w4a8.html)
+Details: [DSP48E2 W4A8 bit-packing →](https://docs.pccx.ai/en/docs/v002/Architecture/dsp48e2_w4a8.html)
 
 ---
 
@@ -199,12 +207,12 @@ End-to-end decode flow, per-cycle overlap strategy, instruction-level
 mapping, memory layout, and the performance budget all live in the
 pccx Models section:
 
-- [Gemma 3N overview](https://pccx.pages.dev/en/docs/v002/Models/gemma3n_overview.html)
-- [Full operator pipeline (embedding → sampling)](https://pccx.pages.dev/en/docs/v002/Models/gemma3n_pipeline.html)
-- [Attention & RoPE constraints](https://pccx.pages.dev/en/docs/v002/Models/gemma3n_attention_rope.html)
-- [PLE & LAuReL routing rules](https://pccx.pages.dev/en/docs/v002/Models/gemma3n_ple_laurel.html)
-- [FFN Gaussian Top-K sparsity](https://pccx.pages.dev/en/docs/v002/Models/gemma3n_ffn_sparsity.html)
-- [**Execution & scheduling on pccx v002**](https://pccx.pages.dev/en/docs/v002/Models/gemma3n_execution.html)
+- [Gemma 3N overview](https://docs.pccx.ai/en/docs/v002/Models/gemma3n_overview.html)
+- [Full operator pipeline (embedding → sampling)](https://docs.pccx.ai/en/docs/v002/Models/gemma3n_pipeline.html)
+- [Attention & RoPE constraints](https://docs.pccx.ai/en/docs/v002/Models/gemma3n_attention_rope.html)
+- [PLE & LAuReL routing rules](https://docs.pccx.ai/en/docs/v002/Models/gemma3n_ple_laurel.html)
+- [FFN Gaussian Top-K sparsity](https://docs.pccx.ai/en/docs/v002/Models/gemma3n_ffn_sparsity.html)
+- [**Execution & scheduling on pccx v002**](https://docs.pccx.ai/en/docs/v002/Models/gemma3n_execution.html)
 
 ---
 
@@ -220,8 +228,8 @@ Five opcodes, 64 bits each: `[63:60]` opcode + `[59:0]` body.
 | `4'h3` | `OP_MEMSET`| Write shape / size / scale constants to the Constant Cache              |
 | `4'h4` | `OP_CVO`   | Element-wise non-linear (exp, sqrt, GELU, sin, cos, reduce_sum, scale, recip) |
 
-Spec: [Per-instruction encoding →](https://pccx.pages.dev/en/docs/v002/ISA/instructions.html)
-· [Dataflow per opcode →](https://pccx.pages.dev/en/docs/v002/ISA/dataflow.html)
+Spec: [Per-instruction encoding →](https://docs.pccx.ai/en/docs/v002/ISA/instructions.html)
+· [Dataflow per opcode →](https://docs.pccx.ai/en/docs/v002/ISA/dataflow.html)
 
 The pipeline is **fully decoupled**: the front-end decodes and enqueues
 into per-engine FIFOs, and each compute engine fires independently once
@@ -256,7 +264,7 @@ enforced at RTL / memory controller / driver level:
    (`max_tokens = 8192`). Wrap-around overwrites the oldest entries.
    This bounds both OOM risk and worst-case memory traffic.
 
-Details: [KV cache strategy →](https://pccx.pages.dev/en/docs/v002/Architecture/kv_cache.html)
+Details: [KV cache strategy →](https://docs.pccx.ai/en/docs/v002/Architecture/kv_cache.html)
 
 ---
 
@@ -280,8 +288,8 @@ future v003 IP-core ownership will be separate in `pccx-v003`.
 Full phase-by-phase plan, decision points, compute budget, and Year 2
 **Auto-Porting Pipeline α** vision:
 
-**→ [Roadmap (EN)](https://pccx.pages.dev/en/docs/roadmap.html)**
-&nbsp;·&nbsp; [**한국어**](https://pccx.pages.dev/ko/docs/roadmap.html)
+**→ [Roadmap (EN)](https://docs.pccx.ai/en/docs/roadmap.html)**
+&nbsp;·&nbsp; [**한국어**](https://docs.pccx.ai/ko/docs/roadmap.html)
 
 ---
 
@@ -385,7 +393,7 @@ Reusable testbench registration lives in
 sources under `third_party/pccx-v002/LLM/tb/`. Changes to that reusable
 suite belong in `pccx-v002`; this repo should only update KV260-specific
 runtime inputs and wrappers. See
-[pccx-lab's verification-workflow doc](https://pccx.pages.dev/en/lab/verification-workflow.html)
+[pccx-lab's verification-workflow doc](https://docs.pccx.ai/en/lab/verification-workflow.html)
 for the end-to-end flow diagram and the Tauri IPC surface.
 
 ### What plugs into pccx-lab
