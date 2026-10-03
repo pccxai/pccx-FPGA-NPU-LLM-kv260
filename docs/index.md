@@ -25,6 +25,7 @@ architecture and ISA reference remains the pccx documentation site:
 | Area | Document |
 | --- | --- |
 | KV260 bring-up | [KV260 bring-up evidence checklist](KV260_BRINGUP.md) |
+| KV260 reset | [KV260 SD card reset procedure](KV260_SD_CARD_RESET.md) |
 | Model handoff | [Gemma 3N E4B target-model handoff boundary](GEMMA3N_HANDOFF.md) |
 | Verification | [xsim evidence workflow](SIMULATION.md) |
 | Timing evidence | [Vivado timing evidence checklist](TIMING_EVIDENCE.md) |

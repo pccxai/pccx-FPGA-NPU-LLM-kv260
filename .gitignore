@@ -141,6 +141,7 @@ formal/sail/build/
 build/
 hw/build/
 hw/sim/work/
+sw/dtbo/build/
 *.jou
 *.log
 .Xil/

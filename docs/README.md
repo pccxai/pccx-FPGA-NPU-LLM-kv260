@@ -10,6 +10,8 @@ Pages, bilingual EN / KO).
   <https://pccx.pages.dev/en/docs/v002/index.html>
 - Repo-local KV260 bring-up checklist:
   [KV260_BRINGUP.md](KV260_BRINGUP.md)
+- Repo-local KV260 SD card reset procedure:
+  [KV260_SD_CARD_RESET.md](KV260_SD_CARD_RESET.md)
 - Repo-local Gemma 3N handoff boundary:
   [GEMMA3N_HANDOFF.md](GEMMA3N_HANDOFF.md)
 - Repo-local W4A8 golden-vector gate:
